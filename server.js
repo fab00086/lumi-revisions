@@ -33,6 +33,11 @@ const DATA_FILE = path.join(DATA_DIR, 'lumi-data.json');
 const KV_URL = (process.env.UPSTASH_REDIS_REST_URL || '').replace(/\/+$/, '');
 const KV_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
 
+// Sur Deno Deploy (hebergement gratuit) : le disque est en lecture seule,
+// mais une base KV gratuite est integree. On l'utilise si elle existe.
+const isDeno = typeof globalThis.Deno !== 'undefined';
+let denoKv = null;
+
 function loadData() {
   try {
     if (!fs.existsSync(DATA_FILE)) return {};
@@ -43,11 +48,20 @@ function saveData(data) {
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (e) { console.error('saveData:', e); }
+  } catch (e) { console.error('saveData:', e.message); }
 }
 
 let memData = null;
 async function initStore() {
+  if (isDeno) { try { denoKv = await Deno.openKv(); } catch { denoKv = null; } }
+  if (denoKv) {
+    try {
+      const entry = await denoKv.get(['lumi-data']);
+      memData = entry.value || {};
+      console.log('  ☁️ Données chargées depuis la base Deno KV');
+      return;
+    } catch (e) { console.error('Deno KV load:', e.message); }
+  }
   if (KV_URL && KV_TOKEN) {
     try {
       const r = await fetch(`${KV_URL}/get/lumi-data`, { headers: { Authorization: `Bearer ${KV_TOKEN}` } });
@@ -62,6 +76,10 @@ async function initStore() {
 function getData() { return memData || {}; }
 function setData(data) {
   memData = data;
+  if (denoKv) {
+    denoKv.set(['lumi-data'], data).catch(e => console.error('Deno KV save:', e.message));
+    return;
+  }
   if (KV_URL && KV_TOKEN) {
     fetch(`${KV_URL}/set/lumi-data`, {
       method: 'POST',
