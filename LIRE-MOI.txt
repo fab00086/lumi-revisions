@@ -1,0 +1,88 @@
+============================================
+  LUMI — Ton tuteur pour les devoirs
+============================================
+
+COMMENT LANCER LUMI :
+1. Double-clique sur le fichier "Lancer-Lumi.bat".
+2. Une fenetre noire s'ouvre : LAISSE-LA OUVERTE.
+3. Chrome s'ouvre tout seul sur Lumi (sans aucun
+   avertissement sur l'ordinateur).
+
+Pour arreter Lumi : ferme la fenetre noire.
+
+
+CONNECTER LE TELEPHONE (meme Wi-Fi) :
+1. Dans la fenetre noire, un QR code s'affiche.
+2. Scanne-le avec l'appareil photo du telephone.
+3. Sur ANDROID : au premier acces, clique
+   "Parametres avances" puis "Continuer".
+   Ensuite tout fonctionne (micro, photo, voix).
+4. Sur IPHONE : Safari bloque le micro tant que le
+   certificat de Lumi n'est pas installe sur le
+   telephone. C'est UNE SEULE FOIS, 4 petits pas :
+   - Dans Lumi, ouvre "Connecter un telephone"
+     puis appuie sur "Aide iPhone".
+   - Suivre les 4 etapes affichees (telecharger le
+     certificat, l'installer dans Reglages,
+     l'approuver, reouvrir Safari).
+   - Apres ca : micro, photo ET voix fonctionnent
+     dans Safari, sans avertissement.
+   (Sur iPhone + Chrome : le bouton micro de Lumi
+   ne marchera pas, c'est une restriction Apple.
+   Utilise Safari, ou le micro du clavier iPhone.)
+5. Sur la page d'accueil de l'ordi, tu peux aussi
+   cliquer "Connecter un telephone" pour voir le QR code.
+
+
+COMMENT UTILISER LUMI :
+1. Cree un profil par enfant : prenom + age + photo.
+   -> Lumi s'adapte a l'age de l'enfant.
+2. Discute : tape une question ou envoie une photo
+   du cahier (bouton appareil photo).
+3. Lumi GUIDE l'enfant, il ne donne JAMAIS la reponse.
+
+Les boutons (en haut du chat) :
+   - film  : regarder une video d'explication
+   - 🆕   : commencer une nouvelle lecon
+   - 📊   : voir la progression de l'enfant
+   - imprimante : imprimer la seance
+   - engrenage : reglages (voix, vitesse)
+
+En bas du chat :
+   - appareil photo : prendre une photo du cahier
+   - micro : parler a Lumi
+   - fleche : envoyer
+
+
+LA MEMOIRE DE LUMI :
+- Lumi se souvient de chaque enfant (ce qu'il a appris).
+- Si l'enfant s'arrete au milieu d'une lecon, en
+  recliquant sur son profil, il reprend ou il en etait.
+- Bouton 📊 : liste des lecons faites (sujet, date).
+
+
+LA VOIX :
+- Dans Reglages, choisis la voix de Lumi et sa vitesse.
+- Si tu n'as que 2 voix ("Thomas", "Amelie"), c'est
+  que l'ordi n'a pas plus de voix francaises.
+  Pour en avoir plus et de meilleures :
+  -> utilise le navigateur EDGE (voix "Online Natural"),
+  -> ou Windows : Parametres -> Heure et langue ->
+     Voix -> "Ajouter des voix" (francaises).
+
+
+OU SONT TES DONNEES :
+- L'app est dans le dossier "app-revisions".
+- Les profils et la progression des enfants sont
+  enregistres sur l'ordi (dossier "data"), et partages
+  avec le telephone automatiquement.
+============================================
+
+=== NOUVEAUTES (28/09/2026) ===
+- Photos du cahier : utilise le modele vision gemma4:31b (glm-5.3 ne lit pas les images).
+- Reponses en DIRECT : le texte s'ecrit mot par mot, plus d'attente a vide.
+- Maths en bel affichage (fractions, calculs) grace a KaTeX.
+- Bouton "Couper la voix" : appuie sur le visage de Lumi ou sur le bouton rouge pendant qu'elle parle.
+- Historique : bouton 📊 -> les leçons finies se relisent en cliquant dessus.
+- Mode Interro 🎯 : Lumi pose 5 questions, score etoile garde.
+- Espace parent 👨‍👩‍👧 : sur l'ecran d'accueil, stats, interros et points a revoir (question 6 x 7 pour entrer).

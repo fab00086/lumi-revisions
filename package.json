@@ -1,0 +1,20 @@
+{
+  "name": "app-revisions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lumi - tuteur IA bienveillant pour aider les enfants a faire leurs devoirs (supervision, pas de reponses toutes faites).",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "katex": "^0.18.9",
+    "qrcode": "^1.5.4",
+    "selfsigned": "^5.5.0"
+  }
+}
