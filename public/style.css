@@ -282,6 +282,7 @@ body {
 .connect-toggle:hover { border-color: var(--violet); }
 .connect-panel { margin-top: 12px; }
 .connect-panel img { width: 200px; height: 200px; border-radius: 12px; border: 1px solid #ece7fb; }
+.connect-panel a { color: #6c5ce7; font-weight: 600; word-break: break-all; }
 
 /* ===== Progression ===== */
 .prog-current { background: var(--violet-soft); border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 14px; }

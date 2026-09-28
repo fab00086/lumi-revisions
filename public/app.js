@@ -838,7 +838,17 @@ async function loadConnectQr() {
     const j = await r.json();
     if (j.qr) {
       $('connect-qr').src = j.qr;
-      $('connect-url').textContent = 'Sur le téléphone, ouvre : ' + (j.url || '') + ' — Chrome recommandé pour la voix';
+      $('connect-url').textContent = 'Sur le téléphone (même Wi-Fi), ouvre : ' + (j.url || '');
+      const t = $('connect-tunnel');
+      if (t) {
+        if (j.tunnel_url) {
+          t.href = j.tunnel_url;
+          t.textContent = '🌍 Depuis n\'importe où (PC allumé) : ' + j.tunnel_url.replace('https://', '');
+          t.parentElement.classList.remove('hidden');
+        } else {
+          t.parentElement.classList.add('hidden');
+        }
+      }
     } else {
       $('connect-url').textContent = 'QR code indisponible pour le moment.';
     }

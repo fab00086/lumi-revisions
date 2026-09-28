@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumi — Aide-mémoire famille</title>
+<style>
+  :root {
+    --violet: #6c5ce7; --violet-soft: #f0edff; --bg: #f6f4ff;
+    --card: #ffffff; --text: #2b2640; --soft: #6b6580; --border: #e6e1fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --violet-soft: #2a2545; --bg: #17141f; --card: #221e30; --text: #ece9f5; --soft: #a29cba; --border: #383252; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--soft); margin: 0 0 20px; }
+  h2 { font-size: 17px; margin: 28px 0 10px; display: flex; align-items: center; gap: 8px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; margin-bottom: 12px; }
+  a { color: var(--violet); font-weight: 600; text-decoration: underline; }
+  .lien { display: block; padding: 10px 12px; background: var(--violet-soft); border-radius: 10px; margin: 8px 0; text-decoration: none; }
+  .lien:hover { filter: brightness(0.97); }
+  code { background: var(--violet-soft); padding: 2px 7px; border-radius: 6px; font-size: 13.5px; word-break: break-all; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--soft); font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+  ol li, ul li { margin: 6px 0; }
+  .astuce { border-left: 4px solid var(--violet); padding: 8px 12px; background: var(--violet-soft); border-radius: 0 10px 10px 0; font-size: 14px; }
+  .gros { font-size: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🌟 Lumi — aide-mémoire famille</h1>
+  <p class="sub">Tous les liens et les manipulations pour gérer l'app. Garde cette page dans le dossier.</p>
+
+  <h2>🔗 Tous les liens en un clic</h2>
+  <div class="card">
+    <a class="lien" href="https://dashboard.render.com">🖥️ Render — le serveur de Lumi en ligne (l'allumer, les réglages)</a>
+    <a class="lien" href="https://console.upstash.com">☁️ Upstash — là où sont gardés les profils et les historiques</a>
+    <a class="lien" href="https://github.com/fab00086/lumi-revisions">📦 GitHub — là où est rangé le code</a>
+    <a class="lien" href="https://dashboard.render.com/undeploy">↩️ Render — annuler une mise à jour qui a mal tourné</a>
+    <a class="lien" href="https://github.com/settings/tokens">🔑 GitHub — voir / supprimer le jeton d'accès</a>
+  </div>
+
+  <h2>🪪 À noter une fois pour toutes</h2>
+  <div class="card">
+    <table>
+      <tr><th>Quoi</th><th>C'est quoi</th></tr>
+      <tr><td>Adresse en ligne</td><td><code>https://… .onrender.com</code> — visible en haut de la page Render (bouton en haut, ou « URL »)</td></tr>
+      <tr><td>Code de famille</td><td>dans Render → <strong>Environment</strong> → ligne <code>LUMI_ACCESS_CODE</code></td></tr>
+      <tr><td>Clé Ollama</td><td>dans le fichier <code>.env</code> du dossier et dans Render → <strong>Environment</strong> → <code>OLLAMA_API_KEY</code></td></tr>
+      <tr><td>Jeton GitHub</td><td>commence par <code>ghp_…</code> — à supprimer quand tout marche (voir plus bas)</td></tr>
+    </table>
+  </div>
+
+  <h2>👨‍👩‍👧 Le quotidien</h2>
+  <div class="card">
+    <ul>
+      <li><strong>Sur le PC</strong> : double-clique sur <code>Lancer-Lumi.bat</code> → l'app s'ouvre sur <code>http://localhost:3000</code>.</li>
+      <li><strong>Sur le téléphone (à la maison)</strong> : même Wi-Fi que le PC → <code>https://IP-du-PC:3443</code> (le QR code s'affiche quand on lance le .bat).</li>
+      <li><strong>Partout ailleurs</strong> : l'adresse <code>.onrender.com</code> — aucune condition, marche même PC éteint.</li>
+      <li><strong>Installer sur le téléphone</strong> : ouvrir l'adresse → bouton <strong>Partager</strong> (iPhone) ou <strong>⋮</strong> (Android) → « Sur l'écran d'accueil ».</li>
+    </ul>
+  </div>
+
+  <h2>🔐 Changer le code de famille</h2>
+  <div class="card">
+    <ol>
+      <li>Render → ton service <strong>lumi-revisions</strong>.</li>
+      <li>Menu de gauche → <strong>Environment</strong>.</li>
+      <li>Ligne <code>LUMI_ACCESS_CODE</code> → change la valeur → <strong>Save Changes</strong>.</li>
+      <li>Render redémarre tout seul (1 min). Le nouveau code est actif — l'ancien ne marche plus (les téléphones redemandent le code une fois).</li>
+    </ol>
+  </div>
+
+  <h2>🆕 Demander une modification de l'app</h2>
+  <div class="card">
+    <p>Les mises à jour se font comme ça : je (Claude) modifie le code → j'envoie sur GitHub → <strong>Render redéploie tout seul</strong> en 2-3 minutes. Rien à faire de ton côté.</p>
+    <div class="astuce">💡 La seule chose manuelle : si je te demande d'ouvrir Render et de cliquer <strong>Manual Deploy → Deploy latest commit</strong> (onglet <strong>Deploys</strong>).</div>
+    <p class="astuce" style="border-left-color:#4cd07d">✅ Les profils et historiques des enfants sont sur Upstash : ils survivent à chaque mise à jour.</p>
+  </div>
+
+  <h2>⚠️ Dépannage rapide</h2>
+  <div class="card">
+    <table>
+      <tr><th>Problème</th><th>Solution</th></tr>
+      <tr><td>L'app en ligne met 30-40 s à s'ouvrir</td><td>Normal (le serveur gratuit « se réveille »). Les ouvertures suivantes sont instantanées.</td></tr>
+      <tr><td>« Code d'accès » en boucle</td><td>Le cookie du navigateur a expiré : retape le code une fois (Render → Environment pour le retrouver).</td></tr>
+      <tr><td>Erreur « Ollama 401 »</td><td>La clé API n'est pas bonne : Render → Environment → <code>OLLAMA_API_KEY</code> (celle du fichier <code>.env</code>).</td></tr>
+      <tr><td>Le téléphone ne se connecte plus en local</td><td>Le PC est éteint ou plus sur le même Wi-Fi → utilise l'adresse <code>.onrender.com</code>.</td></tr>
+      <tr><td>Render redémarre en erreur</td><td>Dashboard → <strong>Logs</strong> → copie l'erreur rouge et colle-la moi dans la discussion.</td></tr>
+    </table>
+  </div>
+
+  <h2>🧹 Nettoyage final (quand tout marche en ligne)</h2>
+  <div class="card">
+    <ol>
+      <li>Ouvre <a href="https://github.com/settings/tokens">github.com/settings/tokens</a></li>
+      <li>Repère le jeton « Lumi Deploy » → <strong>Delete</strong>. (On en recréera un nouveau en 30 s la prochaine fois qu'une mise à jour du code est nécessaire.)</li>
+      <li>Le fichier <code>.env</code> du dossier : ne le partage jamais, il contient ta clé Ollama.</li>
+    </ol>
+  </div>
+
+  <p class="sub" style="margin-top:26px">Fait avec ❤️ par Lumi &amp; Claude — dernière mise à jour : 28 septembre 2026</p>
+</main>
+</body>
+</html>

@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import os from 'os';
 import path from 'path';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import QRCode from 'qrcode';
 import fs from 'fs';
@@ -476,6 +476,27 @@ function lanUrls() {
   return lanIps().map(ip => `https://${ip}:${HTTPS_PORT}`);
 }
 
+// Tunnel public (cloudflared) : le telephone peut se connecter de n'importe
+// ou tant que le PC est allume, avec un vrai HTTPS (pas de certificat a installer).
+const TUNNEL_EXE = path.join(__dirname, 'cloudflared.exe');
+let tunnelUrl = '';
+function startTunnel() {
+  if (process.env.NO_HTTPS || !fs.existsSync(TUNNEL_EXE)) return;
+  try {
+    const p = spawn(TUNNEL_EXE, ['tunnel', '--url', `http://localhost:${PORT}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const grab = (buf) => {
+      const m = String(buf).match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+      if (m && !tunnelUrl) {
+        tunnelUrl = m[0];
+        console.log(`  🌍 Depuis n'importe ou (PC allume) :  ${tunnelUrl}`);
+      }
+    };
+    p.stdout.on('data', grab);
+    p.stderr.on('data', grab);
+    p.on('exit', () => { tunnelUrl = ''; });
+  } catch (e) { console.error('Tunnel:', e.message); }
+}
+
 // Ouvre le navigateur en forcant Chrome (meilleure voix / micro)
 function openBrowser(url) {
   if (process.platform === 'win32') {
@@ -503,7 +524,7 @@ app.get('/api/qr', async (req, res) => {
     const urls = lanUrls();
     const url = urls[0] || `http://localhost:${PORT}`;
     const qr = await QRCode.toDataURL(url, { margin: 1, width: 300 });
-    res.json({ qr, url, urls });
+    res.json({ qr, url, urls, tunnel_url: tunnelUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -589,6 +610,7 @@ app.post('/api/child', (req, res) => {
     if (!process.env.NO_OPEN_BROWSER) {
       openBrowser(`http://localhost:${PORT}`);
     }
+    startTunnel(); // ouvre une porte publique (PC allume) pour le telephone
   });
 
   // HTTPS auto-signé : utile seulement en local, pour le telephone.
