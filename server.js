@@ -287,6 +287,16 @@ async function callOllama(messages, { image, maxTokens } = {}) {
 
 // Appel Ollama en streaming : pousse chaque morceau de texte a onDelta
 async function streamOllama(messages, { image, maxTokens, onDelta } = {}) {
+  // Comme pour callOllama : la photo est jointe au dernier message utilisateur
+  if (image) {
+    const last = messages[messages.length - 1];
+    if (last && last.role === 'user') {
+      last.content = [
+        { type: 'text', text: last.content },
+        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}` } }
+      ];
+    }
+  }
   const body = { model: image ? VISION_MODEL : MODEL, messages, temperature: 0.4, max_tokens: maxTokens || (image ? 500 : 320), stream: true };
   const r = await fetch(`${BASE_URL}/v1/chat/completions`, {
     method: 'POST',
@@ -299,7 +309,7 @@ async function streamOllama(messages, { image, maxTokens, onDelta } = {}) {
   }
   const reader = r.body.getReader();
   const dec = new TextDecoder();
-  let buf = '', full = '';
+  let buf = '', full = '', reasoning = '';
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -313,10 +323,18 @@ async function streamOllama(messages, { image, maxTokens, onDelta } = {}) {
       if (!data || data === '[DONE]') continue;
       try {
         const j = JSON.parse(data);
-        const d = j.choices?.[0]?.delta?.content;
+        const delta = j.choices?.[0]?.delta || {};
+        const d = delta.content || '';
         if (d) { full += d; if (onDelta) onDelta(d, full); }
+        // Certains modeles streament leur reflexion dans "reasoning" :
+        // on la garde de cote, au cas ou aucun vrai texte n'arrive.
+        else if (delta.reasoning) { reasoning += delta.reasoning; }
       } catch {}
     }
+  }
+  if (!full.trim() && reasoning.trim()) {
+    full = reasoning;
+    if (onDelta) onDelta(full, full);
   }
   return full;
 }
