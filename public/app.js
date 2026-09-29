@@ -8,6 +8,9 @@ let activeChat = null;
 let chatLoading = false;
 let archiving = false;
 function cancelChat() {
+  stopListening();
+  stopSpeech();
+  lastSpeechText = '';
   chatGeneration++;
   if (activeChat) activeChat.abort();
   activeChat = null;
@@ -389,22 +392,13 @@ if ('speechSynthesis' in window) {
   $('rate-val').textContent = voiceRate.toFixed(2);
 }
 
-// Safari/iOS : le premier appel a speak() doit partir d'un geste de
-// l'utilisateur, sinon la voix reste muette. On "debloque" la voix
-// au premier toucher de l'ecran (son inaudible, volume 0).
-let speechUnlocked = false;
-function unlockSpeech() {
-  if (speechUnlocked || !('speechSynthesis' in window)) return;
-  try {
-    const u = new SpeechSynthesisUtterance(' ');
-    u.volume = 0;
-    speechSynthesis.speak(u);
-    speechUnlocked = true;
-    speechSynthesis.getVoices(); // iOS charge les voix tres tard
-  } catch {}
-}
-document.addEventListener('pointerdown', unlockSpeech);
-document.addEventListener('keydown', unlockSpeech);
+// Un vrai bouton déclenche la lecture dans le geste utilisateur Safari.
+// Un énoncé vide et muet ne prouve pas que la lecture a été autorisée.
+let lastSpeechText = '';
+let speechTimer = null;
+let speechUtterances = [];
+$('btn-listen').addEventListener('click', () => speak(lastSpeechText || 'Bonjour ! Je suis Lumi.'));
+$('btn-test-voice').addEventListener('click', () => speak('Bonjour ! Je suis Lumi. Est-ce que tu entends ma voix ?'));
 
 // Decoupe le texte aux fins de phrases : iOS coupe le son sur les
 // textes longs, il faut plusieurs morceaux courts.
@@ -425,6 +419,8 @@ let speakGen = 0;
 // Coupe la parole en cours (bouton ✋, micro, ou envoi d'un message)
 function stopSpeech() {
   speakGen++; // invalide les fins d'ecoute des morceaux en cours
+  clearTimeout(speechTimer);
+  speechUtterances = [];
   try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch {}
   $('avatar').classList.remove('talking');
   $('btn-stop').classList.add('hidden');
@@ -432,14 +428,21 @@ function stopSpeech() {
 }
 
 // Appuie sur l'avatar = couper la parole aussi
-$('avatar').addEventListener('click', stopSpeech);
-$('btn-stop').addEventListener('click', stopSpeech);
+// (et en mode discussion, le micro reprend tout de suite après)
+$('avatar').addEventListener('click', () => { stopSpeech(); if (typeof micLiveResume === 'function') micLiveResume(); });
+$('btn-stop').addEventListener('click', () => { stopSpeech(); if (typeof micLiveResume === 'function') micLiveResume(); });
 
 function speak(text) {
-  if (!('speechSynthesis' in window)) return;
+  lastSpeechText = cleanForSpeech(text);
+  if (!('speechSynthesis' in window)) {
+    setStatus('La lecture vocale est indisponible dans ce navigateur.');
+    if (typeof micLiveResume === 'function') micLiveResume();
+    return;
+  }
   try {
-    text = cleanForSpeech(text);
+    text = lastSpeechText;
     if (!text) return;
+    stopListening();
     stopSpeech();
     const gen = ++speakGen; // annule les fins d'ecoute des anciens morceaux
     const voice = pickBestVoice();
@@ -450,9 +453,13 @@ function speak(text) {
       const done = () => {
         if (gen !== speakGen) return;
         if (--pending <= 0) {
+          clearTimeout(speechTimer);
+          speechUtterances = [];
           $('avatar').classList.remove('talking');
           $('btn-stop').classList.add('hidden');
           setStatus("Je t'écoute 👂");
+          // Mode discussion : le micro se rouvre maintenant que Lumi s'est tu.
+          if (typeof micLiveResume === 'function') micLiveResume();
         }
       };
       for (const part of parts) {
@@ -460,22 +467,57 @@ function speak(text) {
         u.lang = 'fr-FR';
         u.rate = voiceRate || 1;
         if (voice) u.voice = voice;
+        speechUtterances.push(u); // conserve les énoncés jusqu'à leur fin
         u.onstart = () => {
           if (gen === speakGen) {
+            clearTimeout(speechTimer);
             $('avatar').classList.add('talking');
             $('btn-stop').classList.remove('hidden');
             setStatus('Je parle 🗣️ (appuie sur ✋ pour me couper)');
           }
         };
         u.onend = done;
-        u.onerror = done;
+        u.onerror = () => {
+          if (gen !== speakGen) return;
+          stopSpeech();
+          setStatus('Appuie sur 🔊 Écouter Lumi pour lancer la voix.');
+          if (typeof micLiveResume === 'function') micLiveResume();
+        };
         speechSynthesis.speak(u);
       }
     };
-    // iOS : speak() lance juste apres cancel() est ignore -> petit delai
-    setTimeout(start, 80);
+    setStatus('Préparation de la voix…');
+    speechTimer = setTimeout(() => {
+      if (gen !== speakGen) return;
+      stopSpeech();
+      setStatus('Appuie sur 🔊 Écouter Lumi pour lancer la voix.');
+      if (typeof micLiveResume === 'function') micLiveResume();
+    }, 5000);
+    // Aucun délai : un clic doit conserver son activation utilisateur.
+    start();
+  } catch {
+    stopSpeech();
+    setStatus('Appuie sur 🔊 Écouter Lumi pour réessayer la voix.');
+    if (typeof micLiveResume === 'function') micLiveResume();
+  }
+}
+
+// iOS : Safari refuse de lire un texte lance automatiquement (apres une
+// reponse de Lumi) tant qu'un premier enonce n'a pas ete lance DANS un geste
+// utilisateur. On "deverrouille" donc la voix au premier toucher : un enonce
+// muet, inaudible, qui autorise ensuite toutes les lectures automatiques.
+let voiceUnlocked = false;
+function unlockVoice() {
+  if (voiceUnlocked || !('speechSynthesis' in window)) return;
+  voiceUnlocked = true;
+  try {
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    speechSynthesis.speak(u);
   } catch {}
 }
+document.addEventListener('touchend', unlockVoice, { once: true, passive: true });
+document.addEventListener('click', unlockVoice, { once: true, passive: true });
 
 // ---------- Caméra (webcam + galerie) ----------
 let cameraStream = null;
@@ -593,79 +635,127 @@ function compressImage(file, maxDim, quality) {
 
 // ---------- Micro (voix) ----------
 let recog = null;
+let micTimer = null;
+// Mode discussion ("mains libres", comme ChatGPT voix) : le micro reste
+// ouvert pendant TOUTE la conversation — il se rouvre tout seul quand Lumi
+// a fini de parler (ou quand iOS coupe la session), jusqu'a ce qu'on
+// rappuie sur le bouton 🎙️. Un appui sur 🎤 coupe aussi le mode.
+let liveMic = false;
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-if (SR) {
-  recog = new SR();
-  recog.lang = 'fr-FR';
-  recog.continuous = false;
-  recog.interimResults = false;
-  recog.onresult = (e) => {
-    const t = e.results[0][0].transcript;
-    $('input').value = t;
-    send(t);
-  };
-  recog.onerror = (e) => {
-    $('btn-mic').classList.remove('recording');
-    const err = e && e.error;
-    if (err === 'not-allowed' || err === 'service-not-allowed') {
-      if (isIOS) {
-        addBubble('assistant', "🎤 Je ne peux pas t'entendre pour l'instant ! Il faut approuver le certificat de Lumi : ouvre la page d'accueil, bouton « 📱 Connecter un téléphone », puis « 🍎 Aide iPhone ». Une seule fois, promis ! 🙏");
-      } else {
-        addBubble('assistant', "🎤 Le micro est bloque par le navigateur. Clique sur le petit cadenas dans la barre d'adresse et autorise le micro. 🙏");
-      }
-    } else if (err === 'no-speech') {
-      addBubble('assistant', "🎤 Je n'ai rien entendu ! Appuie sur le micro et parle un peu plus fort, pres du telephone. 😊");
-    } else if (err === 'network') {
-      addBubble('assistant', "🎤 Petit probleme de reseau avec la reconnaissance vocale. Reessaie dans un instant. 🙏");
-    } else if (err) {
-      addBubble('assistant', "🎤 Le micro n'a pas fonctionne (" + err + "). Tu peux aussi ecrire ta question. 🙏");
-    }
-  };
-  recog.onend = () => $('btn-mic').classList.remove('recording');
+function stopListening() {
+  clearTimeout(micTimer);
+  const previous = recog;
+  recog = null; // ignore les événements tardifs (profil changé, voix démarrée)
+  $('btn-mic').classList.remove('recording');
+  if (previous) { try { previous.abort(); } catch {} }
 }
-// Sur iOS, Safari exige que la permission micro soit accordee AVANT
-// SpeechRecognition (sinon il echoue en silence). On demande le micro
-// une premiere fois via getUserMedia pour declencher la boite de
-// permission, puis l'appui suivant sur le micro fonctionnera.
-let micPermissionOk = false;
-async function warmMicPermission() {
-  if (micPermissionOk || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return true;
+function micError(error) {
+  if (liveMic) { liveMic = false; $('btn-mic-live').classList.remove('live'); }
+  setStatus('Micro indisponible — tu peux utiliser la dictée du clavier.');
+  const help = isIOS
+    ? "Sur iPhone : ouvre Lumi via le QR code ou l'adresse 🌍 trycloudflare.com (pas l'adresse https://192.168…), autorise le micro dans les réglages du site, et vérifie que Siri ET la Dictée (Réglages → Général → Clavier) sont activés."
+    : "Autorise le microphone dans les réglages du site de ton navigateur.";
+  const messages = {
+    'not-allowed': help,
+    'service-not-allowed': help,
+    'audio-capture': 'Vérifie que le microphone est disponible et autorisé, puis réessaie.',
+    'no-speech': "Je n'ai rien entendu. Appuie sur le micro et parle près du téléphone.",
+    'network': 'La reconnaissance vocale ne répond pas. Vérifie ta connexion et réessaie.',
+    'timeout': "La reconnaissance vocale n'a pas répondu. Recharge la page ou utilise la dictée du clavier.",
+  };
+  addBubble('assistant', '🎤 ' + (messages[error] || 'Le micro est indisponible. Tu peux écrire ta question ou utiliser la dictée du clavier.'));
+}
+function setLiveMic(on) {
+  liveMic = on;
+  if (on) $('btn-mic-live').classList.add('live');
+  else { $('btn-mic-live').classList.remove('live'); stopListening(); }
+}
+// Rouvre le micro du mode discussion (apres un delai court) si rien ne tourne.
+function micLiveRestart(delay = 300) {
+  clearTimeout(micTimer);
+  micTimer = setTimeout(() => {
+    if (liveMic && !recog && !chatLoading && !activeChat && !archiving) startListening();
+  }, delay);
+}
+// Appele par la voix quand Lumi a fini (ou echoue) de parler : le micro
+// reprend tout seul en mode discussion. typeof : la section voix peut etre
+// chargee avant celle-ci.
+function micLiveResume() {
+  if (liveMic) micLiveRestart(350);
+}
+function startListening() {
+  if (recog || chatLoading || activeChat || archiving) return;
+  if (!window.isSecureContext) {
+    setLiveMic(false);
+    addBubble('assistant', '🎤 Ouvre Lumi avec son adresse HTTPS sécurisée : https://lumi-revisions.onrender.com/');
+    return;
+  }
+  if (!SR) {
+    micError('service-not-allowed');
+    return;
+  }
   try {
-    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-    s.getTracks().forEach(t => t.stop());
-    micPermissionOk = true;
-    return true;
+    // Nouvelle instance à chaque essai : évite de réutiliser une session bloquée.
+    const session = new SR();
+    recog = session;
+    const generation = chatGeneration;
+    session.lang = 'fr-FR';
+    session.continuous = false;
+    session.interimResults = false;
+    session.onstart = () => {
+      if (recog === session) setStatus(liveMic ? 'Mode discussion 🎙️ — parle, je t’écoute !' : "Je t'écoute… 🎤");
+    };
+    session.onresult = (e) => {
+      if (recog !== session || generation !== chatGeneration) return;
+      const text = e.results[0][0].transcript;
+      stopListening();
+      $('input').value = text;
+      send(text);
+    };
+    session.onerror = (e) => {
+      if (recog !== session) return;
+      stopListening();
+      if (e.error !== 'aborted') micError(e.error);
+    };
+    session.onend = () => {
+      if (recog !== session) return;
+      stopListening();
+      if (liveMic) { micLiveRestart(); return; } // iOS coupe souvent : on rouvre
+      setStatus("Je t'écoute 👂");
+    };
+    $('btn-mic').classList.add('recording');
+    setStatus(liveMic ? 'Mode discussion 🎙️ — parle, je t’écoute !' : 'Autorise le micro si Safari le demande, puis parle.');
+    micTimer = setTimeout(() => {
+      if (recog !== session) return;
+      stopListening();
+      if (liveMic) { micLiveRestart(); return; } // silence prolongé : on réécoute
+      micError('timeout');
+    }, 30000);
+    // Safari gère lui-même ses permissions. Ne pas attendre getUserMedia
+    // avant start() : cela peut perdre le geste et monopoliser le micro.
+    session.start();
   } catch {
-    return false;
+    stopListening();
+    micError('service-not-allowed');
   }
 }
-$('btn-mic').addEventListener('click', async () => {
-  if (recog && $('btn-mic').classList.contains('recording')) { recog.stop(); return; }
-  stopSpeech(); // appuyer sur le micro coupe la voix de Lumi
-  if (!recog) {
-    addBubble('assistant', '🎤 Le micro ne marche pas sur ce navigateur (souvent il faut Chrome/Edge, et une connexion HTTPS sur téléphone). En attendant, écris ta question. 🙏');
+$('btn-mic-live').addEventListener('click', () => {
+  if (liveMic) { setLiveMic(false); setStatus('Mode discussion éteint. Appuie sur 🎤 quand tu veux parler.'); return; }
+  setLiveMic(true);
+  stopSpeech();
+  setStatus('Mode discussion 🎙️ — parle, je t’écoute tout le temps !');
+  startListening();
+});
+$('btn-mic').addEventListener('click', () => {
+  if (recog) { stopListening(); setStatus("Je t'écoute 👂"); return; }
+  if (liveMic) { setLiveMic(false); setStatus('Mode discussion éteint. Appuie sur 🎤 quand tu veux parler.'); return; }
+  stopSpeech();
+  if (chatLoading || activeChat || archiving) {
+    setStatus('Attends la fin du chargement ou de la réponse, puis appuie sur 🎤.');
     return;
   }
-  if ($('btn-mic').classList.contains('recording')) { recog.stop(); return; }
-  $('btn-mic').classList.add('recording');
-  setStatus("Je t'écoute… 🎤");
-  const ok = await warmMicPermission();
-  if (!ok) {
-    $('btn-mic').classList.remove('recording');
-    if (isIOS) {
-      addBubble('assistant', "🎤 Je ne peux pas t'entendre pour l'instant ! Il faut d'abord approuver le certificat de Lumi : page d'accueil → « 📱 Connecter un téléphone » → « 🍎 Aide iPhone ». Une seule fois, promis ! 🙏");
-    } else {
-      addBubble('assistant', "🎤 Le micro est bloque. Clique sur le cadenas dans la barre d'adresse et autorise le micro. 🙏");
-    }
-    return;
-  }
-  try { recog.start(); } catch {
-    // Sur iOS, start() juste apres une boite de permission peut echouer :
-    // on previent l'enfant de reappluyer une fois.
-    $('btn-mic').classList.remove('recording');
-    addBubble('assistant', "🎤 Le micro est maintenant active ! Reappuie sur le bouton micro et parle. 😊");
-  }
+  startListening();
 });
 
 // ---------- Envoi ----------
@@ -675,6 +765,7 @@ $('input').addEventListener('keydown', (e) => { if (e.key === 'Enter') send($('i
 // ---------- Retour ----------
 $('btn-back').addEventListener('click', () => {
   if (archiving) return;
+  if (typeof setLiveMic === 'function') setLiveMic(false); // on quitte la conversation
   cancelChat();
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   $('avatar').classList.remove('talking');
@@ -888,6 +979,127 @@ $('btn-iphone-help').addEventListener('click', () => $('iphone-modal').classList
 $('btn-iphone-help2').addEventListener('click', () => $('iphone-modal').classList.remove('hidden'));
 $('btn-iphone-close').addEventListener('click', () => $('iphone-modal').classList.add('hidden'));
 
+// ---------- Diagnostic micro + voix ----------
+// Fait sur l'appareil lui-meme (iPhone en particulier) : au lieu de deviner
+// pourquoi le micro ou la voix ne marchent pas, on teste chaque brique et on
+// affiche un rapport. Envoie une capture de ce rapport si besoin d'aide.
+$('btn-diag-voice').addEventListener('click', () => {
+  $('settings-modal').classList.add('hidden');
+  $('diag-content').innerHTML = '<p class="hint">Appuie sur « Lancer le diagnostic » puis accepte la demande de micro si Safari la montre.</p>';
+  $('diag-modal').classList.remove('hidden');
+});
+$('btn-diag-close').addEventListener('click', () => $('diag-modal').classList.add('hidden'));
+
+function diagBeep() {
+  return new Promise((resolve) => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.frequency.value = 440;
+      g.gain.value = 0.3;
+      o.connect(g); g.connect(ctx.destination);
+      o.start();
+      setTimeout(() => { try { o.stop(); ctx.close(); } catch {} resolve(true); }, 600);
+    } catch { resolve(false); }
+  });
+}
+
+function diagMic() {
+  return new Promise((resolve) => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return resolve('API micro absente du navigateur');
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((s) => {
+        const label = (s.getAudioTracks()[0] || {}).label || 'micro';
+        s.getTracks().forEach((t) => t.stop());
+        resolve('ok (' + label + ')');
+      })
+      .catch((e) => resolve('refus ou erreur : ' + (e.name || e.message)));
+  });
+}
+
+function diagSR() {
+  return new Promise((resolve) => {
+    const SRc = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SRc) return resolve('reconnaissance vocale absente de ce navigateur (iOS trop ancien ou navigateur limite)');
+    let done = false;
+    const finish = (msg) => { if (!done) { done = true; try { r.abort(); } catch {} resolve(msg); } };
+    let r;
+    try {
+      r = new SRc();
+    } catch (e) {
+      return resolve('impossible a creer : ' + e.message);
+    }
+    r.lang = 'fr-FR';
+    r.onstart = () => finish('demarre — dis un mot pour completer le test');
+    r.onerror = (e) => finish('erreur : ' + e.error);
+    r.onresult = () => finish('voix reconnue correctement');
+    r.onend = () => finish('demarre puis s\'est arrete (tu n\'as rien dit ?)');
+    try {
+      r.start();
+    } catch (e) {
+      return finish('lancement impossible : ' + e.message);
+    }
+    setTimeout(() => finish('aucune reponse en 6 s'), 6000);
+  });
+}
+
+function diagSpeech() {
+  return new Promise((resolve) => {
+    if (!('speechSynthesis' in window)) return resolve('synthese vocale absente de ce navigateur');
+    let started = false;
+    try { speechSynthesis.cancel(); } catch {}
+    const u = new SpeechSynthesisUtterance('Bonjour.');
+    u.lang = 'fr-FR';
+    u.onstart = () => { started = true; };
+    u.onend = () => resolve(started ? 'ok : la voix a parle' : 'coupee avant de parler (mode silencieux ?)');
+    u.onerror = (e) => resolve('erreur : ' + (e.error || 'inconnue'));
+    speechSynthesis.speak(u);
+    setTimeout(() => resolve(started ? 'ok : la voix parle toujours' : 'jamais demarree'), 6000);
+  });
+}
+
+$('btn-diag-run').addEventListener('click', async () => {
+  const btn = $('btn-diag-run');
+  btn.disabled = true;
+  const rows = [];
+  const report = [];
+  const add = (ok, label, detail) => {
+    const icon = ok === true ? '✅' : ok === false ? '❌' : '⚠️';
+    const line = `${icon} <strong>${label}</strong>${detail ? ' — ' + escapeHtml(detail) : ''}`;
+    rows.push(`<li class="${ok === true ? 'diag-ok' : ok === false ? 'diag-bad' : 'diag-warn'}">${line}</li>`);
+    report.push(`${ok === true ? 'OK' : ok === false ? 'ECHEC' : '!'} ${label}${detail ? ' -- ' + detail : ''}`);
+    $('diag-content').innerHTML = '<ol class="diag-list">' + rows.join('') + '</ol>';
+  };
+
+  const ua = navigator.userAgent;
+  const iosVer = (ua.match(/OS (\d+_\d+(?:_\d+)?)/) || [])[1];
+  add(null, 'Appareil', (isIOS ? 'iPhone/iPad' : 'autre appareil') + (iosVer ? ' · iOS ' + iosVer.replace(/_/g, '.') : '') + ' · ' + (window.isSecureContext ? 'HTTPS sécurisé' : 'PAS en HTTPS') + ' · ' + location.hostname);
+
+  add(!!('speechSynthesis' in window), 'Voix de synthèse disponible', 'speechSynthesis' + ('speechSynthesis' in window ? '' : ' absent'));
+  if ('speechSynthesis' in window) {
+    const fr = frenchVoices();
+    add(fr.length > 0, 'Voix françaises trouvées', fr.length + ' (' + fr.slice(0, 3).map((v) => v.name).join(', ') + ')');
+  }
+
+  const beep = await diagBeep();
+  add(beep, 'Haut-parleur (bip de test)', beep ? 'un bip a été joué : entends-tu un son ?' : 'impossible de jouer un son');
+
+  const mic = await diagMic();
+  add(/^ok/.test(mic), 'Permission micro du site', mic);
+
+  const sr = await diagSR();
+  add(/^voix reconnue|demarre/.test(sr), 'Reconnaissance vocale (Siri/Dictée)', sr);
+
+  const speech = await diagSpeech();
+  add(/^ok/.test(speech), 'Lecture à voix haute', speech);
+
+  rows.push('<li class="diag-warn">📋 <strong>Rapport texte</strong> (copie-le ou fais une capture d\'écran si tu demandes de l\'aide) :</li>');
+  rows.push('<li><textarea class="diag-report" readonly rows="8">' + escapeHtml(report.join('\n')) + '</textarea></li>');
+  $('diag-content').innerHTML = '<ol class="diag-list">' + rows.join('') + '</ol>';
+  btn.disabled = false;
+});
+
 // ---------- QR code de connexion (telephone) ----------
 async function loadConnectQr() {
   try {
@@ -895,7 +1107,7 @@ async function loadConnectQr() {
     const j = await r.json();
     if (j.qr) {
       $('connect-qr').src = j.qr;
-      $('connect-url').textContent = 'Sur le téléphone (même Wi-Fi), ouvre : ' + (j.url || '');
+      $('connect-url').textContent = 'Sur le téléphone (iPhone inclus), ouvre : ' + (j.url || '');
       const t = $('connect-tunnel');
       if (t) {
         if (j.tunnel_url) {
@@ -951,6 +1163,7 @@ $('btn-new').addEventListener('click', async () => {
     history = [];
     $('chat').innerHTML = '';
     addBubble('assistant', 'Nouvelle leçon, ' + escapeHtml(profile.name) + ' ! 👋 Montre-moi ton devoir ou pose une question.');
+    if (typeof micLiveResume === 'function') micLiveResume();
   } catch (err) {
     addBubble('assistant', '⚠️ ' + escapeHtml(err.message));
   } finally {
@@ -987,7 +1200,8 @@ async function openProgress(view) {
 
     sessions.forEach((s, k) => {
       const idx = orig.length - 1 - k;
-      html += `<li><button class="prog-item prog-link" data-idx="${idx}"><span class="prog-topic">${escapeHtml(s.topic)}</span><span class="prog-meta">${s.count} réponses · ${formatDate(s.date)}</span></button></li>`;
+      const flag = Array.isArray(s.a_travailler) && s.a_travailler.length ? ' 🔧' : '';
+      html += `<li><button class="prog-item prog-link" data-idx="${idx}"><span class="prog-topic">${escapeHtml(s.topic)}${flag}</span><span class="prog-meta">${s.count} réponses · ${formatDate(s.date)}</span></button></li>`;
     });
     html += '</ul>';
   }
@@ -1011,6 +1225,15 @@ function renderSession(s) {
   });
   box.innerHTML = '';
   box.appendChild(back);
+  // Bilan pedagogique (genere a l'archivage) : reussites + points a retravailler
+  const reussi = Array.isArray(s && s.reussi) ? s.reussi : [];
+  const trav = Array.isArray(s && s.a_travailler) ? s.a_travailler : [];
+  if (reussi.length || trav.length) {
+    box.insertAdjacentHTML('beforeend', `<div class="prog-bilan">` +
+      (reussi.length ? `<p>✅ <strong>Bien compris :</strong> ${escapeHtml(reussi.join(' · '))}</p>` : '') +
+      (trav.length ? `<p>🔧 <strong>À retravailler :</strong> ${escapeHtml(trav.join(' · '))}</p>` : '') +
+      `</div>`);
+  }
   const msgs = (s && s.messages) || [];
   if (!msgs.length) {
     box.insertAdjacentHTML('beforeend', '<p class="hint">Pas de détails gardés pour cette leçon (elle date d\'avant la mise à jour).</p>');
@@ -1098,7 +1321,9 @@ async function renderParentArea() {
       html += '<ul class="prog-list">';
       for (const s of sessions.slice().reverse().slice(0, 10)) {
         const sc = s.type === 'quiz' && s.count ? ` · ${s.score}/${s.count} ✅` : '';
-        html += `<li class="prog-item"><span class="prog-topic">${escapeHtml(s.topic)}</span><span class="prog-meta">${s.count} échanges · ${formatDate(s.date)}${sc}</span></li>`;
+        const reussi = Array.isArray(s.reussi) && s.reussi.length ? `<span class="prog-extra">✅ ${escapeHtml(s.reussi.join(' · '))}</span>` : '';
+        const trav = Array.isArray(s.a_travailler) && s.a_travailler.length ? `<span class="prog-extra">🔧 <strong>À retravailler :</strong> ${escapeHtml(s.a_travailler.join(' · '))}</span>` : '';
+        html += `<li class="prog-item"><span class="prog-topic">${escapeHtml(s.topic)}</span><span class="prog-meta">${s.count} échanges · ${formatDate(s.date)}${sc}</span>${reussi}${trav}</li>`;
       }
       html += '</ul>';
     }

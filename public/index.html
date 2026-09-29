@@ -121,6 +121,7 @@
           <strong id="child-name">…</strong>
         </div>
         <span id="teacher-status">Je t'écoute 👂</span>
+        <button id="btn-listen" class="btn" type="button">🔊 Écouter Lumi</button>
         <button id="btn-stop" class="btn-stop hidden" type="button">✋ Couper la voix</button>
       </div>
     </div>
@@ -131,6 +132,7 @@
       <button id="btn-camera" class="icon-btn" title="Prendre une photo du cahier">📷</button>
       <input id="mic" type="file" accept="image/*" capture="environment" class="hidden">
       <input id="input" type="text" placeholder="Écris ta question…" autocomplete="off">
+      <button id="btn-mic-live" class="icon-btn live-btn" title="Mode discussion : le micro reste ouvert, parle quand tu veux !">🎙️</button>
       <button id="btn-mic" class="icon-btn" title="Parler">🎤</button>
       <button id="btn-send" class="icon-btn send" title="Envoyer">➤</button>
     </div>
@@ -195,11 +197,25 @@
         <input id="rate-slider" type="range" min="0.8" max="1.3" step="0.05" value="1.0">
       </label>
       <p class="hint">Astuce : sur Windows, le navigateur Edge a les voix françaises les plus naturelles (mention « Online (Natural) »).</p>
+      <button id="btn-test-voice" class="btn" type="button">🔊 Tester la voix</button>
+      <button id="btn-diag-voice" class="btn" type="button">🩺 Diagnostic micro + voix</button>
       <button id="btn-iphone-help2" class="btn" type="button">🍎 Aide iPhone / iPad (micro + voix)</button>
     </div>
   </div>
 
-  <!-- ===== Aide iPhone (certificat) ===== -->
+  <!-- ===== Diagnostic micro + voix ===== -->
+  <div id="diag-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <strong>🩺 Diagnostic micro + voix</strong>
+        <button id="btn-diag-close" class="icon-btn" title="Fermer">✕</button>
+      </div>
+      <div id="diag-content" class="diag-content"><p class="hint">Appuie sur le bouton « Lancer le diagnostic » puis accepte la demande de micro si Safari la montre. Le rapport s'affiche en 10 secondes.</p></div>
+      <button id="btn-diag-run" class="btn btn-primary" type="button">▶️ Lancer le diagnostic</button>
+    </div>
+  </div>
+
+  <!-- ===== Aide iPhone ===== -->
   <div id="iphone-modal" class="modal hidden">
     <div class="modal-box">
       <div class="modal-head">
@@ -207,12 +223,13 @@
         <button id="btn-iphone-close" class="icon-btn" title="Fermer">✕</button>
       </div>
       <ol class="help-steps">
-        <li><a href="/lumi-cert.crt">Appuie ici pour télécharger le certificat de Lumi</a> — en haut de l'écran, « Profil téléchargé » apparaît.</li>
-        <li>Ouvre <strong>Réglages</strong> → « Profil téléchargé » → <strong>Installer</strong> (entre ton code si on te le demande).</li>
-        <li>Puis <strong>Réglages</strong> → <strong>Général</strong> → <strong>Informations</strong> → <strong>Réglages de confiance du certificat</strong> → active <strong>Lumi</strong>.</li>
-        <li>Ferme Safari complètement (double-clic, glisse l'app vers le haut), puis reviens sur Lumi : le micro 🎤 et la voix 🔊 fonctionnent !</li>
+        <li>Ouvre Lumi via le <strong>QR code</strong> (adresse 🌍 trycloudflare.com) ou <a href="https://lumi-revisions.onrender.com/">Lumi en ligne</a>, directement dans <strong>Safari</strong>. Évite l'adresse https://192.168… : sans certificat installé, Safari y bloque le micro et la voix, quel que soit le navigateur (ils utilisent tous Safari dessous).</li>
+        <li>Appuie sur <strong>🔊 Écouter Lumi</strong> dans la conversation, ou <strong>Tester la voix</strong> dans les réglages. Monte le volume et <strong>désactive le mode silencieux</strong> (petit interrupteur sur le côté de l'iPhone) : en mode silencieux, la voix de Lumi est coupée.</li>
+        <li>Appuie sur <strong>🎤</strong> et accepte les demandes d'accès au micro et de reconnaissance vocale. Si tu les as refusées, ouvre les réglages de ce site dans le menu de Safari pour autoriser le microphone.</li>
+        <li>Vérifie que <strong>Siri est activé</strong> dans les Réglages de l'iPhone : Safari s'appuie sur ce service pour reconnaître la parole.</li>
+        <li>Si le micro reste bloqué, recharge la page et réessaie. Tu peux aussi toucher le champ de texte et utiliser la dictée du clavier de l'iPhone, puis envoyer ta question.</li>
       </ol>
-      <p class="hint">C'est une seule fois par téléphone. Quand Safari dit encore « connexion non sécurisée », c'est que l'étape 3 n'a pas été faite (active bien Lumi dans la liste).</p>
+      <p class="hint">Le site en ligne utilise déjà HTTPS : aucun certificat ni profil à installer. Si Safari affiche une alerte de sécurité, vérifie l'adresse sans contourner l'alerte.</p>
     </div>
   </div>
 

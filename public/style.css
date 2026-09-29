@@ -204,6 +204,8 @@ body {
 .inputbar input[type="text"]:focus { outline: none; border-color: var(--violet); }
 .icon-btn.send { background: var(--violet); color: #fff; }
 .icon-btn.recording { background: #ff5b5b; color: #fff; animation: pulse 1s infinite; }
+/* Mode discussion : micro ouvert en continu (vert quand actif) */
+.icon-btn.live-btn.live { background: #2fbf71; color: #fff; animation: pulse 1.6s infinite; }
 @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
 
 /* ===== Fenêtres (modales) ===== */
@@ -287,9 +289,13 @@ body {
 /* ===== Progression ===== */
 .prog-current { background: var(--violet-soft); border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 14px; }
 .prog-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.prog-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: #faf9ff; border: 2px solid #ece7fb; border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+.prog-item { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: #faf9ff; border: 2px solid #ece7fb; border-radius: 12px; padding: 10px 12px; font-size: 14px; }
 .prog-topic { flex: 1; }
 .prog-meta { color: var(--text-soft); font-size: 12px; white-space: nowrap; }
+/* Bilan pedagogique (parents) : reussites et points a retravailler */
+.prog-extra { flex-basis: 100%; color: var(--text-soft); font-size: 12px; }
+.prog-bilan { background: #f0fbf4; border: 2px solid #cdeeda; border-radius: 12px; padding: 10px 12px; margin: 10px 0; font-size: 14px; }
+.prog-bilan p { margin: 4px 0; }
 
 /* ===== Caméra ===== */
 #camera-video { width: 100%; border-radius: 14px; background: #000; max-height: 320px; object-fit: cover; }
@@ -388,3 +394,10 @@ body {
 .stat small { color: var(--text-soft); font-size: 11px; text-align: center; }
 .parent-weak { background: #fdf3e0; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; }
 .parent-line { font-size: 13.5px; color: var(--text-soft); margin: 6px 0; }
+
+/* Diagnostic micro + voix */
+.diag-list { padding-left: 22px; line-height: 1.8; font-size: 14px; }
+.diag-ok strong { color: #1a7f37; }
+.diag-bad strong { color: #c0392b; }
+.diag-warn strong { color: #b8860b; }
+.diag-report { width: 100%; font-family: monospace; font-size: 12px; border: 1px solid var(--violet-soft, #ddd); border-radius: 8px; padding: 8px; box-sizing: border-box; }

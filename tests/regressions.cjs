@@ -59,11 +59,11 @@ test('routes HTTP : sauvegardes concurrentes préservées et échec signalé', a
    if(options.method==='POST') { if(fail)return {ok:false,status:503}; stored=options.body;return {ok:true,json:async()=>({result:'OK'})}; }
    return {ok:true,json:async()=>({result:stored})};
  }});
- await c.initStore();run(c,section(back,'function topicLabel(history)','// Adresses IP locales'));run(c,section(back,"app.get('/api/profiles'",'// ---------- Demarrage'));
+ await c.initStore();run(c,section(back,'function topicLabel(history)','// Adresses IP locales'));run(c,section(back,'// ---------- Comptes famille (V2) ----------','function buildSystemPrompt(profile = {})'));run(c,section(back,"app.get('/api/profiles'",'// ---------- Demarrage'));
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
  const post=(route,body)=>fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  try {
-  const results=await Promise.all([post('/api/child',{id:'a',history:[{role:'user',content:'A'}]}),post('/api/child',{id:'b',history:[{role:'user',content:'B'}]})]);assert.ok(results.every(r=>r.ok));assert.equal(JSON.parse(stored).a.history[0].content,'A');assert.equal(JSON.parse(stored).b.history[0].content,'B');
+  const results=await Promise.all([post('/api/child',{id:'a',history:[{role:'user',content:'A'}]}),post('/api/child',{id:'b',history:[{role:'user',content:'B'}]})]);assert.ok(results.every(r=>r.ok));assert.equal(JSON.parse(stored).spaces.local.a.history[0].content,'A');assert.equal(JSON.parse(stored).spaces.local.b.history[0].content,'B');
   fail=true;const refused=await post('/api/child',{id:'a',action:'archive'});assert.equal(refused.status,503);const old=await (await fetch(base+'/api/child?id=a')).json();assert.equal(old.history[0].content,'A');assert.equal(old.sessions.length,0);
   fail=false;assert.equal((await post('/api/child',{id:'a',action:'archive'})).status,200);const archived=await (await fetch(base+'/api/child?id=a')).json();assert.equal(archived.history.length,0);assert.equal(archived.sessions[0].messages[0].content,'A');
  } finally {server.closeAllConnections();await new Promise(r=>server.close(r));}
@@ -76,4 +76,37 @@ test('sauvegarde locale : remplace le fichier seulement après écriture du temp
 });
 test('conversation non sauvegardée : conservée en mémoire pour réessayer',async()=>{
  const c=context({pendingLessons:new Map(),fetch:async()=>({ok:false})});run(c,section(front,'async function saveChild(', 'function addBubble'));await assert.rejects(c.saveChild({id:'a'},[{content:'à garder'}]));assert.equal(c.pendingLessons.get('a')[0].content,'à garder');c.fetch=async()=>({ok:true});await c.saveChild({id:'a'},c.pendingLessons.get('a'));assert.equal(c.pendingLessons.size,0);
+});
+test('migration V2 : profils à plats deviennent l’espace du compte local',()=>{
+ const c=context();run(c,section(back,'function migrateLegacy(data)','function topicLabel'));
+ const before={profiles:[{id:'a',name:'A',age:7}],a:{name:'A',age:7,history:[{role:'user',content:'x'}],sessions:[]}};
+ const m=c.migrateLegacy(before);
+ assert.equal(m.accounts.local.id,'local');assert.equal(m.spaces.local.a.history[0].content,'x');
+ assert.equal(c.migrateLegacy(m),m); // idempotente : relancer ne change rien
+ const intact={a:1};assert.equal(c.migrateLegacy(intact),intact); // sans profils -> intact
+});
+test('mots de passe : PBKDF2, jamais en clair, vérifiable',async()=>{
+ const c=context({crypto:globalThis.crypto,TextEncoder,btoa:globalThis.btoa,atob:globalThis.atob});
+ run(c,section(back,'function bufToB64','function parseCookies'));
+ const h=await c.hashPassword('secret123');
+ assert.match(h,/^pbkdf2:/);assert.ok(!h.includes('secret123'));
+ assert.equal(await c.verifyPassword('secret123',h),true);
+ assert.equal(await c.verifyPassword('faux',h),false);
+ assert.equal(await c.verifyPassword('secret123',''),false);
+});
+test('RGPD : effacement du compte supprime tout, export donne tout',async()=>{
+ const c=store({app:{post(){},get(){}},fetch:async()=>({ok:true,json:async()=>({result:'{}'})})});
+ await c.initStore();
+ run(c,section(back,'// ---------- Comptes famille (V2) ----------','function buildSystemPrompt(profile = {})'));
+ const d=c.getData();
+ d.accounts={x:{id:'x',email:'a@b.c',passHash:'h',plan:'free',created:'2026-01-01',consentDate:'2026-01-01',settings:{},usage:{}}};
+ d.sessions={t1:{accountId:'x',expires:'2999-01-01'},t2:{accountId:'y',expires:'2999-01-01'}};
+ d.spaces={x:{profiles:[{id:'k',name:'K',age:7}],k:{name:'K',age:7,history:[{role:'user',content:'perso'}],sessions:[{topic:'T'}]}}};
+ await c.setData(d);
+ const exported=await c.accountExport('x');
+ assert.equal(exported.account.email,'a@b.c');assert.equal(exported.children[0].conversations[0].content,'perso');assert.equal(exported.children[0].sessions[0].topic,'T');
+ await c.accountErase('x');
+ const after=c.getData();
+ assert.equal(after.accounts.x,undefined);assert.equal(after.spaces.x,undefined);assert.equal(after.sessions.t1,undefined);
+ assert.ok(after.sessions.t2); // les autres comptes ne sont pas touchés
 });
