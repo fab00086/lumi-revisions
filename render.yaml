@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: lumi-revisions
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm test
+    startCommand: npm start
+    healthCheckPath: /api/gate
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NO_HTTPS
+        value: "1"
+      - key: NO_OPEN_BROWSER
+        value: "1"
+      - key: OLLAMA_BASE_URL
+        value: https://ollama.com
+      - key: OLLAMA_API_KEY
+        sync: false
+      - key: OLLAMA_MODEL
+        sync: false
+      - key: OLLAMA_VISION_MODEL
+        sync: false
+      - key: LUMI_ACCESS_CODE
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false

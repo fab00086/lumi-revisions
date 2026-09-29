@@ -8,7 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test tests/*.cjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

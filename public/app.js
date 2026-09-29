@@ -3,6 +3,17 @@
 // ---------- Raccourcis ----------
 const $ = (id) => document.getElementById(id);
 let currentProfile = null;
+let chatGeneration = 0;
+let activeChat = null;
+let chatLoading = false;
+let archiving = false;
+function cancelChat() {
+  chatGeneration++;
+  if (activeChat) activeChat.abort();
+  activeChat = null;
+  chatLoading = false;
+  removeTyping();
+}
 let history = []; // { role, content }
 
 // ---------- Utilitaires ----------
@@ -48,28 +59,30 @@ function generateId() { return Date.now().toString(36) + Math.random().toString(
 
 // Profils partages entre tous les appareils via le serveur
 let profilesCache = [];
+const pendingLessons = new Map();
 
 async function fetchProfiles() {
   try {
     const r = await fetch('/api/profiles');
+    if (!r.ok) throw new Error('Chargement des profils impossible');
     let list = await r.json();
     if (!Array.isArray(list) || !list.length) {
       // migration depuis l'ancien stockage local du navigateur
       try { list = JSON.parse(localStorage.getItem('lumiprofiles') || '[]'); } catch { list = []; }
-      if (list.length) saveProfiles(list);
+      if (list.length) await saveProfiles(list);
     }
     profilesCache = (Array.isArray(list) ? list : []).map(p => { if (!p.id) p.id = generateId(); return p; });
   } catch {}
 }
 
 function loadProfiles() { return profilesCache; }
-function saveProfiles(list) {
-  profilesCache = list;
-  fetch('/api/profiles', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+async function saveProfiles(list) {
+  const r = await fetch('/api/profiles', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ profiles: list })
-  }).catch(() => {});
+  });
+  if (!r.ok) throw new Error('Sauvegarde des profils impossible. Réessaie.');
+  profilesCache = list;
 }
 
 function renderProfiles() {
@@ -79,11 +92,12 @@ function renderProfiles() {
   list.forEach((p, i) => {
     const el = document.createElement('button');
     el.className = 'profile-pill';
-    el.innerHTML = `${p.photo ? `<img src="${p.photo}" class="pill-photo" alt="">` : ''} ${escapeHtml(p.name)} <span class="badge">${p.age} ans</span> <span class="del" data-i="${i}">✕</span>`;
-    el.addEventListener('click', (e) => {
+    el.innerHTML = `${p.photo ? `<img src="${escapeHtml(p.photo)}" class="pill-photo" alt="">` : ''} ${escapeHtml(p.name)} <span class="badge">${escapeHtml(p.age)} ans</span> <span class="del" data-i="${i}">✕</span>`;
+    el.addEventListener('click', async (e) => {
       if (e.target.classList.contains('del')) {
         e.stopPropagation();
-        list.splice(i, 1); saveProfiles(list); renderProfiles();
+        try { await saveProfiles(list.filter((_, index) => index !== i)); renderProfiles(); }
+        catch (err) { alert(err.message); }
         return;
       }
       startChat(p);
@@ -95,7 +109,7 @@ function renderProfiles() {
 // Photo de profil (selfie)
 let pendingPhoto = null; // dataURL jpeg
 
-$('profile-form').addEventListener('submit', (e) => {
+$('profile-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = $('pf-name').value.trim();
   const age = parseInt($('pf-age').value, 10);
@@ -103,8 +117,8 @@ $('profile-form').addEventListener('submit', (e) => {
   const photo = pendingPhoto;
   const list = loadProfiles();
   const child = { id: generateId(), name, age, photo: photo || null };
-  list.push(child);
-  saveProfiles(list);
+  try { await saveProfiles([...list, child]); }
+  catch (err) { alert(err.message); return; }
   pendingPhoto = null;
   $('pf-photo-preview').classList.add('hidden');
   $('pf-photo-preview').removeAttribute('src');
@@ -116,6 +130,10 @@ $('profile-form').addEventListener('submit', (e) => {
 
 // ---------- Chat ----------
 async function startChat(p) {
+  if (archiving) return;
+  cancelChat();
+  const generation = chatGeneration;
+  chatLoading = true;
   currentProfile = p;
   history = [];
   $('screen-profile').classList.add('hidden');
@@ -131,10 +149,19 @@ async function startChat(p) {
   if (p.id) {
     try {
       const r = await fetch('/api/child?id=' + encodeURIComponent(p.id));
+      if (!r.ok) throw new Error('Chargement impossible');
       saved = await r.json();
-    } catch {}
+    } catch {
+      if (generation === chatGeneration) {
+        addBubble('assistant', '⚠️ Impossible de charger la leçon. Reviens aux profils puis réessaie.');
+      }
+      return;
+    }
   }
 
+  if (generation !== chatGeneration) return;
+  chatLoading = false;
+  if (pendingLessons.has(p.id)) saved = { history: pendingLessons.get(p.id) };
   if (saved && Array.isArray(saved.history) && saved.history.length) {
     history = saved.history;
     for (const h of history) {
@@ -151,15 +178,15 @@ async function startChat(p) {
 }
 
 // Sauvegarde la lecon en cours sur le serveur
-async function saveChild() {
-  if (!currentProfile || !currentProfile.id) return;
-  try {
-    await fetch('/api/child', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: currentProfile.id, name: currentProfile.name, age: currentProfile.age, history })
-    });
-  } catch {}
+async function saveChild(profile = currentProfile, messages = history) {
+  if (!profile || !profile.id) return;
+  pendingLessons.set(profile.id, messages);
+  const r = await fetch('/api/child', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: profile.id, name: profile.name, age: profile.age, history: messages })
+  });
+  if (!r.ok) throw new Error('La leçon n’a pas été sauvegardée. Réessaie avant de quitter.');
+  pendingLessons.delete(profile.id);
 }
 
 function addBubble(role, html, sources) {
@@ -194,7 +221,13 @@ function removeTyping() { const t = $('typing'); if (t) t.remove(); }
 
 async function send(text, imageBase64) {
   const clean = (text || '').trim();
-  if (!clean && !imageBase64) return;
+  if ((!clean && !imageBase64) || !currentProfile || activeChat || chatLoading || archiving) return;
+  const generation = chatGeneration;
+  const profile = { ...currentProfile };
+  const messages = history;
+  const controller = new AbortController();
+  activeChat = controller;
+  const timeout = setTimeout(() => controller.abort(), 120000);
   stopSpeech(); // l'enfant "coupe la parole" en envoyant un nouveau message
 
   if (imageBase64) {
@@ -219,12 +252,14 @@ async function send(text, imageBase64) {
     const r = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: clean, image: imageBase64 || null, profile: currentProfile, history })
+      signal: controller.signal,
+      body: JSON.stringify({ message: clean, image: imageBase64 || null, profile, history: messages })
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       throw new Error(j.error || ('HTTP ' + r.status));
     }
+    if (generation !== chatGeneration) return;
     // Lecture du flux : {type: status|start|delta|error|done}
     const bubble = addBubble('assistant', '');
     const reader = r.body.getReader();
@@ -232,6 +267,7 @@ async function send(text, imageBase64) {
     let buf = '', full = '', sources = [], hadError = null, firstDelta = true;
     while (true) {
       const { done, value } = await reader.read();
+      if (generation !== chatGeneration) return;
       if (done) break;
       buf += dec.decode(value, { stream: true });
       const lines = buf.split('\n');
@@ -266,14 +302,22 @@ async function send(text, imageBase64) {
       s.innerHTML = '<strong>📚 Sources :</strong> ' + sources.map(x => `<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener">${escapeHtml(x.title)}</a>`).join(' · ');
       bubble.parentElement.appendChild(s);
     }
-    history.push({ role: 'user', content: clean || '[photo du cahier]' });
-    history.push({ role: 'assistant', content: full });
-    saveChild();
-    speak(full);
+    messages.push({ role: 'user', content: clean || '[photo du cahier]' });
+    messages.push({ role: 'assistant', content: full });
+    try {
+      await saveChild(profile, messages);
+    } catch (err) {
+      if (generation === chatGeneration) addBubble('assistant', '⚠️ ' + escapeHtml(err.message));
+    }
+    if (generation === chatGeneration) speak(full);
   } catch (err) {
+    if (generation !== chatGeneration) return;
     removeTyping();
     setStatus("Je t'écoute 👂");
     addBubble('assistant', '⚠️ Impossible de joindre Lumi : ' + escapeHtml(String(err)));
+  } finally {
+    clearTimeout(timeout);
+    if (activeChat === controller) activeChat = null;
   }
 }
 
@@ -630,6 +674,8 @@ $('input').addEventListener('keydown', (e) => { if (e.key === 'Enter') send($('i
 
 // ---------- Retour ----------
 $('btn-back').addEventListener('click', () => {
+  if (archiving) return;
+  cancelChat();
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   $('avatar').classList.remove('talking');
   $('screen-chat').classList.add('hidden');
@@ -712,22 +758,29 @@ $('btn-settings').addEventListener('click', () => $('settings-modal').classList.
 $('btn-settings-close').addEventListener('click', () => $('settings-modal').classList.add('hidden'));
 
 // ---------- Interro (quiz) ----------
+let quizGeneration = 0, quizBusy = false;
 let quizData = null, quizIdx = 0, quizScore = 0, quizTopicUsed = '';
 
 $('btn-quiz').addEventListener('click', () => {
+  $('quiz-topic-row').classList.remove('hidden');
   $('quiz-modal').classList.remove('hidden');
   $('quiz-area').innerHTML = '<p class="hint">Choisis un sujet et Lumi te pose 5 questions ! 🌟</p>';
   $('quiz-progress').textContent = '';
   if (lastTopic()) $('quiz-topic').value = lastTopic();
 });
 $('btn-quiz-close').addEventListener('click', () => {
+  quizGeneration++;
+  quizBusy = false;
   $('quiz-modal').classList.add('hidden');
   stopSpeech();
 });
 
 async function startQuiz() {
+  if (quizBusy) return;
   const topic = $('quiz-topic').value.trim();
   if (!topic || !currentProfile) { $('quiz-area').innerHTML = '<p class="hint">Écris un sujet d\'abord 🙂</p>'; return; }
+  quizBusy = true;
+  const generation = ++quizGeneration;
   quizTopicUsed = topic;
   $('quiz-topic-row').classList.add('hidden');
   $('quiz-area').innerHTML = '<p class="hint">Je prépare ton interro… ⏳</p>';
@@ -738,6 +791,7 @@ async function startQuiz() {
       body: JSON.stringify({ topic, profile: currentProfile, count: 5 })
     });
     const j = await r.json();
+    if (generation !== quizGeneration) return;
     if (!j.quiz || !j.quiz.length) {
       $('quiz-area').innerHTML = '<p class="hint">⚠️ Je n\'ai pas réussi à préparer les questions. Essaie encore !</p>';
       $('quiz-topic-row').classList.remove('hidden');
@@ -746,8 +800,11 @@ async function startQuiz() {
     quizData = j.quiz; quizIdx = 0; quizScore = 0;
     renderQuizQuestion();
   } catch {
+    if (generation !== quizGeneration) return;
     $('quiz-area').innerHTML = '<p class="hint">⚠️ Impossible de préparer l\'interro.</p>';
     $('quiz-topic-row').classList.remove('hidden');
+  } finally {
+    if (generation === quizGeneration) quizBusy = false;
   }
 }
 $('btn-quiz-start').addEventListener('click', startQuiz);
@@ -880,21 +937,25 @@ function formatDate(iso) {
 }
 
 $('btn-new').addEventListener('click', async () => {
-  if (!currentProfile) return;
-  const name = currentProfile.name;
-  if (currentProfile.id) {
-    try {
-      await fetch('/api/child', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: currentProfile.id, name, age: currentProfile.age, history, action: 'archive' })
-      });
-    } catch {}
+  if (!currentProfile || archiving || chatLoading || activeChat) return;
+  archiving = true;
+  const profile = { ...currentProfile };
+  try {
+    const r = await fetch('/api/child', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: profile.id, name: profile.name, age: profile.age, history, action: 'archive' })
+    });
+    if (!r.ok) throw new Error('Archivage impossible. Ta leçon est conservée, réessaie.');
+    pendingLessons.delete(profile.id);
+    cancelChat();
+    history = [];
+    $('chat').innerHTML = '';
+    addBubble('assistant', 'Nouvelle leçon, ' + escapeHtml(profile.name) + ' ! 👋 Montre-moi ton devoir ou pose une question.');
+  } catch (err) {
+    addBubble('assistant', '⚠️ ' + escapeHtml(err.message));
+  } finally {
+    archiving = false;
   }
-  history = [];
-  $('chat').innerHTML = '';
-  const greeting = `C'est parti pour une nouvelle leçon, ${escapeHtml(name)} ! 👋 Montre-moi ton devoir (photo 📷) ou pose-moi une question 😊`;
-  addBubble('assistant', greeting);
-  speak(`C'est parti pour une nouvelle leçon, ${name} ! Montre-moi ton devoir, ou pose-moi une question.`);
 });
 
 async function openProgress(view) {
@@ -909,7 +970,8 @@ async function openProgress(view) {
   let d = null;
   try { d = await (await fetch('/api/child?id=' + encodeURIComponent(currentProfile.id))).json(); } catch {}
   if (!d) { box.innerHTML = '<p class="hint">Aucune progression pour le moment.</p>'; return; }
-  const sessions = (d.sessions || []).slice().reverse();
+  const orig = d.sessions || [];
+  const sessions = orig.slice().reverse();
   const currentTopic = (d.history && d.history.length) ? topicLabelFront(d.history) : null;
   let html = '';
   if (currentTopic) {
@@ -922,7 +984,7 @@ async function openProgress(view) {
   } else {
     html += '<p class="hint" style="margin:0 0 8px">Leçons terminées — appuie dessus pour relire la conversation :</p><ul class="prog-list">';
     // les sessions les plus recentes d'abord ; on garde l'index d'origine pour la vue detail
-    const orig = (d.sessions || []);
+
     sessions.forEach((s, k) => {
       const idx = orig.length - 1 - k;
       html += `<li><button class="prog-item prog-link" data-idx="${idx}"><span class="prog-topic">${escapeHtml(s.topic)}</span><span class="prog-meta">${s.count} réponses · ${formatDate(s.date)}</span></button></li>`;
@@ -989,7 +1051,7 @@ $('btn-parent-close').addEventListener('click', () => $('parent-modal').classLis
 function enterParentArea() {
   const v = parseInt($('parent-gate').value, 10);
   if (v !== 42) {
-    $('parent-content').innerHTML += '<p class="hint">Ce n\'est pas la bonne réponse 🙂</p>';
+    $('parent-content').insertAdjacentHTML('beforeend', '<p class="hint">Ce n\'est pas la bonne réponse 🙂</p>');
     return;
   }
   renderParentArea();
@@ -1015,7 +1077,7 @@ async function renderParentArea() {
     const weak = quizzes.filter(s => s.count > 0 && s.score / s.count < 0.6);
 
     html += `<div class="parent-kid">
-      <h3>${kid.photo ? `<img src="${escapeHtml(kid.photo)}" class="pill-photo" alt="">` : ''} ${escapeHtml(kid.name)} <span class="badge">${kid.age} ans</span></h3>
+      <h3>${kid.photo ? `<img src="${escapeHtml(kid.photo)}" class="pill-photo" alt="">` : ''} ${escapeHtml(kid.name)} <span class="badge">${escapeHtml(kid.age)} ans</span></h3>
       <div class="parent-stats">
         <span class="stat"><strong>${sessions.length}</strong><small>leçons + interros</small></span>
         <span class="stat"><strong>${answers}</strong><small>réponses de Lumi</small></span>

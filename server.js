@@ -39,56 +39,69 @@ const isDeno = typeof globalThis.Deno !== 'undefined';
 let denoKv = null;
 
 function loadData() {
-  try {
-    if (!fs.existsSync(DATA_FILE)) return {};
-    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  } catch { return {}; }
+  if (!fs.existsSync(DATA_FILE)) return {};
+  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 }
 function saveData(data) {
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (e) { console.error('saveData:', e.message); }
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const temp = DATA_FILE + '.tmp';
+  fs.writeFileSync(temp, JSON.stringify(data, null, 2), 'utf8');
+  fs.renameSync(temp, DATA_FILE);
 }
 
 let memData = null;
+async function kvRequest(endpoint, options = {}) {
+  const r = await fetch(KV_URL + endpoint, {
+    ...options, signal: AbortSignal.timeout(15000),
+    headers: { Authorization: 'Bearer ' + KV_TOKEN, 'Content-Type': 'text/plain' }
+  });
+  if (!r.ok) throw new Error('Stockage distant indisponible (' + r.status + ')');
+  const j = await r.json();
+  if (j.error) throw new Error('Erreur du stockage distant');
+  return j;
+}
 async function initStore() {
-  if (isDeno) { try { denoKv = await Deno.openKv(); } catch { denoKv = null; } }
+  if (isDeno) denoKv = await Deno.openKv();
   if (denoKv) {
-    try {
-      const entry = await denoKv.get(['lumi-data']);
-      memData = entry.value || {};
-      console.log('  ☁️ Données chargées depuis la base Deno KV');
-      return;
-    } catch (e) { console.error('Deno KV load:', e.message); }
-  }
-  if (KV_URL && KV_TOKEN) {
-    try {
-      const r = await fetch(`${KV_URL}/get/lumi-data`, { headers: { Authorization: `Bearer ${KV_TOKEN}` } });
-      const j = await r.json();
-      memData = j.result ? JSON.parse(j.result) : {};
-      console.log('  ☁️ Données chargées depuis le stockage distant');
-    } catch (e) { console.error('KV load:', e.message); memData = {}; }
+    memData = (await denoKv.get(['lumi-data'])).value || {};
+  } else if (KV_URL && KV_TOKEN) {
+    const j = await kvRequest('/get/lumi-data');
+    memData = j.result ? JSON.parse(j.result) : {};
   } else {
     memData = loadData();
   }
-}
-function getData() { return memData || {}; }
-function setData(data) {
-  memData = data;
-  if (denoKv) {
-    denoKv.set(['lumi-data'], data).catch(e => console.error('Deno KV save:', e.message));
-    return;
+  if (!memData || typeof memData !== 'object' || Array.isArray(memData)) {
+    memData = null;
+    throw new Error('Données invalides : démarrage interrompu pour les préserver.');
   }
-  if (KV_URL && KV_TOKEN) {
-    fetch(`${KV_URL}/set/lumi-data`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'text/plain' },
-      body: JSON.stringify(data)
-    }).catch(e => console.error('KV save:', e.message));
+}
+function getData() {
+  if (!memData) throw new Error('Stockage non initialisé');
+  return structuredClone(memData);
+}
+async function setData(data) {
+  if (!memData) throw new Error('Stockage non initialisé');
+  if (denoKv) {
+    const result = await denoKv.set(['lumi-data'], data);
+    if (!result.ok) throw new Error('Sauvegarde refusée');
+  } else if (KV_URL && KV_TOKEN) {
+    await kvRequest('/set/lumi-data', { method: 'POST', body: JSON.stringify(data) });
   } else {
     saveData(data);
   }
+  memData = data;
+}
+// Sérialise les modifications pour ne jamais publier un état non sauvegardé.
+let writeQueue = Promise.resolve();
+function storedRoute(handler) {
+  return (req, res) => {
+    const task = writeQueue.then(() => handler(req, res));
+    writeQueue = task.catch(() => {});
+    task.catch(e => {
+      console.error('Sauvegarde:', e.message);
+      if (!res.headersSent) res.status(503).json({ error: 'Sauvegarde impossible. Réessaie avant de quitter la leçon.' });
+    });
+  };
 }
 function topicLabel(history) {
   const first = (history || []).find(h => h.role === 'user');
@@ -216,7 +229,7 @@ REGLES ABSOLUES (a respecter en toutes circonstances) :
 5. Tu as un petit caractere joyeux et amusant : sois chaleureux et enthousiaste, utilise de temps en temps un emoji, une pointe d'humour, des "Bravo !", "Super !". Rends l'apprentissage plaisant, sans jamais etre condescendant.
 6. Tu reponds toujours en francais.
 7. Tu restes TRES bref : maximum 3 phrases courtes par reponse (2, c'est encore mieux). Pas de longues listes a puces (une seule au grand maximum). Va droit au but : pas de salutations repetees, pas de recapitulatif. Si l'enfant demande une explication complete, tu peux aller jusqu'a 5 phrases, jamais plus.
-8. Pour les maths, ecris les fractions, puissances et calculs entre $ ... $ (LaTeX) pour un bel affichage. Exemple : $\frac{3}{4}$ ou $3 \times 4$.
+8. Pour les maths, ecris les fractions, puissances et calculs entre $ ... $ (LaTeX) pour un bel affichage. Exemple : $\\frac{3}{4}$ ou $3 \\times 4$.
 
 Methode par matiere :
 - Maths : ne donne pas le resultat, aide a comprendre l'enonce, puis guide etape par etape.
@@ -290,7 +303,8 @@ async function callOllama(messages, { image, maxTokens } = {}) {
   const r = await fetch(`${BASE_URL}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(120000)
   });
   if (!r.ok) {
     const t = await r.text();
@@ -319,7 +333,8 @@ async function streamOllama(messages, { image, maxTokens, onDelta } = {}) {
   const r = await fetch(`${BASE_URL}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(120000)
   });
   if (!r.ok) {
     const t = await r.text();
@@ -424,12 +439,12 @@ function parseQuiz(raw, count) {
   }
   if (!Array.isArray(arr)) return [];
   return arr
-    .filter(q => q && q.question && Array.isArray(q.options) && q.options.length >= 2)
+    .filter(q => q && q.question && Array.isArray(q.options) && q.options.length >= 2 && q.options.length <= 4 && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < q.options.length)
     .slice(0, count)
     .map(q => ({
       question: String(q.question),
       options: q.options.map(String).slice(0, 4),
-      answer: Math.max(0, Math.min(q.options.length - 1, Number(q.answer) || 0)),
+      answer: q.answer,
       explication: String(q.explication || '')
     }));
 }
@@ -572,19 +587,19 @@ app.get('/api/profiles', (req, res) => {
   res.json(data.profiles || []);
 });
 
-app.post('/api/profiles', (req, res) => {
+app.post('/api/profiles', storedRoute(async (req, res) => {
   const { profiles } = req.body || {};
   if (!Array.isArray(profiles)) return res.status(400).json({ error: 'profiles invalide' });
   const data = getData();
   data.profiles = profiles;
-  setData(data);
+  await setData(data);
   res.json({ ok: true });
-});
+}));
 
 // ---------- Score d'interro (mode quiz) ----------
-app.post('/api/quiz-score', (req, res) => {
+app.post('/api/quiz-score', storedRoute(async (req, res) => {
   const { id, topic, score, total } = req.body || {};
-  if (!id) return res.status(400).json({ error: 'id manquant' });
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id) || ['profiles', '__proto__', 'constructor', 'prototype'].includes(id)) return res.status(400).json({ error: 'id invalide' });
   const data = getData();
   const child = data[id] || { name: '', age: null, history: [], sessions: [] };
   child.sessions.push({
@@ -595,21 +610,21 @@ app.post('/api/quiz-score', (req, res) => {
     score: Number(score) || 0
   });
   data[id] = child;
-  setData(data);
+  await setData(data);
   res.json({ ok: true });
-});
+}));
 
 // ---------- Progression des enfants ----------
 app.get('/api/child', (req, res) => {
   const id = String(req.query.id || '').trim();
-  if (!id) return res.status(400).json({ error: 'id manquant' });
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id) || ['profiles', '__proto__', 'constructor', 'prototype'].includes(id)) return res.status(400).json({ error: 'id invalide' });
   const data = getData();
   res.json(data[id] || { name: '', age: null, history: [], sessions: [] });
 });
 
-app.post('/api/child', (req, res) => {
+app.post('/api/child', storedRoute(async (req, res) => {
   const { id, name, age, history, action } = req.body || {};
-  if (!id) return res.status(400).json({ error: 'id manquant' });
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id) || ['profiles', '__proto__', 'constructor', 'prototype'].includes(id)) return res.status(400).json({ error: 'id invalide' });
   const data = getData();
   const child = data[id] || { name: '', age: null, history: [], sessions: [] };
   if (name) child.name = name;
@@ -631,9 +646,9 @@ app.post('/api/child', (req, res) => {
     child.history = history;
   }
   data[id] = child;
-  setData(data);
+  await setData(data);
   res.json({ ok: true });
-});
+}));
 
 // ---------- Demarrage ----------
 (async () => {
