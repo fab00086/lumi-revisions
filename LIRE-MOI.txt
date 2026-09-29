@@ -17,19 +17,21 @@ CONNECTER LE TELEPHONE (meme Wi-Fi) :
 3. Sur ANDROID : au premier acces, clique
    "Parametres avances" puis "Continuer".
    Ensuite tout fonctionne (micro, photo, voix).
-4. Sur IPHONE : Safari bloque le micro tant que le
-   certificat de Lumi n'est pas installe sur le
-   telephone. C'est UNE SEULE FOIS, 4 petits pas :
-   - Dans Lumi, ouvre "Connecter un telephone"
-     puis appuie sur "Aide iPhone".
-   - Suivre les 4 etapes affichees (telecharger le
-     certificat, l'installer dans Reglages,
-     l'approuver, reouvrir Safari).
-   - Apres ca : micro, photo ET voix fonctionnent
-     dans Safari, sans avertissement.
-   (Sur iPhone + Chrome : le bouton micro de Lumi
-   ne marchera pas, c'est une restriction Apple.
-   Utilise Safari, ou le micro du clavier iPhone.)
+4. Sur IPHONE : le QR code pointe vers l'adresse
+   securisee "trycloudflare.com" (vrai HTTPS).
+   Rien a installer, le micro et la voix marchent
+   dans Safari.
+   - Autorise le micro quand Safari le demande.
+   - Si le micro ne marche pas : verifie que Siri
+     est active, et la Dictee (Reglages -> General
+     -> Clavier -> Activer la Dictee).
+   - Si tu n'entends pas la voix : desactive le
+     mode silencieux (interrupteur sur le cote de
+     l'iPhone) et monte le volume.
+   (Sur iPhone, Chrome et les autres navigateurs
+   ont les memes limites que Safari : tous
+   utilisent Safari dessous. Utilise Safari, ou
+   la dictee du clavier iPhone.)
 5. Sur la page d'accueil de l'ordi, tu peux aussi
    cliquer "Connecter un telephone" pour voir le QR code.
 

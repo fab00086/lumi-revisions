@@ -540,6 +540,10 @@ function startTunnel() {
       if (m && !tunnelUrl) {
         tunnelUrl = m[0];
         console.log(`  🌍 Depuis n'importe ou (PC allume) :  ${tunnelUrl}`);
+        console.log('  📱 IPHONE / ANDROID : scanne plutot ce QR code (micro et voix garantis) :\n');
+        QRCode.toString(tunnelUrl, { type: 'terminal', small: true })
+          .then(qr => console.log(qr + '\n'))
+          .catch(() => {});
       }
     };
     p.stdout.on('data', grab);
@@ -573,7 +577,11 @@ function openBrowser(url) {
 app.get('/api/qr', async (req, res) => {
   try {
     const urls = lanUrls();
-    const url = urls[0] || `http://localhost:${PORT}`;
+    // On prefere le tunnel (vrai HTTPS) : l'adresse locale utilise un
+    // certificat auto-signe, et sans certificat installe l'iPhone bloque
+    // le micro, la reconnaissance vocale et la camera, quel que soit le
+    // navigateur (tous utilisent Safari/WebKit sur iPhone).
+    const url = tunnelUrl || urls[0] || `http://localhost:${PORT}`;
     const qr = await QRCode.toDataURL(url, { margin: 1, width: 300 });
     res.json({ qr, url, urls, tunnel_url: tunnelUrl });
   } catch (e) {
