@@ -36,12 +36,37 @@ test('stockage : attend et sérialise les sauvegardes',async()=>{
  let resolve;const gate=new Promise(r=>resolve=r);const order=[];const c=store();const first=c.storedRoute(async()=>{order.push('first');await gate;order.push('saved');});const second=c.storedRoute(async()=>order.push('second'));first({},{});second({},{});await Promise.resolve();assert.deepEqual(order,['first']);resolve();await run(c,'writeQueue');assert.deepEqual(order,['first','saved','second']);
 });
 function chat(fetch) {const u=ui();const bubbles=[];const c=context({...u,fetch,currentProfile:{id:'a',name:'A'},history:[],chatGeneration:0,activeChat:null,chatLoading:false,archiving:false,stopSpeech(){},addTyping(){},removeTyping(){},setStatus(){},escapeHtml:String,renderMarkdown:String,speak(){},saveChild:async()=>{},addBubble(role,html){bubbles.push(html);return {innerHTML:html,parentElement:{appendChild(){}},closest:()=>({remove(){}})};}});run(c,section(front,'async function send(text, imageBase64)','function setStatus'));return {c,bubbles};}
+test('photo : énoncé sauvegardé même si le tuteur échoue',async()=>{
+ const content='[Lecture de la photo]\nLea a 18 billes et en donne 5.';
+ const bytes=new TextEncoder().encode(JSON.stringify({type:'photo',userContent:content})+'\n'+JSON.stringify({type:'error',error:'Modèle indisponible'})+'\n');let n=0,saved;
+ const {c}=chat(async()=>({ok:true,body:{getReader:()=>({read:async()=>n++?{done:true}:{done:false,value:bytes}})}}));
+ c.saveChild=async(p,h)=>saved=h.slice();c.speak=()=>assert.fail('erreur prononcée');
+ await c.send('Lis cet exercice');assert.equal(saved.length,1);assert.equal(c.history[0].content,content);
+});
+test('photo : échange réussi sans doublon de l’énoncé',async()=>{
+ const content='[Lecture de la photo]\n18 billes.';
+ const events=[{type:'photo',userContent:content},{type:'delta',text:'Que faut-il chercher ?'},{type:'done',userContent:content}];
+ const bytes=new TextEncoder().encode(events.map(e=>JSON.stringify(e)).join('\n')+'\n');let n=0;
+ const {c}=chat(async()=>({ok:true,body:{getReader:()=>({read:async()=>n++?{done:true}:{done:false,value:bytes}})}}));
+ await c.send('Lis cet exercice');assert.equal(c.history.length,2);assert.equal(c.history[0].content,content);assert.equal(c.history[1].role,'assistant');
+});
 test('chat : ignore la réponse de l’ancien profil et interdit le double envoi',async()=>{
  let resolve,calls=0;const response=new Promise(r=>resolve=r);const {c,bubbles}=chat(()=>{calls++;return response;});const pending=c.send('hello');await c.send('second');assert.equal(calls,1);c.chatGeneration++;c.currentProfile={id:'b'};c.history=[];resolve({ok:true});await pending;assert.equal(c.history.length,0);assert.equal(bubbles.length,1);assert.equal(c.activeChat,null);
 });
 test('chat : enregistre sous le profil initial et libère le prochain envoi',async()=>{
  const bytes=new TextEncoder().encode('{"type":"delta","text":"Bonjour"}\n{"type":"done"}\n');let n=0,saved;
  const {c}=chat(async()=>({ok:true,body:{getReader:()=>({read:async()=>n++?{done:true}:{done:false,value:bytes}})}}));c.saveChild=async(p,h)=>saved={id:p.id,messages:h.slice()};await c.send('hello');assert.equal(saved.id,'a');assert.equal(saved.messages.length,2);assert.equal(c.activeChat,null);
+});
+test('chat : conserve la transcription reçue pour le prochain échange',async()=>{
+ const content='[Lecture de la photo]\nExercice 7 : 18 billes';
+ const bytes=new TextEncoder().encode(JSON.stringify({type:'delta',text:'Commençons.'})+'\n'+JSON.stringify({type:'done',userContent:content})+'\n');let n=0,saved;
+ const {c}=chat(async()=>({ok:true,body:{getReader:()=>({read:async()=>n++?{done:true}:{done:false,value:bytes}})}}));
+ c.saveChild=async(p,h)=>saved=h.slice();await c.send('Lis mon exercice');assert.equal(saved[0].content,content);assert.equal(c.history[0].content,content);
+});
+test('chat : réponse interrompue non mémorisée et non prononcée',async()=>{
+ const bytes=new TextEncoder().encode('{"type":"delta","text":"Réponse partielle"}\n');let n=0;
+ const {c,bubbles}=chat(async()=>({ok:true,body:{getReader:()=>({read:async()=>n++?{done:true}:{done:false,value:bytes}})}}));
+ c.speak=()=>assert.fail('réponse incomplète prononcée');await c.send('Question');assert.equal(c.history.length,0);assert.match(bubbles.at(-1),/interrompue/);
 });
 test('nouvelle leçon : erreur d’archivage préserve la conversation',async()=>{
  const u=ui();const c=context({...u,currentProfile:{id:'a'},history:[{content:'à garder'}],archiving:false,chatLoading:false,activeChat:null,fetch:async()=>({ok:false}),addBubble(){},escapeHtml:String,cancelChat(){throw Error('ne doit pas effacer');}});run(c,section(front,"$('btn-new').addEventListener",'async function openProgress'));await u.$('btn-new').handlers.click();assert.equal(c.history[0].content,'à garder');assert.equal(c.archiving,false);

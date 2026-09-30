@@ -74,6 +74,14 @@ Détails complets de chaque phase dans le fichier de plan cité en tête.
 
 ## Reprendre une session
 
+### Vérification contexte et photos — 30/09/2026
+
+- Le code actuel conserve l'historique avec `lessonHistory()` (budget 48 000 caractères), dont les lectures de photos et le début de la leçon. Les limites citées plus haut correspondent à des versions précédentes.
+- La photo est transcrite par le modèle vision, puis son texte est transmis au tuteur et sauvegardé dans l'historique. L'événement `photo` transmet désormais cette transcription avant la réponse du tuteur : une panne du tuteur ne fait plus perdre un énoncé déjà lu. Aucun doublon lors d'un échange réussi.
+- Budgets actuels : `REPLY_TOKENS = PHOTO_TOKENS = 4096`. Les réponses interrompues ne sont pas ajoutées à l'historique comme réponses complètes.
+- Vérification réelle de l'API vision : image synthétique avec exercice « 18 billes, 5 données », transcription exacte, HTTP 200. Une vraie photo de cahier et le parcours sur téléphone restent à vérifier.
+- Validation : 36 tests réussis et vérification syntaxique serveur/interface. Cache PWA : `lumi-v6`. Relancer Lumi et recharger l'interface pour appliquer ces changements.
+
 1. Lire ce fichier + le plan complet (`~/.claude/plans/resilient-wibbling-backus.md`).
 2. `cd app-revisions && npm test` → doit être vert.
 3. Continuer à la phase indiquée « en cours » dans le tableau.

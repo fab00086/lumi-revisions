@@ -40,10 +40,13 @@ function renderMarkdown(text) {
 // Nettoie un texte pour la lecture vocale (retire emojis et symboles)
 function cleanForSpeech(text) {
   let t = String(text || '');
+  t = t.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1');
+  t = t.replace(/https?:\/\/\S+/g, '');
   try { t = t.replace(/\p{Extended_Pictographic}/gu, ''); } catch (e) {}
   // LaTeX : garde le contenu, jette les commandes (\frac{3}{4} -> 3 sur 4)
   t = t.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '$1 sur $2');
   t = t.replace(/\\sqrt\{([^{}]+)\}/g, 'racine de $1');
+  t = t.replace(/\\(?:times|cdot)\b/g, ' fois ').replace(/\\div\b/g, ' divisé par ');
   t = t.replace(/\\[a-zA-Z]+/g, ' ');
   t = t.replace(/[${}\\]/g, ' ');
   t = t.replace(/[️‍\u{1F3FB}-\u{1F3FF}]/gu, '');
@@ -51,8 +54,14 @@ function cleanForSpeech(text) {
   t = t.replace(/\*([^*\n]+)\*/g, '$1');
   t = t.replace(/`([^`]+)`/g, '$1');
   t = t.replace(/^\s*[-•▪◦·]\s*/gm, '');
+  t = t.replace(/^\s*#{1,6}\s*/gm, '');
+  t = t.replace(/(\d)\s*\/\s*(\d)/g, '$1 sur $2');
+  t = t.replace(/(\d)[.,](\d)/g, '$1 virgule $2');
+  t = t.replace(/[×]/g, ' fois ').replace(/[÷]/g, ' divisé par ').replace(/=/g, ' égale ');
+  t = t.replace(/[\/|_#\[\]<>*`]/g, ' ');
   t = t.replace(/[«»“”‘’]/g, '');
-  t = t.replace(/\s*\n+\s*/g, '. ');
+  // Les signes ne sont pas transmis aux voix qui les prononcent littéralement.
+  t = t.replace(/[.,;:!?…()]+/g, '\n');
   t = t.replace(/[ \t]{2,}/g, ' ');
   return t.trim();
 }
@@ -230,7 +239,7 @@ async function send(text, imageBase64) {
   const messages = history;
   const controller = new AbortController();
   activeChat = controller;
-  const timeout = setTimeout(() => controller.abort(), 120000);
+  const timeout = setTimeout(() => controller.abort(), imageBase64 ? 260000 : 130000);
   stopSpeech(); // l'enfant "coupe la parole" en envoyant un nouveau message
 
   if (imageBase64) {
@@ -268,6 +277,7 @@ async function send(text, imageBase64) {
     const reader = r.body.getReader();
     const dec = new TextDecoder();
     let buf = '', full = '', sources = [], hadError = null, firstDelta = true;
+    let userContent = clean || '[photo du cahier]', completed = false, userSaved = false;
     while (true) {
       const { done, value } = await reader.read();
       if (generation !== chatGeneration) return;
@@ -280,6 +290,12 @@ async function send(text, imageBase64) {
         let ev; try { ev = JSON.parse(line); } catch { continue; }
         if (ev.type === 'status') {
           setStatus(ev.text);
+        } else if (ev.type === 'photo' && typeof ev.userContent === 'string' && !userSaved) {
+          userContent = ev.userContent;
+          messages.push({ role: 'user', content: userContent });
+          userSaved = true;
+          try { await saveChild(profile, messages); }
+          catch (err) { addBubble('assistant', '⚠️ ' + escapeHtml(err.message)); }
         } else if (ev.type === 'delta') {
           if (firstDelta) { firstDelta = false; removeTyping(); setStatus("Je t'écoute 👂"); }
           full += ev.text;
@@ -288,6 +304,8 @@ async function send(text, imageBase64) {
         } else if (ev.type === 'error') {
           hadError = ev.error;
         } else if (ev.type === 'done') {
+          completed = true;
+          if (typeof ev.userContent === 'string') userContent = ev.userContent;
           sources = ev.sources || [];
         }
       }
@@ -295,7 +313,7 @@ async function send(text, imageBase64) {
     removeTyping();
     setStatus("Je t'écoute 👂");
 
-    if (hadError && !full) { bubble.closest('.msg').remove(); addBubble('assistant', '⚠️ ' + escapeHtml(hadError)); return; }
+    if (hadError || !completed) { bubble.closest('.msg').remove(); addBubble('assistant', '⚠️ ' + escapeHtml(hadError || 'Réponse interrompue — réessaie.')); return; }
     if (!full) { bubble.closest('.msg').remove(); addBubble('assistant', '⚠️ Réponse vide — réessaie.'); return; }
 
     bubble.innerHTML = renderMarkdown(full);
@@ -305,7 +323,7 @@ async function send(text, imageBase64) {
       s.innerHTML = '<strong>📚 Sources :</strong> ' + sources.map(x => `<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener">${escapeHtml(x.title)}</a>`).join(' · ');
       bubble.parentElement.appendChild(s);
     }
-    messages.push({ role: 'user', content: clean || '[photo du cahier]' });
+    if (!userSaved) messages.push({ role: 'user', content: userContent });
     messages.push({ role: 'assistant', content: full });
     try {
       await saveChild(profile, messages);
@@ -406,7 +424,8 @@ function splitForSpeech(text, maxLen = 160) {
   const out = [];
   let cur = '';
   const push = () => { const t = cur.trim(); if (t) out.push(t); cur = ''; };
-  for (const w of String(text).split(/\s+/)) {
+  for (const w of String(text).replace(/\n/g, ' \n ').split(/[^\S\n]+/)) {
+    if (w === '\n') { push(); continue; }
     cur += (cur ? ' ' : '') + w;
     if (cur.length >= maxLen || /[.!?]$/.test(cur)) push();
   }
@@ -590,7 +609,7 @@ $('btn-camera').addEventListener('click', () => openCamera(b64 => send('', b64),
 $('mic').addEventListener('change', (e) => {
   const f = e.target.files && e.target.files[0];
   if (!f) return;
-  compressImage(f, 1200, 0.85).then(b64 => finishCamera(b64));
+  compressImage(f, 2000, 0.92).then(b64 => finishCamera(b64));
   e.target.value = '';
 });
 
