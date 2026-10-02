@@ -48,6 +48,13 @@
         </div>
         <input id="pf-name" type="text" placeholder="Prénom de l'enfant" required>
         <input id="pf-age" type="number" min="3" max="18" placeholder="Âge" required>
+        <select id="pf-level" aria-label="Classe">
+          <option value="">Classe : déduite de l'âge</option>
+          <option value="CP">CP</option><option value="CE1">CE1</option><option value="CE2">CE2</option>
+          <option value="CM1">CM1</option><option value="CM2">CM2</option>
+          <option value="6e">6e</option><option value="5e">5e</option>
+          <option value="4e">4e</option><option value="3e">3e</option>
+        </select>
         <button type="submit" class="btn btn-primary">Commencer ➜</button>
       </form>
       <p class="hint">Un profil par enfant — Lumi s'adapte à chaque âge.</p>
@@ -69,18 +76,18 @@
   <!-- ===== Écran : chat ===== -->
   <div id="screen-chat" class="screen hidden">
     <header class="topbar">
-      <button id="btn-back" class="icon-btn" title="Changer d'enfant">←</button>
+      <button id="btn-back" class="icon-btn labeled-btn" title="Changer d'enfant"><span class="button-icon" aria-hidden="true">←</span><span class="button-label">Profils</span></button>
       <div class="topbar-title">
         <strong>Lumi</strong>
         <span id="child-age" class="badge"></span>
       </div>
       <div class="topbar-actions">
-        <button id="btn-quiz" class="icon-btn" title="Interro-moi">🎯</button>
-        <button id="btn-video" class="icon-btn" title="Vidéo d'explication">🎬</button>
-        <button id="btn-new" class="icon-btn" title="Nouvelle leçon">🆕</button>
-        <button id="btn-progress" class="icon-btn" title="Progression">📊</button>
-        <button id="btn-print" class="icon-btn" title="Imprimer">🖨️</button>
-        <button id="btn-settings" class="icon-btn" title="Réglages">⚙️</button>
+        <button id="btn-quiz" class="icon-btn labeled-btn" title="Interro-moi"><span class="button-icon" aria-hidden="true">🎯</span><span class="button-label">Quiz</span></button>
+        <button id="btn-video" class="icon-btn labeled-btn" title="Vidéo d'explication"><span class="button-icon" aria-hidden="true">🎬</span><span class="button-label">Vidéo</span></button>
+        <button id="btn-new" class="icon-btn labeled-btn" title="Nouvelle leçon"><span class="button-icon" aria-hidden="true">🆕</span><span class="button-label">Leçon</span></button>
+        <button id="btn-progress" class="icon-btn labeled-btn" title="Progression"><span class="button-icon" aria-hidden="true">📊</span><span class="button-label">Progrès</span></button>
+        <button id="btn-print" class="icon-btn labeled-btn" title="Imprimer"><span class="button-icon" aria-hidden="true">🖨️</span><span class="button-label">Imprimer</span></button>
+        <button id="btn-settings" class="icon-btn labeled-btn" title="Réglages"><span class="button-icon" aria-hidden="true">⚙️</span><span class="button-label">Réglages</span></button>
       </div>
     </header>
 
@@ -129,13 +136,14 @@
     <div id="chat" class="chat"></div>
 
     <div class="inputbar">
-      <button id="btn-camera" class="icon-btn" title="Prendre une photo du cahier">📷</button>
+      <button id="btn-camera" class="icon-btn labeled-btn" title="Prendre une photo du cahier"><span class="button-icon" aria-hidden="true">📷</span><span class="button-label">Photo</span></button>
       <input id="mic" type="file" accept="image/*" capture="environment" class="hidden">
       <input id="input" type="text" placeholder="Écris ta question…" autocomplete="off">
-      <button id="btn-mic-live" class="icon-btn live-btn" title="Mode discussion : le micro reste ouvert, parle quand tu veux !">🎙️</button>
-      <button id="btn-mic" class="icon-btn" title="Parler">🎤</button>
-      <button id="btn-send" class="icon-btn send" title="Envoyer">➤</button>
+      <button id="btn-mic-live" class="icon-btn labeled-btn live-btn" aria-label="Activer ou arrêter le mode discussion" title="Mode discussion"><span class="button-icon" aria-hidden="true">🎙️</span><span class="button-label">Discussion</span></button>
+      <button id="btn-mic" class="icon-btn labeled-btn" aria-label="Dicter une question ou arrêter le micro" title="Dicter une question"><span class="button-icon" aria-hidden="true">🎤</span><span class="button-label">Parler</span></button>
+      <button id="btn-send" class="icon-btn labeled-btn send" title="Envoyer"><span class="button-icon" aria-hidden="true">➤</span><span class="button-label">Envoyer</span></button>
     </div>
+    <p class="mic-help">🎤 Une question · 🎙️ Discussion : écoute après chaque réponse</p>
   </div>
 
   <!-- ===== Interro (quiz) ===== -->
@@ -223,11 +231,11 @@
         <button id="btn-iphone-close" class="icon-btn" title="Fermer">✕</button>
       </div>
       <ol class="help-steps">
-        <li>Ouvre Lumi via le <strong>QR code</strong> (adresse 🌍 trycloudflare.com) ou <a href="https://lumi-revisions.onrender.com/">Lumi en ligne</a>, directement dans <strong>Safari</strong>. Évite l'adresse https://192.168… : sans certificat installé, Safari y bloque le micro et la voix, quel que soit le navigateur (ils utilisent tous Safari dessous).</li>
+        <li>Sur le PC, ouvre <strong>Connecter un téléphone</strong> et scanne le <strong>QR code</strong> (adresse HTTPS 🌍 trycloudflare.com). Ouvre ce lien directement dans <strong>Safari</strong>, en dehors du navigateur de WhatsApp, Facebook ou d'une autre application. Évite l'adresse https://192.168… : son certificat local peut empêcher l'accès au micro.</li>
         <li>Appuie sur <strong>🔊 Écouter Lumi</strong> dans la conversation, ou <strong>Tester la voix</strong> dans les réglages. Monte le volume et <strong>désactive le mode silencieux</strong> (petit interrupteur sur le côté de l'iPhone) : en mode silencieux, la voix de Lumi est coupée.</li>
         <li>Appuie sur <strong>🎤</strong> et accepte les demandes d'accès au micro et de reconnaissance vocale. Si tu les as refusées, ouvre les réglages de ce site dans le menu de Safari pour autoriser le microphone.</li>
         <li>Vérifie que <strong>Siri est activé</strong> dans les Réglages de l'iPhone : Safari s'appuie sur ce service pour reconnaître la parole.</li>
-        <li>Si le micro reste bloqué, recharge la page et réessaie. Tu peux aussi toucher le champ de texte et utiliser la dictée du clavier de l'iPhone, puis envoyer ta question.</li>
+        <li>Le mode 🎙️ réécoute après les réponses. Si iOS bloque une relance, Lumi arrête le mode et te propose de retoucher 🎤. Si cela continue, recharge dans Safari. Tu peux aussi dicter dans le champ de texte avec le micro du clavier, puis envoyer ta question.</li>
       </ol>
       <p class="hint">Le site en ligne utilise déjà HTTPS : aucun certificat ni profil à installer. Si Safari affiche une alerte de sécurité, vérifie l'adresse sans contourner l'alerte.</p>
     </div>
@@ -257,6 +265,22 @@
         <button id="btn-camera-gallery" class="btn">🖼️ Choisir une image</button>
       </div>
       <p id="camera-msg" class="hint hidden"></p>
+    </div>
+  </div>
+
+  <!-- ===== Prévisualisation de la photo du cahier, avant envoi à Lumi ===== -->
+  <div id="photo-preview-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <strong>👀 Vérifie ta photo</strong>
+        <button id="btn-photo-preview-close" class="icon-btn" title="Annuler">✕</button>
+      </div>
+      <img id="photo-preview-img" class="photo-preview-img" alt="Photo du cahier">
+      <p class="hint">La photo est floue, sombre ou coupée ? Refais-la : Lumi lira mieux ton cahier ! ✍️</p>
+      <div class="camera-actions">
+        <button id="btn-photo-retake" class="btn">🔄 Refaire la photo</button>
+        <button id="btn-photo-send" class="btn btn-primary">✅ Envoyer à Lumi</button>
+      </div>
     </div>
   </div>
 

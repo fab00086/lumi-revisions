@@ -5,7 +5,7 @@
   "description": "Lumi - tuteur IA bienveillant pour aider les enfants a faire leurs devoirs (supervision, pas de reponses toutes faites).",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0 <25"
   },
   "scripts": {
     "start": "node server.js",

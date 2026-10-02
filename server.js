@@ -22,6 +22,18 @@ const VISION_MODEL = process.env.OLLAMA_VISION_MODEL || 'gemma4:31b';
 const PORT = process.env.PORT || 3000;
 const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
 
+// ---------- Programme scolaire (data/curriculum.json) ----------
+// Notions courtes par niveau et matiere : injectees en une seule ligne dans le
+// prompt du tuteur (pour situer les explications) et tirees pour les themes de
+// quiz. Fichier editable — modifier data/curriculum.json puis relancer Lumi.
+const CURRICULUM = (() => {
+  try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'curriculum.json'), 'utf8')); }
+  catch (e) { console.error('programme scolaire non charge :', e.message); return {}; }
+})();
+const AGE_LEVEL = { 6: 'CP', 7: 'CE1', 8: 'CE2', 9: 'CM1', 10: 'CM2', 11: '6e', 12: '5e', 13: '4e', 14: '3e' };
+// Niveau d'un profil : celui choisi dans l'espace parent, sinon deduit de l'age.
+function profileLevel(profile = {}) { return (profile && profile.level) || AGE_LEVEL[profile && profile.age] || ''; }
+
 // ---------- Stockage des donnees des enfants ----------
 // En local : fichier JSON (data/lumi-data.json).
 // En ligne (Render etc.) : le disque est efface a chaque mise a jour, on
@@ -232,7 +244,7 @@ function importJsonToSql(raw) {
   const putAccount = sql.prepare('INSERT OR REPLACE INTO accounts (id,email,pass_hash,plan,trial_ends,consent_date,created,settings,usage) VALUES (?,?,?,?,?,?,?,?,?)');
   for (const acc of Object.values(migrated.accounts || {})) {
     putAccount.run(acc.id, acc.email || '', acc.passHash || '', acc.plan || 'free',
-      acc.trialEnds || null, acc.created || null, acc.created || now,
+      acc.trialEnds || null, acc.consentDate || null, acc.created || now,
       JSON.stringify(acc.settings || {}), JSON.stringify(acc.usage || {}));
   }
   const putSession = sql.prepare('INSERT OR REPLACE INTO sessions (token,account_id,expires) VALUES (?,?,?)');
@@ -325,7 +337,9 @@ app.get('/api/gate', (req, res) => {
 app.post('/api/unlock', (req, res) => {
   if (!ACCESS_CODE) return res.json({ ok: true });
   if (String((req.body || {}).code || '').trim() === ACCESS_CODE) {
-    res.setHeader('Set-Cookie', `lumi_access=${accessCookieValue()}; Path=/; Max-Age=31536000; SameSite=Lax; Secure`);
+    // Secure seulement en HTTPS : en http://IP-LAN, un cookie Secure serait ignore
+    // et le gate ne s'ouvrirait jamais.
+    res.setHeader('Set-Cookie', `lumi_access=${accessCookieValue()}; Path=/; Max-Age=31536000; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
     res.json({ ok: true });
   } else {
     res.status(401).json({ error: 'Code incorrect.' });
@@ -406,9 +420,12 @@ function parseCookies(req) {
   }
   return out;
 }
+// La requete arrive-t-elle en HTTPS ? (derriere un proxy, voir x-forwarded-proto)
+function isSecureReq(req) {
+  return req.secure || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+}
 function sessionCookie(token, req, maxAgeSec) {
-  const secure = req.secure || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
-  return SESSION_COOKIE + '=' + token + '; Path=/; HttpOnly; Max-Age=' + maxAgeSec + '; SameSite=Lax' + (secure ? '; Secure' : '');
+  return SESSION_COOKIE + '=' + token + '; Path=/; HttpOnly; Max-Age=' + maxAgeSec + '; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
 }
 // Trouve le compte de la requete : session valide, sinon compte local (mode
 // local), sinon rien (mode vente : le front montre l'ecran de connexion).
@@ -431,6 +448,55 @@ async function requireAccount(req, res) {
   const r = await resolveAccount(req);
   if (!r) { res.status(401).json({ error: 'Connecte-toi à ton compte famille pour utiliser Lumi.' }); return null; }
   return r;
+}
+
+// ---------- Freemium (gatekeeper n°1) ----------
+// Le plan 'local' (toi, Manon) n'est JAMAIS limite. Un essai est illimite
+// pendant 14 jours, apres quoi il est traité comme le plan 'free'. Les
+// plans payants et inconnus restent illimites (fail-open, securisé pour
+// la famille) : seuls 'free' et les essais expirés sont plafonnés.
+const FREE_DAILY = Math.max(1, parseInt(ENV.LUMI_FREE_DAILY || '20', 10));
+const QUOTA_MESSAGE = "Lumi a besoin de faire une pause aujourd'hui 💤 Demande à tes parents de la relancer — ils savent comment !";
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function planLimit(acc) {
+  if (!acc || acc.plan === 'local') return Infinity;
+  // Plafond spécial posé par l'admin : il s'applique à tous les plans (sauf local),
+  // pour garder la consommation IA maîtrisée même sur un compte payant.
+  const daily = Number(acc.settings && acc.settings.dailyLimit);
+  if (Number.isFinite(daily) && daily >= 0) return Math.round(daily);
+  if (acc.plan === 'trial' && (!acc.trialEnds || new Date(acc.trialEnds) > new Date())) return Infinity;
+  if (acc.plan !== 'free' && acc.plan !== 'trial') return Infinity; // famille / payant : illimité par défaut
+  return FREE_DAILY;
+}
+function quotaOk(acc, kind) {
+  if (!acc || !Number.isFinite(planLimit(acc))) return true;
+  const used = ((acc.usage || {})[kind] || {})[todayKey()] || 0;
+  return used < planLimit(acc);
+}
+async function countUsage(acc, kind) {
+  if (!acc || acc.plan === 'local') return; // maison : ni limité ni compté
+  // On compte tout le monde (y compris illimité) : c'est ce qui alimente
+  // la page admin et permet de voir la consommation réelle par client.
+  if (!acc.usage) acc.usage = {};
+  if (!acc.usage[kind]) acc.usage[kind] = {};
+  const day = acc.usage[kind];
+  day[todayKey()] = (day[todayKey()] || 0) + 1;
+  await accountPut(acc);
+}
+// Estimation de jetons en caracteres : ~3,2 car/jeton pour du francais.
+// Ce sont surtout le systeme + l'historique qui coutent, pas la reponse.
+function tokenEstimate(s) { return Math.ceil(String(s).length / 3.2); }
+function messageTokens(messages) { let n = 0; for (const m of messages || []) n += tokenEstimate(m.content); return n; }
+// Jetons consommes, cumules par jour dans la meme base que les echanges.
+async function countTokens(acc, tokens) {
+  if (!acc || acc.plan === 'local' || !Number.isFinite(tokens) || tokens <= 0) return;
+  if (!acc.usage) acc.usage = {};
+  if (!acc.usage.tok) acc.usage.tok = {};
+  acc.usage.tok[todayKey()] = (acc.usage.tok[todayKey()] || 0) + Math.round(tokens);
+  await accountPut(acc);
 }
 // --- Acces aux donnees : base SQL si dispo, sinon blob (Redis/Deno pour l'hebergement) ---
 function rowToAccount(r) {
@@ -669,6 +735,72 @@ app.get('/api/auth/me', async (req, res) => {
   });
 });
 
+// ---------- Admin ventes : gestion des clients (c'est à toi seulement) ----------
+// Desactive tant que LUMI_ADMIN_CODE est vide (typeof-guard pour les tests
+// qui font tourner cette section sans le serveur complet).
+const ADMIN_CODE = (typeof ENV !== 'undefined' && ENV.LUMI_ADMIN_CODE) || '';
+function adminCookieValue() {
+  // Valeur derivee du code (pas le code lui-meme), comme pour le gate.
+  let h = 5381;
+  for (const c of ADMIN_CODE) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
+  return h.toString(16).padStart(8, '0');
+}
+function hasAdmin(req) { return !!ADMIN_CODE && parseCookies(req).lumi_admin === adminCookieValue(); }
+function requireAdmin(req, res) {
+  if (!ADMIN_CODE) { res.status(404).json({ error: 'Gestion des clients désactivée : définis LUMI_ADMIN_CODE.' }); return false; }
+  if (!hasAdmin(req)) { res.status(401).json({ error: 'Code admin requis.' }); return false; }
+  return true;
+}
+app.get('/api/admin/session', (req, res) => res.json({ enabled: !!ADMIN_CODE, open: hasAdmin(req), localMode: LOCAL_MODE }));
+app.post('/api/admin/login', (req, res) => {
+  if (!ADMIN_CODE) return res.status(404).json({ error: 'Gestion des clients désactivée : définis LUMI_ADMIN_CODE.' });
+  if (String((req.body || {}).code || '').trim() === ADMIN_CODE) {
+    res.setHeader('Set-Cookie', `lumi_admin=${adminCookieValue()}; Path=/; HttpOnly; Max-Age=43200; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
+    res.json({ ok: true });
+  } else res.status(401).json({ error: 'Code admin incorrect.' });
+});
+app.get('/api/admin/accounts', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  let rows;
+  if (sql) rows = sql.prepare('SELECT * FROM accounts WHERE id != ? ORDER BY created DESC').all('local');
+  else rows = Object.values(getData().accounts || {}).filter(a => a && a.id !== 'local');
+  res.json({
+    freeDaily: FREE_DAILY, localMode: LOCAL_MODE,
+    accounts: rows.map(a => ({
+      id: a.id, email: a.email || '', plan: a.plan || 'free',
+      trialEnds: a.trial_ends || a.trialEnds || null, created: a.created || null,
+      dailyLimit: (a.settings && Number.isFinite(Number(a.settings.dailyLimit)) && a.settings.dailyLimit !== null) ? Number(a.settings.dailyLimit) : null,
+      usage: (a.usage || {})
+    }))
+  });
+});
+app.post('/api/admin/account', storedRoute(async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { id, action, value } = req.body || {};
+  const acc = await accountById(String(id || ''));
+  if (!acc) return res.status(404).json({ error: 'Compte introuvable.' });
+  if (acc.plan === 'local') return res.status(400).json({ error: 'Le compte maison reste illimité et n’est pas modifiable ici.' });
+  if (action === 'plan') {
+    if (!['trial', 'free', 'family'].includes(value)) return res.status(400).json({ error: 'Plan inconnu.' });
+    if (value === 'trial' && !acc.trialEnds) acc.trialEnds = new Date(Date.now() + 14 * 86400000).toISOString();
+    acc.plan = value;
+  } else if (action === 'extend') {
+    acc.plan = 'trial';
+    acc.trialEnds = new Date(Date.now() + (Number(value) > 0 ? Number(value) : 14) * 86400000).toISOString();
+  } else if (action === 'limit') {
+    const n = Math.max(0, parseInt(value, 10) || 0);
+    acc.settings = acc.settings || {};
+    acc.settings.dailyLimit = n > 0 ? n : null; // 0 = redevient illimite pour ce plan
+  } else if (action === 'usage-reset') {
+    acc.usage = {};
+  } else if (action === 'delete') {
+    await accountErase(acc.id); // meme effacement RGPD complet que l'art. 17
+    return res.json({ ok: true, deleted: true });
+  } else return res.status(400).json({ error: 'Action inconnue.' });
+  await accountPut(acc);
+  res.json({ ok: true });
+}));
+
 // ---------- RGPD : export et effacement du compte ----------
 // Droit d'acces (art. 15) : la famille recupere TOUTES ses donnees en JSON.
 app.get('/api/account/export', async (req, res) => {
@@ -707,7 +839,7 @@ function buildSystemPrompt(profile = {}) {
     tone = 'Langage precis et structure, tu aides a la methode, au raisonnement et a la preparation des examens.';
   }
 
-  return `Tu es "Lumi", un tuteur (maitre/maitresse) bienveillant qui aide ${name} (${age} ans) a faire ses devoirs et a reviser.
+  const core = `Tu es "Lumi", un tuteur (maitre/maitresse) bienveillant qui aide ${name} (${age} ans) a faire ses devoirs et a reviser.
 
 REGLES ABSOLUES (a respecter en toutes circonstances) :
 1. Tu ne donnes JAMAIS la reponse finale. Tu guides : tu poses des questions, tu donnes des indices, tu fais reflechir. L'enfant doit trouver par lui-meme. S'il est bloque, tu donnes UN indice a la fois, jamais le resultat.
@@ -727,6 +859,20 @@ Methode par matiere :
 - Orthographe / grammaire : fais retrouver la regle, ne corrige pas sans explication.
 - Histoire / geo / sciences : explique simplement, puis pose des questions pour verifier la comprehension.
 - Autres devoirs : guide la methode, ne fais jamais le travail a la place de l'enfant.`;
+
+  // Programme officiel (data/curriculum.json) : une courte ligne par matiere,
+  // pour que le tuteur situe ses questions dans le programme du niveau.
+  let post = '';
+  if (typeof CURRICULUM !== 'undefined' && typeof AGE_LEVEL !== 'undefined') {
+    const level = profileLevel(profile);
+    const prog = level && CURRICULUM[level];
+    if (prog) {
+      const line = Object.entries(prog).map(([mat, arr]) => mat + ' : ' + arr.slice(0, 14).join(', ')).join(' / ');
+      post = `\n\nPROGRAMME SCOLAIRE (${level}) — notions de l'annee. Sers-toi de cette liste pour situer l'exercice et choisir des exemples du bon niveau ; ne la recite pas tel quel, et ne parle du programme que si c'est utile :`;
+      post += '\n' + line;
+    }
+  }
+  return core + post;
 }
 
 // ---------- Recherche web (sources) ----------
@@ -878,27 +1024,30 @@ async function streamOllama(messages, { image, maxTokens, onDelta } = {}) {
   const reader = r.body.getReader();
   const dec = new TextDecoder();
   let buf = '', full = '', truncated = false;
+  const consumeLine = (line) => {
+    const t = line.trim();
+    if (!t.startsWith('data:')) return;
+    const data = t.slice(5).trim();
+    if (!data || data === '[DONE]') return;
+    let j;
+    try { j = JSON.parse(data); }
+    catch { throw new Error('La réponse de Lumi a été interrompue. Réessaie.'); }
+    if (j.error) throw new Error('Le service IA est momentanément indisponible. Réessaie dans un instant.');
+    if (j.choices?.[0]?.finish_reason === 'length') truncated = true;
+    const d = j.choices?.[0]?.delta?.content || '';
+    if (d) { full += d; if (onDelta) onDelta(d, full); }
+    // Le raisonnement interne reste privé.
+  };
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     buf += dec.decode(value, { stream: true });
     const lines = buf.split('\n');
     buf = lines.pop();
-    for (const line of lines) {
-      const t = line.trim();
-      if (!t.startsWith('data:')) continue;
-      const data = t.slice(5).trim();
-      if (!data || data === '[DONE]') continue;
-      try {
-        const j = JSON.parse(data);
-        if (j.choices?.[0]?.finish_reason === 'length') truncated = true;
-        const delta = j.choices?.[0]?.delta || {};
-        const d = delta.content || '';
-        if (d) { full += d; if (onDelta) onDelta(d, full); }
-        // Le raisonnement interne ne doit jamais être affiché ou lu à voix haute.
-      } catch {}
-    }
+    for (const line of lines) consumeLine(line);
   }
+  buf += dec.decode();
+  if (buf.trim()) consumeLine(buf);
   if (truncated) throw new Error('Réponse interrompue : réessaie avec une question plus courte.');
   if (!full.trim()) throw new Error('Le modèle n’a pas fourni de réponse. Réessaie.');
   return full;
@@ -943,6 +1092,10 @@ app.post('/api/chat', async (req, res) => {
     if (!text && !image) return res.status(400).json({ error: 'Message vide.' });
     const acc = await resolveAccount(req);
     if (!acc) return res.status(401).json({ error: 'Connecte-toi à ton compte famille pour utiliser Lumi.' });
+    // Freemium : le plan 'local' passe toujours ; seul un essai expiré ou le
+    // plan gratuit est plafonné. Message en langage enfant (le front l'affiche tel quel).
+    if (!quotaOk(acc, 'chat')) return res.status(402).json({ error: QUOTA_MESSAGE });
+    await countUsage(acc, 'chat');
 
     let photoText = '';
     if (image) {
@@ -988,7 +1141,12 @@ PHOTO DU CAHIER (tres important) :
     ];
 
     send({ type: 'start', sources });
-    await streamOllama(messages, { onDelta: (d) => send({ type: 'delta', text: d }) });
+    const replyParts = [];
+    await streamOllama(messages, { onDelta: (d) => { replyParts.push(d); send({ type: 'delta', text: d }); } });
+    // Burn IA : prompt complet (systeme + historique + question) + reponse,
+    // plus la lecture de la photo en amont. Enregistre dans la base d'usage.
+    let tokensUsed = messageTokens(messages) + tokenEstimate(replyParts.join('')) + tokenEstimate(photoText);
+    await countTokens(acc, tokensUsed);
     send({ type: 'done', sources, userContent });
     res.end();
   } catch (e) {
@@ -1023,22 +1181,34 @@ function parseQuiz(raw, count) {
     }));
 }
 
+app.get('/api/curriculum', (req, res) => res.json(CURRICULUM));
+
 app.post('/api/quiz', async (req, res) => {
   try {
     const acc = await resolveAccount(req);
     if (!acc) return res.status(401).json({ error: 'Connecte-toi à ton compte famille pour utiliser Lumi.' });
+    if (!quotaOk(acc, 'quiz')) return res.status(402).json({ error: QUOTA_MESSAGE });
+    await countUsage(acc, 'quiz');
     const { topic, profile, count = 5 } = req.body || {};
-    const cleanTopic = String(topic || '').trim() || 'les leçons récentes';
     const age = (profile && profile.age) || 10;
+    // Sans theme donne : une notion au hasard dans le programme du niveau de l'enfant.
+    const lvl = profileLevel(profile || {});
+    let cleanTopic = String(topic || '').trim();
+    if (!cleanTopic && lvl && typeof CURRICULUM !== 'undefined') {
+      const pool = Object.values(CURRICULUM[lvl] || {}).flat();
+      if (pool.length) cleanTopic = pool[Math.floor(Math.random() * pool.length)];
+    }
+    if (!cleanTopic) cleanTopic = 'les leçons récentes';
     // Prompt volontairement COURT : les modeles "raisonneurs" depensent
     // leur budget de tokens sur un long prompt et renvoient un JSON vide/tronque.
-    const sys = `Tu generes un quiz pour un enfant de ${age} ans. Reponds UNIQUEMENT avec un tableau JSON (pas de texte autour, pas de markdown). Chaque element : {"question": "...", "options": ["...", "...", "...", "..."], "answer": INDEX_bonne_option_0_a_3, "explication": "une courte phrase"}. Questions en francais, simples et adaptees a ${age} ans. Les mauvaises options sont plausibles. L'index de la bonne reponse varie.`;
+    const sys = `Tu generes un quiz pour un enfant de ${age} ans${lvl ? ' en classe de ' + lvl : ''} (reste conforme au programme de ce niveau). Reponds UNIQUEMENT avec un tableau JSON (pas de texte autour, pas de markdown). Chaque element : {"question": "...", "options": ["...", "...", "...", "..."], "answer": INDEX_bonne_option_0_a_3, "explication": "une courte phrase"}. Questions en francais, simples et adaptees a ${age} ans. Les mauvaises options sont plausibles. L'index de la bonne reponse varie.`;
     const msgs = [
       { role: 'system', content: sys },
       { role: 'user', content: `Genere ${count} questions a choix multiple sur : ${cleanTopic}` }
     ];
     for (let attempt = 0; attempt < 2; attempt++) {
       const msg = await callOllama(msgs, { maxTokens: 2000 });
+      await countTokens(acc, messageTokens(msgs) + tokenEstimate(msg.content || '') + tokenEstimate(msg.reasoning || ''));
       // On essaie le contenu, puis le raisonnement (content peut etre vide).
       for (const raw of [msg.content, msg.reasoning]) {
         const quiz = parseQuiz(raw, count);
@@ -1107,16 +1277,19 @@ function lanUrls() {
 // ou tant que le PC est allume, avec un vrai HTTPS (pas de certificat a installer).
 const TUNNEL_EXE = path.join(__dirname, 'cloudflared.exe');
 let tunnelUrl = '';
+let tunnelPending = false;
 function startTunnel() {
   if (process.env.NO_HTTPS || !fs.existsSync(TUNNEL_EXE)) return;
+  tunnelPending = true;
   try {
     const p = spawn(TUNNEL_EXE, ['tunnel', '--url', `http://localhost:${PORT}`], { stdio: ['ignore', 'pipe', 'pipe'] });
     const grab = (buf) => {
       const m = String(buf).match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
       if (m && !tunnelUrl) {
         tunnelUrl = m[0];
+        tunnelPending = false;
         console.log(`  🌍 Depuis n'importe ou (PC allume) :  ${tunnelUrl}`);
-        console.log('  📱 IPHONE / ANDROID : scanne plutot ce QR code (micro et voix garantis) :\n');
+        console.log('  📱 IPHONE / ANDROID : scanne ce QR code HTTPS, puis ouvre dans Safari :\n');
         QRCode.toString(tunnelUrl, { type: 'terminal', small: true })
           .then(qr => console.log(qr + '\n'))
           .catch(() => {});
@@ -1124,8 +1297,11 @@ function startTunnel() {
     };
     p.stdout.on('data', grab);
     p.stderr.on('data', grab);
-    p.on('exit', () => { tunnelUrl = ''; });
-  } catch (e) { console.error('Tunnel:', e.message); }
+    p.on('error', e => { tunnelPending = false; console.error('Tunnel:', e.message); });
+    p.on('exit', () => { tunnelUrl = ''; tunnelPending = false; });
+    const timer = setTimeout(() => { tunnelPending = false; }, 30000);
+    timer.unref();
+  } catch (e) { tunnelPending = false; console.error('Tunnel:', e.message); }
 }
 
 // Ouvre le navigateur en forcant Chrome (meilleure voix / micro)
@@ -1157,7 +1333,11 @@ app.get('/api/qr', async (req, res) => {
     // certificat auto-signe, et sans certificat installe l'iPhone bloque
     // le micro, la reconnaissance vocale et la camera, quel que soit le
     // navigateur (tous utilisent Safari/WebKit sur iPhone).
-    const url = tunnelUrl || urls[0] || `http://localhost:${PORT}`;
+    // Ne jamais présenter un certificat auto-signé comme accès micro prêt pour iPhone.
+    const hostedUrl = isSecureReq(req) && req.headers['x-forwarded-proto'] === 'https'
+      ? `https://${req.get('host')}` : '';
+    const url = tunnelUrl || process.env.LUMI_PUBLIC_URL || hostedUrl;
+    if (!url) return res.json({ qr: null, url: null, urls, tunnel_url: '', pending: tunnelPending });
     const qr = await QRCode.toDataURL(url, { margin: 1, width: 300 });
     res.json({ qr, url, urls, tunnel_url: tunnelUrl });
   } catch (e) {
@@ -1264,11 +1444,11 @@ app.post('/api/child', storedRoute(async (req, res) => {
   https.createServer({ cert, key }, app).listen(HTTPS_PORT, '0.0.0.0', () => {
     const urls = lanUrls();
     urls.forEach(u => console.log(`  📱 Depuis le telephone (meme Wi-Fi) :  ${u}`));
-    console.log('  (sur le telephone, au 1er acces : "Parametres avances" puis "Continuer")');
+    console.log('  Pour le micro iPhone, utilise le QR code du tunnel HTTPS affiché plus haut.');
     console.log('');
     if (urls.length) {
       QRCode.toString(urls[0], { type: 'terminal', small: true }).then(qr => {
-        console.log('  Scanne ce QR code avec l appareil photo du telephone :\n');
+        console.log('  Accès Wi-Fi local avancé (certificat à approuver ; préférer le tunnel pour iPhone) :\n');
         console.log(qr);
         console.log('');
       }).catch(() => {});

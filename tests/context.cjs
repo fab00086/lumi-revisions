@@ -34,7 +34,7 @@ test('voix : retire ponctuation et URL, conserve le sens des fractions et décim
 
 test('stream : ne diffuse jamais le raisonnement à la place de la réponse', async () => {
   const deltas = [];
-  const c = vm.createContext({TextDecoder, AbortSignal, BASE_URL:'http://test', API_KEY:'fake', MODEL:'text', VISION_MODEL:'vision', REASONING_EFFORT:'low', REPLY_TOKENS:4096, PHOTO_TOKENS:4096,
+  const c = vm.createContext({TextDecoder, AbortSignal, ENV:{}, BASE_URL:'http://test', API_KEY:'fake', MODEL:'text', VISION_MODEL:'vision', REASONING_EFFORT:'low', REPLY_TOKENS:4096, PHOTO_TOKENS:4096,
     fetch:async()=>({ok:true,body:new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"reasoning":"private thoughts"}}]}\n\n'));controller.close();}})})});
   vm.runInContext(extract(back, 'async function streamOllama(', '// Conserve le début'), c);
   await assert.rejects(c.streamOllama([{role:'user',content:'test'}], {onDelta:d=>deltas.push(d)}), /pas fourni/);
@@ -44,11 +44,12 @@ test('stream : ne diffuse jamais le raisonnement à la place de la réponse', as
 test('photo : transcription jointe au tuteur et retournée pour sauvegarde', async () => {
   let handler, visionCall, tutorMessages;
   const events = [];
-  const c = vm.createContext({console, app:{post(route,fn){handler=fn;}}, PHOTO_TOKENS:4096,
-    resolveAccount:async()=>({account:{id:'test'}}), buildSystemPrompt:()=> 'Tuteur', lessonHistory:h=>h,
+  const c = vm.createContext({console, ENV:{}, app:{post(route,fn){handler=fn;}}, PHOTO_TOKENS:4096,
+    resolveAccount:async()=>({account:{id:'test'}}), accountPut:async()=>{}, buildSystemPrompt:()=> 'Tuteur', lessonHistory:h=>h,
     callOllama:async(messages,options)=>{visionCall={messages,options};return {content:'Exercice 9 : comparer 7/8 et 5/6.'};},
     streamOllama:async(messages,options)=>{tutorMessages=messages;options.onDelta('Quel dénominateur commun ?');},
     searchWeb:async()=>{throw Error('recherche non demandée');}});
+  vm.runInContext(extract(back, 'const FREE_DAILY', 'function rowToAccount'), c);
   vm.runInContext(extract(back, "app.post('/api/chat'", '// ---------- Quiz'), c);
   const res={writeHead(){},write(line){events.push(JSON.parse(line));},end(){}};
   await handler({body:{image:'fake-image',history:[{role:'user',content:'Je suis en CM2'}],profile:{}}},res);
@@ -57,4 +58,30 @@ test('photo : transcription jointe au tuteur et retournée pour sauvegarde', asy
   assert.match(tutorMessages.at(-1).content,/7\/8 et 5\/6/);
   assert.match(events.at(-1).userContent,/\[Lecture de la photo\]/);
   assert.equal(events.at(-1).type,'done');
+});
+
+function streamContext(chunks) {
+  const c = vm.createContext({ TextDecoder, AbortSignal, BASE_URL:'http://test', API_KEY:'fake',
+    MODEL:'text', VISION_MODEL:'vision', REASONING_EFFORT:'low', REPLY_TOKENS:4096, PHOTO_TOKENS:4096,
+    fetch:async()=>({ok:true,body:new ReadableStream({start(controller){
+      for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+      controller.close();
+    }})}) });
+  vm.runInContext(extract(back, 'async function streamOllama(', '// Conserve le début'), c);
+  return c;
+}
+test('stream : traite la dernière réponse même sans saut de ligne', async () => {
+  const c = streamContext(['data: {"choices":[{"delta":{"content":"Bonjour é"}}]}\n\n',
+    'data: {"choices":[{"delta":{"content":"lève."},"finish_reason":"stop"}]}']);
+  assert.equal(await c.streamOllama([{role:'user',content:'test'}]), 'Bonjour élève.');
+});
+test('stream : dernier événement tronqué interdit de valider la réponse', async () => {
+  const c = streamContext(['data: {"choices":[{"delta":{"content":"Un début"}}]}\n\n',
+    'data: {"choices":[{"delta":{},"finish_reason":"length"}]}']);
+  await assert.rejects(c.streamOllama([{role:'user',content:'test'}]), /interrompue/);
+});
+test('stream : une erreur du fournisseur ne devient jamais un succès partiel', async () => {
+  const c = streamContext(['data: {"choices":[{"delta":{"content":"Un début"}}]}\n\n',
+    'data: {"error":{"message":"internal details"}}\n\n']);
+  await assert.rejects(c.streamOllama([{role:'user',content:'test'}]), /momentanément indisponible/);
 });

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Lumi — Gestion des clients</title>
+<link rel="stylesheet" href="style.css">
+<style>
+/* Page admin adulte : palette de l'app, densité de lecture du coup. */
+body { min-height: 100%; display: flex; flex-direction: column; }
+.admin-wrap { max-width: 860px; margin: 0 auto; width: 100%; padding: 24px 16px 60px; }
+.admin-title { font-size: 26px; display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.admin-sub { color: var(--text-soft); font-size: 14.5px; margin-bottom: 18px; }
+.bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.bar .spacer { flex: 1; }
+
+.client { display: grid; gap: 10px; }
+.client-card { background: var(--card); border: 1px solid #e6e1f7; border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; }
+@media (min-width: 720px) {
+  .client-card { grid-template-columns: 1.4fr 1fr 1fr; align-items: start; }
+}
+.client-id { min-width: 0; }
+.client-id strong { font-size: 16px; word-break: break-all; }
+.client-id small { color: var(--text-soft); display: block; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.badge-plan { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.badge-plan.trial { background: #fdf3e0; color: #b8860b; }
+.badge-plan.trial.expired { background: #fdeaea; color: #c0392b; }
+.badge-plan.free { background: #e8f0fe; color: #2b57c4; }
+.badge-plan.family { background: #e9f7ef; color: #1a7f37; }
+.badge-plan.local { background: var(--violet-soft); color: var(--violet-dark); }
+.badge-trial { font-size: 12px; color: var(--text-soft); }
+
+.client-ctl { display: grid; gap: 8px; }
+select.plan-select, input.limit-input {
+  width: 100%; padding: 10px 12px; border-radius: 10px; border: 2px solid #e6e1f7;
+  font-size: 14.5px; background: #faf9ff; color: var(--text);
+}
+.btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn-sm {
+  padding: 9px 10px; font-size: 13px; border-radius: 10px; border: 1px solid #e6e1f7;
+  background: #faf9ff; cursor: pointer; color: var(--violet-dark); font-weight: 600; min-height: 40px;
+}
+.btn-sm:hover { background: var(--violet-soft); }
+.btn-sm.warn { color: #c0392b; border-color: #f3cfcf; }
+.btn-sm.wide { flex: 1; }
+
+.usage-line { display: flex; gap: 10px; font-size: 13px; color: var(--text-soft); align-items: center; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.spark { display: flex; align-items: flex-end; gap: 2px; height: 30px; }
+.spark i { width: 9px; border-radius: 2px 2px 0 0; background: var(--violet); opacity: 0.75; min-height: 1px; }
+
+.note { background: var(--violet-soft); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+#login-box { max-width: 420px; margin: 60px auto; text-align: center; }
+#login-box input { width: 100%; margin-bottom: 10px; }
+.empty { text-align: center; color: var(--text-soft); padding: 30px 10px; }
+.toastmsg { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 50; }
+.toastmsg.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="admin-wrap">
+  <div id="login-box">
+    <h1 class="admin-title">🔐 Admin Lumi</h1>
+    <p class="admin-sub">Espace de gestion des clients. Il te faut le code admin (variable <b>LUMI_ADMIN_CODE</b>).</p>
+    <input id="admin-code" type="password" placeholder="Code admin" autocomplete="current-password">
+    <button id="admin-login" class="btn btn-primary" style="width:100%">Ouvrir la gestion des clients</button>
+    <p id="login-err" style="color:#c0392b; font-size:14px; margin-top:8px"></p>
+  </div>
+
+  <div id="admin-view" class="hidden">
+    <h1 class="admin-title">🧑‍🤝‍🧑 Clients</h1>
+    <p class="admin-sub" id="admin-sub"></p>
+    <div class="bar">
+      <button id="btn-refresh" class="btn btn-sm wide" style="min-width:120px">↻ Rafraîchir</button>
+      <div class="spacer"></div>
+      <span id="mode-note" class="note" style="display:none"></span>
+    </div>
+    <div id="clients" class="client"></div>
+    <p id="admin-empty" class="empty hidden">Aucun client pour l'instant. Passe en mode vente (<b>LUMI_LOCAL_MODE=0</b>) puis fais-les s'inscrire depuis l'app.</p>
+  </div>
+</div>
+<div id="toast" class="toastmsg"></div>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString('fr-FR'); } catch { return '—'; } };
+const days = (iso) => Math.ceil((new Date(iso) - Date.now()) / 86400000);
+function usageToday(u) { return (u && u.chat && u.chat[todayKey()]) || 0; }
+function allUsageToday(u) { return ((u && u.chat && u.chat[todayKey()]) || 0) + ((u && u.quiz && u.quiz[todayKey()]) || 0); }
+function todayKey() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+// 7 derniere jours calendaire dans l'ordre chronologique
+function last7Days() {
+  const out = [];
+  for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); out.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')); }
+  return out;
+}
+function total7(u, kind) {
+  const ds = last7Days(); let n = 0;
+  for (const d of ds) n += ((u && u[kind] && u[kind][d]) || 0);
+  return n;
+}
+function tokToday(u) { return (u && u.tok && u.tok[todayKey()]) || 0; }
+function tok7(u) { return total7(u, 'tok'); }
+const fmtK = (n) => n >= 100000 ? Math.round(n / 1000) + 'k' : n >= 1000 ? (Math.round(n / 100) / 10) + 'k' : String(n);
+
+let FREE_DAILY = 20;
+
+async function refresh() {
+  const r = await fetch('/api/admin/accounts');
+  if (r.status === 401) { $('admin-view').classList.add('hidden'); $('login-box').classList.remove('hidden'); return; }
+  if (!r.ok) { toast('Rafraîchissement impossible.'); return; }
+  const j = await r.json();
+  FREE_DAILY = j.freeDaily || 20;
+  render(j.accounts || [], j.localMode);
+}
+
+function planBadge(plan, trialEnds) {
+  const exp = plan === 'trial' && trialEnds && days(trialEnds) <= 0;
+  const label = { trial: 'Essai', free: 'Gratuit', family: 'Famille', local: 'Maison' }[plan] || plan;
+  return `<span class="badge-plan ${plan}${exp ? ' expired' : ''}">${label}${exp ? ' (expiré)' : ''}</span>`;
+}
+function spark(u) {
+  const ds = last7Days(), chat = (u && u.chat) || {}, quiz = (u && u.quiz) || {};
+  const vals = ds.map(d => (chat[d] || 0) + (quiz[d] || 0));
+  const max = Math.max(...vals, 1);
+  return `<div class="spark" title="7 derniers jours">${vals.map(v => `<i style="height:${Math.max(5, Math.round(100 * v / max)) * 0.3}px"></i>`).join('')}</div>`;
+}
+
+function render(list, localMode) {
+  $('login-box').classList.add('hidden');
+  $('admin-view').classList.remove('hidden');
+  const total = list.reduce((n, a) => n + allUsageToday(a.usage), 0);
+  const totTok = list.reduce((n, a) => n + tokToday(a.usage), 0);
+  $('admin-sub').textContent = `Plafond gratuit actuel : ${FREE_DAILY} échanges/jour (LUMI_FREE_DAILY). Tous clients, aujourd'hui : ${total} échanges ≈ ${fmtK(totTok)} jetons. Usage = échanges chat + quiz.`;
+  $('mode-note').style.display = localMode ? 'inline-block' : 'none';
+  $('mode-note').innerHTML = localMode ? '🏠 <b>Mode maison</b> : tout est illimité ici, les limites ne comptent qu’en mode vente.' : '';
+  const box = $('clients');
+  box.innerHTML = '';
+  $('admin-empty').classList.toggle('hidden', list.length > 0);
+  list.forEach(a => {
+    const t = document.createElement('template');
+    const day = usageToday(a.usage), w = total7(a.usage, 'chat') + total7(a.usage, 'quiz');
+    const limitTxt = a.dailyLimit ? `${a.dailyLimit}/j (spécial)` : `${FREE_DAILY}/j (défaut)`;
+    t.innerHTML =
+      `<div class="client-card">
+        <div class="client-id">
+          <strong>${a.email || '(sans e-mail)'}</strong>
+          <small>Inscrit le ${fmtDate(a.created)} · ${a.id}</small>
+          <div class="badges">${planBadge(a.plan, a.trialEnds)}${a.plan === 'trial' && a.trialEnds ? `<span class="badge-trial">${days(a.trialEnds) > 0 ? '⏳ ' + days(a.trialEnds) + ' j restants' : 'terminé le ' + fmtDate(a.trialEnds)}</span>` : ''}</div>
+        </div>
+        <div class="usage-line">
+          ${spark(a.usage)}
+          <span><b style="color:var(--text)">${day}</b> aujourd'hui · <b style="color:var(--text)">${w}</b> sur 7 j</span>
+          <small>jetons : <b style="color:var(--text)">${fmtK(tokToday(a.usage))}</b> aujourd'hui · ${fmtK(tok7(a.usage))} sur 7 j</small>
+          <small>plafond : ${limitTxt}</small>
+        </div>
+        <div class="client-ctl">
+          <select class="plan-select" aria-label="Plan">
+            ${[['trial', 'Essai 14 jours'], ['free', 'Gratuit (' + FREE_DAILY + '/j)'], ['family', 'Famille (illimité)']].map(([v, l]) => `<option value="${v}"${a.plan === v ? ' selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <div class="btn-row">
+            <button class="btn-sm act-extend">⏳ Prolonger +14 j</button>
+            <button class="btn-sm act-reset">↺ Remettre le compteur</button>
+            <button class="btn-sm warn act-del">🗑️ Supprimer</button>
+          </div>
+          <div class="btn-row">
+            <input class="limit-input" type="number" min="0" placeholder="${FREE_DAILY} (défaut)" value="${a.dailyLimit || ''}" aria-label="Plafond échanges/jour">
+            <button class="btn-sm act-limit">Appliquer le plafond</button>
+          </div>
+        </div>
+      </div>`;
+    const card = t.content.firstElementChild;
+    const act = async (action, value) => {
+      const r = await fetch('/api/admin/account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: a.id, action, value }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); toast(j.error || 'Action refusée.'); return false; }
+      toast('Fait ✓'); await refresh(); return true;
+    };
+    card.querySelector('.plan-select').addEventListener('change', (e) => act('plan', e.target.value));
+    card.querySelector('.act-extend').addEventListener('click', () => act('extend', 14));
+    card.querySelector('.act-reset').addEventListener('click', () => act('usage-reset'));
+    card.querySelector('.act-limit').addEventListener('click', () => act('limit', card.querySelector('.limit-input').value));
+    // Suppression : 2 taps de confirmation, puis effacement RGPD complet
+    const del = card.querySelector('.act-del');
+    del.addEventListener('click', async () => {
+      if (!del.classList.contains('armed')) {
+        del.classList.add('armed'); del.textContent = 'Tout effacer ?'; del.style.background = '#ff5b5b'; del.style.color = '#fff';
+        setTimeout(() => { del.classList.remove('armed'); del.textContent = '🗑️ Supprimer'; del.style.background = ''; del.style.color = ''; }, 4000);
+        return;
+      }
+      await act('delete');
+    });
+    box.appendChild(card);
+  });
+}
+
+async function init() {
+  const r = await fetch('/api/admin/session');
+  const j = await r.json();
+  if (!j.enabled) {
+    $('login-err').textContent = 'La gestion des clients est désactivée : ajoute LUMI_ADMIN_CODE dans le fichier .env puis relance Lumi.';
+    $('admin-code').disabled = true; $('admin-login').disabled = true;
+    return;
+  }
+  if (j.open) { $('login-box').classList.add('hidden'); await refresh(); }
+  else $('admin-code').focus();
+}
+$('admin-login').addEventListener('click', async () => {
+  $('login-err').textContent = '';
+  const r = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: $('admin-code').value }) });
+  if (!r.ok) { $('login-err').textContent = (await r.json().catch(() => ({}))).error || 'Code admin incorrect.'; return; }
+  await refresh();
+});
+$('admin-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('admin-login').click(); });
+$('btn-refresh').addEventListener('click', refresh);
+init();
+</script>
+</body>
+</html>

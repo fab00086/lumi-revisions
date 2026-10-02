@@ -2,7 +2,7 @@
 // Cache l'interface ; les appels /api/* passent toujours par le reseau.
 'use strict';
 
-const CACHE = 'lumi-v6';
+const CACHE = 'lumi-v9';
 const SHELL = [
   '/',
   '/index.html',
@@ -42,6 +42,24 @@ self.addEventListener('fetch', (e) => {
   // L'IA, les donnees et le quiz : toujours le reseau, jamais de cache
   if (url.pathname.startsWith('/api/')) return;
   if (e.request.method !== 'GET') return;
+
+  // Les correctifs de l'interface doivent arriver dès la prochaine ouverture.
+  // Le cache ne sert de secours que si le réseau est réellement indisponible.
+  if (url.origin === location.origin &&
+      (e.request.mode === 'navigate' || ['/app.js', '/style.css', '/index.html', '/'].includes(url.pathname))) {
+    e.respondWith(fetch(e.request).then(async r => {
+      if (r.ok) {
+        const c = await caches.open(CACHE);
+        await c.put(e.request, r.clone());
+      }
+      return r;
+    }).catch(async () => {
+      const hit = await caches.match(e.request, { ignoreSearch: true });
+      return hit || new Response('Lumi est hors ligne. Reconnecte-toi puis recharge la page.',
+        { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    }));
+    return;
+  }
 
   // Interface : cache d'abord (ouverture instantanee), reseau ensuite
   e.respondWith(

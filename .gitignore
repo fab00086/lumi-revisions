@@ -2,4 +2,6 @@ node_modules/
 .env
 npm-debug.log*
 .DS_Store
-data/
+data/*
+!data/curriculum.json
+*.exe

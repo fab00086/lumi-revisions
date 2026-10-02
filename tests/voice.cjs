@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
 function section(a, b) { return source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a))); }
 function setup() {
-  const elements = new Map(), timers = new Map(), bubbles = [], spoken = [], sessions = [];
+  const elements = new Map(), timers = new Map(), bubbles = [], spoken = [], sessions = [], documentHandlers = {};
   let timerId = 0, gesture = false;
   const $ = id => {
     if (!elements.has(id)) {
@@ -24,7 +24,7 @@ function setup() {
   }
   const synth = { cancel() {}, speak(u) { spoken.push({ utterance: u, gesture }); } };
   const c = vm.createContext({ $, navigator: { userAgent: 'iPhone' },
-    document: { addEventListener() {} },
+    document: { hidden: false, addEventListener(type, fn) { documentHandlers[type] = fn; } },
     window: { webkitSpeechRecognition: Recognition, isSecureContext: true, speechSynthesis: synth },
     speechSynthesis: synth, SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
     cleanForSpeech: String, pickBestVoice: () => null, voiceRate: 1,
@@ -36,8 +36,8 @@ function setup() {
   });
   vm.runInContext(section('// Un vrai bouton', '// ---------- Caméra'), c);
   vm.runInContext(section('// ---------- Micro (voix)', '// ---------- Envoi'), c);
-  const click = id => { gesture = true; try { $(id).handlers.click(); } finally { gesture = false; } };
-  return { c, $, click, timers, bubbles, spoken, sessions };
+  const click = id => { gesture = true; try { $(id).handlers.click(); documentHandlers.click?.(); } finally { gesture = false; } };
+  return { c, $, click, timers, bubbles, spoken, sessions, documentHandlers };
 }
 test('voix : le bouton parle pendant le clic, sans délai ni énoncé muet', () => {
   const t = setup(); t.click('btn-test-voice');
@@ -105,4 +105,81 @@ test('micro : un résultat tardif ne passe pas dans un autre profil', () => {
 test('la lecture arrête le micro avant de parler', () => {
   const t = setup(); t.click('btn-mic'); t.click('btn-test-voice');
   assert.ok(t.sessions[0].aborted); assert.equal(t.$('btn-mic').classList.contains('recording'), false);
+});
+test('premier toucher du micro : aucun son muet concurrent', () => {
+  const t = setup(); t.click('btn-mic');
+  assert.equal(t.spoken.length, 0);
+  assert.ok(t.sessions[0].startedInGesture);
+  assert.equal(t.documentHandlers.touchend, undefined);
+});
+test('mode discussion bloqué : le délai arrête le mode, sans relance infinie', () => {
+  const t = setup(); t.click('btn-mic-live'); [...t.timers.values()][0]();
+  assert.equal(t.$('btn-mic-live').classList.contains('live'), false);
+  assert.equal(t.sessions.length, 1);
+  assert.equal(t.timers.size, 0);
+  assert.match(t.bubbles[0], /Appuie à nouveau/);
+});
+test('mode discussion : trois sessions vides demandent un nouveau toucher', () => {
+  const t = setup(); t.click('btn-mic-live');
+  for (let i = 0; i < 3; i++) {
+    t.sessions.at(-1).onend();
+    if (i < 2) { const [id, fn] = [...t.timers.entries()][0]; t.timers.delete(id); fn(); }
+  }
+  assert.equal(t.sessions.length, 3);
+  assert.equal(t.$('btn-mic-live').classList.contains('live'), false);
+  assert.equal(t.timers.size, 0);
+});
+test('mode discussion : un chargement ne peut pas activer un micro fantôme', () => {
+  const t = setup(); t.c.chatLoading = true; t.click('btn-mic-live');
+  assert.equal(t.sessions.length, 0);
+  assert.equal(t.$('btn-mic-live').classList.contains('live'), false);
+});
+test('iPhone en arrière-plan : coupe micro et voix, ignore un résultat tardif', () => {
+  const t = setup(); t.click('btn-mic-live');
+  t.c.document.hidden = true; t.documentHandlers.visibilitychange();
+  assert.ok(t.sessions[0].aborted);
+  t.sessions[0].onresult({ results: [[{ transcript: 'ancienne question' }]] });
+  assert.equal(t.c.sent, undefined);
+  assert.equal(t.timers.size, 0);
+  t.click('btn-mic'); assert.equal(t.sessions.length, 1);
+});
+test('les deux boutons : 🎤 arrête complètement une discussion active', () => {
+  const t = setup(); t.click('btn-mic-live'); t.click('btn-mic');
+  assert.ok(t.sessions[0].aborted);
+  assert.equal(t.$('btn-mic-live').classList.contains('live'), false);
+  t.c.micLiveResume();
+  assert.equal(t.timers.size, 0);
+  t.click('btn-mic'); assert.equal(t.sessions.length, 2);
+  assert.ok(t.sessions[1].startedInGesture);
+});
+test('les deux boutons : 🎙️ remplace une dictée par une nouvelle session dans le toucher', () => {
+  const t = setup(); t.click('btn-mic'); t.click('btn-mic-live');
+  assert.ok(t.sessions[0].aborted); assert.equal(t.sessions.length, 2);
+  assert.ok(t.sessions[1].startedInGesture);
+  t.sessions[0].onerror({error:'aborted'});
+  assert.ok(t.$('btn-mic-live').classList.contains('live'));
+});
+test('🎤 passe directement à une question pendant la voix du mode discussion', () => {
+  const t = setup(); t.click('btn-mic-live'); t.c.speak('Je réponds.');
+  t.click('btn-mic');
+  assert.equal(t.$('btn-mic-live').classList.contains('live'), false);
+  assert.equal(t.sessions.length, 2); assert.ok(t.sessions[1].startedInGesture);
+});
+test('mode discussion : une reprise pendant la préparation de la voix ne coupe pas la réponse', () => {
+  const t = setup(); t.click('btn-mic-live'); t.c.speak('Réponse de Lumi.');
+  const count=t.sessions.length;
+  t.c.micLiveResume();
+  t.spoken.at(-1).utterance.onstart(); // retire le délai de préparation
+  assert.equal(t.timers.size, 0); assert.equal(t.sessions.length, count);
+  t.spoken.at(-1).utterance.onend();
+  assert.equal(t.timers.size, 1);
+});
+test('une dictée : ignore les résultats intermédiaires et un doublon final', () => {
+  const t = setup(); let sends=0;t.c.send=()=>sends++;
+  t.click('btn-mic'); const session=t.sessions[0];
+  const interim=[{transcript:'question incomplète'}];interim.isFinal=false;
+  session.onresult({results:[interim]});assert.equal(sends,0);
+  const final=[{transcript:'question complète'}];final.isFinal=true;
+  session.onresult({results:[final]});session.onresult({results:[final]});
+  assert.equal(sends,1);
 });
