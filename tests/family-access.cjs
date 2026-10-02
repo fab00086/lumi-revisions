@@ -7,10 +7,10 @@ const express = require('express');
 const {createHash,webcrypto} = require('node:crypto');
 const source=fs.readFileSync(path.join(__dirname,'../server.js'),'utf8');
 function section(a,b){const start=source.indexOf(a),end=source.indexOf(b,start);assert.ok(start>=0&&end>start);return source.slice(start,end);}
-async function fixture() {
+async function fixture(adminCode = 'test-admin') {
   const app=express();app.use(express.json());let remote='{}', fail=false;
   const c=vm.createContext({console,app,structuredClone,createHash,crypto:webcrypto,TextEncoder,TextDecoder,AbortController,AbortSignal,setTimeout,clearTimeout,
-    process:{env:{LUMI_ADMIN_CODE:'test-admin',LUMI_ACCESS_CODE:'test-house'}},ENV:{},DATA_FILE:'unused',DATA_DIR:'.',KV_URL:'https://storage.test',KV_TOKEN:'test',isDeno:false,denoKv:null,
+    process:{env:{LUMI_ADMIN_CODE:adminCode,LUMI_ACCESS_CODE:'test-house'}},ENV:{},DATA_FILE:'unused',DATA_DIR:'.',KV_URL:'https://storage.test',KV_TOKEN:'test',isDeno:false,denoKv:null,
     fetch:async(url,opt)=>{if(fail)throw Error('offline');if(opt?.method==='POST')remote=opt.body;return {ok:true,json:async()=>({result:remote})};}});
   vm.runInContext(section('function loadData()','function topicLabel'),c);await c.initStore();
   // Même ordre de protection que dans le serveur complet.
@@ -92,4 +92,14 @@ test('une nouvelle famille ne récupère pas les anciens profils maison du navig
  const c=vm.createContext({fetch:async url=>({ok:true,json:async()=>url==='/api/auth/me'?{local:false}:[]}),localStorage:{getItem(){imports++;return '[{"id":"maison"}]';}},saveProfiles:async()=>{throw Error('migration vers famille interdite');}});
  vm.runInContext('let profilesCache=[];let profileFetchGeneration=0;'+front.slice(front.indexOf('async function fetchProfiles()'),front.indexOf('function loadProfiles()')),c);
  await c.fetchProfiles();assert.equal(imports,0);assert.equal(vm.runInContext('profilesCache.length',c),0);
+});
+
+
+test('admin : les espaces de copie autour de la variable Render ne rendent pas le code inutilisable',async()=>{
+ const f=await fixture('  test-admin\r\n');try {
+   const r=await f.post('/api/admin/login',{code:'test-admin'},'');assert.equal(r.status,200);
+   const cookie=r.headers.getSetCookie()[0].split(';')[0];
+   assert.equal((await fetch(f.base+'/api/admin/accounts',{headers:{Cookie:cookie}})).status,200);
+   assert.equal((await f.post('/api/admin/login',{code:'autre-code'},'')).status,401);
+ }finally{await f.close();}
 });

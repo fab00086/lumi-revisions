@@ -326,7 +326,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 // ---------- Code d'accès (protection de l'app en ligne) ----------
 // Si LUMI_ACCESS_CODE est defini, toutes les routes /api demandent ce code
 // (entre une fois dans le navigateur, retenu par un cookie 1 an).
-const ACCESS_CODE = process.env.LUMI_ACCESS_CODE || '';
+const ACCESS_CODE = String(process.env.LUMI_ACCESS_CODE || '').trim();
 const loginAttempts = new Map();
 function allowLoginAttempt(req, res, prefix = 'login', max = 20) {
   const key = prefix + ':' + (req.ip || req.socket?.remoteAddress || 'unknown');
@@ -856,7 +856,7 @@ app.get('/api/auth/me', async (req, res) => {
 // ---------- Admin ventes : gestion des clients (c'est à toi seulement) ----------
 // Desactive tant que LUMI_ADMIN_CODE est vide (typeof-guard pour les tests
 // qui font tourner cette section sans le serveur complet).
-const ADMIN_CODE = (typeof ENV !== 'undefined' && ENV.LUMI_ADMIN_CODE) || '';
+const ADMIN_CODE = String((typeof ENV !== 'undefined' && ENV.LUMI_ADMIN_CODE) || '').trim();
 function adminCookieValue() {
   // Valeur derivee du code (pas le code lui-meme), comme pour le gate.
   return createHash('sha256').update('lumi-admin:' + ADMIN_CODE).digest('hex');
