@@ -505,6 +505,9 @@ function speak(text) {
     if (!text) return;
     stopListening();
     stopSpeech();
+    // cancel() vide la file, mais ne retire pas l'état pause du navigateur.
+    // Reprendre dans le toucher permet au bouton de sortir de cet état.
+    if (speechSynthesis.paused) speechSynthesis.resume();
     const gen = ++speakGen; // annule les fins d'ecoute des anciens morceaux
     const voice = pickBestVoice();
     const start = () => {
@@ -527,6 +530,7 @@ function speak(text) {
         const u = new SpeechSynthesisUtterance(part);
         u.lang = 'fr-FR';
         u.rate = voiceRate || 1;
+        u.volume = 1;
         if (voice) u.voice = voice;
         speechUtterances.push(u); // conserve les énoncés jusqu'à leur fin
         u.onstart = () => {
@@ -551,7 +555,7 @@ function speak(text) {
     speechTimer = setTimeout(() => {
       if (gen !== speakGen) return;
       stopSpeech();
-      setStatus('Appuie sur 🔊 Écouter Lumi pour lancer la voix.');
+      setStatus('Voix non démarrée : monte le volume, coupe le mode silencieux, puis appuie sur 🔊 Écouter Lumi.');
       if (typeof micLiveResume === 'function') micLiveResume();
     }, 5000);
     // Aucun délai : un clic doit conserver son activation utilisateur.

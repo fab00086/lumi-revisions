@@ -22,7 +22,9 @@ function setup() {
     start() { this.startedInGesture = gesture; }
     abort() { this.aborted = true; if (this.onend) this.onend(); }
   }
-  const synth = { cancel() {}, speak(u) { spoken.push({ utterance: u, gesture }); } };
+  const synth = { paused: false, resumedInGesture: false, cancel() {},
+    resume() { this.paused = false; this.resumedInGesture = gesture; },
+    speak(u) { spoken.push({ utterance: u, gesture, paused: this.paused }); } };
   const c = vm.createContext({ $, navigator: { userAgent: 'iPhone' },
     document: { hidden: false, addEventListener(type, fn) { documentHandlers[type] = fn; } },
     window: { webkitSpeechRecognition: Recognition, isSecureContext: true, speechSynthesis: synth },
@@ -37,8 +39,16 @@ function setup() {
   vm.runInContext(section('// Un vrai bouton', '// ---------- Caméra'), c);
   vm.runInContext(section('// ---------- Micro (voix)', '// ---------- Envoi'), c);
   const click = id => { gesture = true; try { $(id).handlers.click(); documentHandlers.click?.(); } finally { gesture = false; } };
-  return { c, $, click, timers, bubbles, spoken, sessions, documentHandlers };
+  return { c, $, click, timers, bubbles, spoken, sessions, documentHandlers, synth };
 }
+
+test('voix iPhone : le bouton reprend une synthèse en pause dans le toucher', () => {
+  const t = setup(); t.synth.paused = true;
+  t.click('btn-listen');
+  assert.equal(t.synth.resumedInGesture, true);
+  assert.equal(t.spoken[0].paused, false);
+  assert.equal(t.spoken[0].utterance.volume, 1);
+});
 test('voix : le bouton parle pendant le clic, sans délai ni énoncé muet', () => {
   const t = setup(); t.click('btn-test-voice');
   assert.ok(t.spoken.length); assert.ok(t.spoken.every(s => s.gesture && s.utterance.text.trim()));
