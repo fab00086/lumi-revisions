@@ -49,6 +49,20 @@ test('voix iPhone : le bouton reprend une synthèse en pause dans le toucher', (
   assert.equal(t.spoken[0].paused, false);
   assert.equal(t.spoken[0].utterance.volume, 1);
 });
+
+test('voix mobile : laisse le téléphone choisir, sans forcer une voix distante', () => {
+  const remote = { name: 'French online', lang: 'fr-FR' };
+  const c = vm.createContext({ navigator: { userAgent: 'iPhone' },
+    voicePref: null, frenchVoices: () => [remote] });
+  vm.runInContext(section('function pickBestVoice()', 'function populateVoiceSelect()'), c);
+  assert.equal(c.pickBestVoice(), null);
+  c.navigator.userAgent = 'Android';
+  assert.equal(c.pickBestVoice(), null);
+  c.voicePref = remote.name;
+  assert.equal(c.pickBestVoice(), remote, 'le choix explicite reste respecté');
+  c.voicePref = '__auto__';
+  assert.equal(c.pickBestVoice(), null);
+});
 test('voix : le bouton parle pendant le clic, sans délai ni énoncé muet', () => {
   const t = setup(); t.click('btn-test-voice');
   assert.ok(t.spoken.length); assert.ok(t.spoken.every(s => s.gesture && s.utterance.text.trim()));

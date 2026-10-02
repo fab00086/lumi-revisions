@@ -3,6 +3,8 @@
   "short_name": "Lumi",
   "description": "Tuteur IA bienveillant pour aider les enfants a faire leurs devoirs (supervision, pas de reponses toutes faites).",
   "start_url": "/",
+  "id": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f4f1ff",
   "theme_color": "#6c5ce7",

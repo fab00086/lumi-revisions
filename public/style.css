@@ -5,7 +5,7 @@
   --bg: #f4f1ff;
   --card: #ffffff;
   --text: #2d2a45;
-  --text-soft: #7a7696;
+  --text-soft: #55506f;
   --accent: #ff9f43;
   --ok: #2ecc71;
 }
@@ -40,7 +40,7 @@ body {
 .logo { font-size: 56px; }
 .card h1 { font-size: 30px; margin-top: 4px; }
 .subtitle { color: var(--text-soft); margin: 8px 0 20px; font-size: 15px; }
-.hint { color: var(--text-soft); font-size: 12.5px; margin-top: 14px; }
+.hint { color: var(--text-soft); font-size: 15px; line-height: 1.6; margin-top: 14px; }
 
 .profiles { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 18px; }
 .profile-pill {
@@ -147,7 +147,7 @@ body {
 
 .teacher-info { display: flex; flex-direction: column; gap: 2px; }
 .teacher-info strong { font-size: 16px; }
-#teacher-status { color: var(--text-soft); font-size: 13px; }
+#teacher-status { color: var(--text-soft); font-size: 15px; line-height: 1.45; }
 
 /* Chat */
 .chat {
@@ -304,9 +304,9 @@ body {
 .prog-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .prog-item { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: #faf9ff; border: 2px solid #ece7fb; border-radius: 12px; padding: 10px 12px; font-size: 14px; }
 .prog-topic { flex: 1; }
-.prog-meta { color: var(--text-soft); font-size: 12px; white-space: nowrap; }
+.prog-meta { color: var(--text-soft); font-size: 14px; line-height: 1.5; }
 /* Bilan pedagogique (parents) : reussites et points a retravailler */
-.prog-extra { flex-basis: 100%; color: var(--text-soft); font-size: 12px; }
+.prog-extra { flex-basis: 100%; color: var(--text-soft); font-size: 15px; line-height: 1.6; }
 .prog-bilan { background: #f0fbf4; border: 2px solid #cdeeda; border-radius: 12px; padding: 10px 12px; margin: 10px 0; font-size: 14px; }
 .prog-bilan p { margin: 4px 0; }
 
@@ -401,12 +401,12 @@ body {
 #btn-parent { margin-top: 12px; width: 100%; }
 .parent-kid { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 2px solid #ece7fb; }
 .parent-kid h3 { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
-.parent-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-.stat { background: var(--violet-soft); border-radius: 12px; padding: 8px 12px; display: flex; flex-direction: column; align-items: center; min-width: 72px; }
-.stat strong { font-size: 18px; }
-.stat small { color: var(--text-soft); font-size: 11px; text-align: center; }
+.parent-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.stat { background: #f1edff; border: 1px solid #d9d0f4; border-radius: 16px; padding: 18px 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.stat strong { font-size: 32px; line-height: 1.1; color: var(--violet-dark); }
+.stat small { color: var(--text); font-size: 15px; line-height: 1.4; font-weight: 600; text-align: center; }
 .parent-weak { background: #fdf3e0; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; }
-.parent-line { font-size: 13.5px; color: var(--text-soft); margin: 6px 0; }
+.parent-line { font-size: 15px; line-height: 1.6; color: var(--text-soft); margin: 10px 0; }
 
 /* Diagnostic micro + voix */
 .diag-list { padding-left: 22px; line-height: 1.8; font-size: 14px; }
@@ -481,3 +481,19 @@ body {
 .prog-details { margin: 10px 0; background: var(--violet-soft); border-radius: 12px; padding: 10px 14px; }
 .prog-details summary { cursor: pointer; font-weight: 700; font-size: 14px; color: var(--violet-dark); }
 .prog-mat { font-size: 13px; line-height: 1.55; color: var(--text); margin: 8px 0 0; }
+
+/* Installation et réglages lisibles sur téléphone. */
+.install-btn { width: 100%; margin-top: 12px; background: var(--violet-soft); color: var(--violet-dark); border: 1px solid #d9d0f4; }
+#screen-profile { height: auto; min-height: 100%; padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+.audio-feedback { margin: 14px 0; padding: 14px; border-radius: 12px; background: #f1edff; color: var(--text); font-size: 16px; line-height: 1.6; }
+#settings-modal .btn { width: 100%; margin-top: 12px; }
+.prog-current, .prog-item, .prog-bilan, .parent-weak { font-size: 16px; line-height: 1.6; padding: 16px; }
+.prog-topic { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.prog-details summary { font-size: 16px; }
+.prog-mat { font-size: 15px; line-height: 1.7; }
+.hist-who { font-size: 14px; }
+.hist-msg.user .hist-text, .hist-msg.assistant .hist-text { font-size: 16px; line-height: 1.6; }
+@media (max-width: 600px) {
+  .prog-item { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .modal-box { max-height: 90dvh; }
+}

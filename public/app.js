@@ -384,7 +384,10 @@ async function send(text, imageBase64) {
   }
 }
 
-function setStatus(txt) { $('teacher-status').textContent = txt; }
+function setStatus(txt) {
+  $('teacher-status').textContent = txt;
+  $('voice-feedback').textContent = txt;
+}
 
 // ---------- Voix (lecture + avatar qui parle) ----------
 let voicePref = localStorage.getItem('lumivoice') || null;
@@ -397,9 +400,14 @@ function frenchVoices() {
 
 // Choisit la meilleure voix : les voix "naturelles" d'abord
 function pickBestVoice() {
+  if (voicePref === '__auto__') return null;
   const fr = frenchVoices();
   if (!fr.length) return null;
   if (voicePref) { const chosen = fr.find(v => v.name === voicePref); if (chosen) return chosen; }
+  // Sur mobile, laisser le système choisir évite de forcer une voix distante
+  // ou une ancienne référence indisponible après une mise à jour du téléphone.
+  if (/iPad|iPhone|iPod|Android/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return null;
   const score = (v) => {
     let s = 0;
     const n = v.name.toLowerCase();
@@ -419,16 +427,15 @@ function populateVoiceSelect() {
   const sel = $('voice-select');
   const fr = frenchVoices();
   const best = pickBestVoice();
-  sel.innerHTML = '';
+  sel.innerHTML = '<option value="__auto__">Voix du téléphone (automatique)</option>';
   if (!fr.length) {
-    sel.innerHTML = '<option value="">Aucune voix française trouvée</option>';
     return;
   }
   fr.forEach(v => {
     const o = document.createElement('option');
     o.value = v.name;
     o.textContent = `${v.name}${v.lang === 'fr-FR' ? '' : ' (' + v.lang + ')'}${(!voicePref && v === best) ? ' ✨' : ''}`;
-    if (voicePref ? v.name === voicePref : v === best) o.selected = true;
+    if (voicePref !== '__auto__' && (voicePref ? v.name === voicePref : v === best)) o.selected = true;
     sel.appendChild(o);
   });
 }
@@ -1512,3 +1519,51 @@ $('btn-gate-enter').addEventListener('click', enterGate);
 $('gate-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') enterGate(); });
 initApp();
 if ('speechSynthesis' in window) speechSynthesis.getVoices();
+
+// ---------- Installation sur l'écran d'accueil ----------
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  installPrompt = event;
+});
+function showInstall() {
+  $('settings-modal').classList.add('hidden');
+  $('install-modal').classList.remove('hidden');
+  const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  $('install-intro').textContent = installed ? 'Lumi est déjà ouverte comme une application.' : 'Garde Lumi à portée de main depuis son icône.';
+  $('btn-install-native').classList.toggle('hidden', installed || !installPrompt);
+  $('install-steps').innerHTML = installed ? '<li>Ouvre Lumi depuis son icône sur l’écran d’accueil.</li>' : isIOS
+    ? '<li>Ouvre Lumi dans <strong>Safari</strong>.</li><li>Appuie sur <strong>Partager</strong> (le carré avec une flèche vers le haut).</li><li>Choisis <strong>Sur l’écran d’accueil</strong>, puis <strong>Ajouter</strong>. Garde « Ouvrir comme app web » activé si cette option apparaît.</li>'
+    : '<li>Ouvre Lumi dans <strong>Chrome</strong> ou <strong>Edge</strong>.</li><li>Dans le menu du navigateur, choisis <strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong>.</li><li>Confirme l’installation, puis ouvre l’icône <strong>Lumi</strong>.</li>';
+}
+$('btn-install').addEventListener('click', showInstall);
+$('btn-install-settings').addEventListener('click', showInstall);
+$('btn-install-close').addEventListener('click', () => $('install-modal').classList.add('hidden'));
+$('btn-install-native').addEventListener('click', async () => {
+  const prompt = installPrompt;
+  if (!prompt) return;
+  installPrompt = null;
+  await prompt.prompt();
+  const result = await prompt.userChoice;
+  $('install-intro').textContent = result.outcome === 'accepted' ? 'Installation demandée. Ouvre Lumi depuis son icône.' : 'Tu peux installer Lumi plus tard depuis ce bouton.';
+  $('btn-install-native').classList.add('hidden');
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  $('btn-install').textContent = '📲 Lumi est installée';
+});
+
+// ---------- Test de sortie audio, indépendant des voix du téléphone ----------
+let soundCheck = null;
+$('btn-test-sound').addEventListener('click', () => {
+  setLiveMic(false);
+  stopSpeech();
+  if (!soundCheck) soundCheck = new Audio('/sound-check.wav');
+  soundCheck.pause();
+  soundCheck.currentTime = 0;
+  soundCheck.volume = 1;
+  $('voice-feedback').textContent = 'Écoute la petite mélodie. Aucun son ? Vérifie le volume et la sortie Bluetooth.';
+  soundCheck.play().catch(() => {
+    $('voice-feedback').textContent = 'Le navigateur a bloqué le son. Rouvre Lumi dans Safari ou Chrome, puis retouche « Tester le son ».';
+  });
+});

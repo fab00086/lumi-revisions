@@ -202,7 +202,7 @@ async function init() {
   const r = await fetch('/api/admin/session');
   const j = await r.json();
   if (!j.enabled) {
-    $('login-err').textContent = 'La gestion des clients est désactivée : ajoute LUMI_ADMIN_CODE dans le fichier .env puis relance Lumi.';
+    $('login-err').textContent = 'La gestion des clients est désactivée. Sur Render, ajoute LUMI_ADMIN_CODE dans Environment puis sauvegarde et redéploie. En local, configure ce code dans .env puis relance Lumi.';
     $('admin-code').disabled = true; $('admin-login').disabled = true;
     return;
   }
