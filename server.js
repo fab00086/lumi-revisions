@@ -9,6 +9,7 @@ import fs from 'fs';
 import http from 'http';
 import https from 'https';
 import selfsigned from 'selfsigned';
+import { createHash } from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -243,7 +244,7 @@ function importJsonToSql(raw) {
   const now = new Date().toISOString();
   const putAccount = sql.prepare('INSERT OR REPLACE INTO accounts (id,email,pass_hash,plan,trial_ends,consent_date,created,settings,usage) VALUES (?,?,?,?,?,?,?,?,?)');
   for (const acc of Object.values(migrated.accounts || {})) {
-    putAccount.run(acc.id, acc.email || '', acc.passHash || '', acc.plan || 'free',
+    putAccount.run(acc.id, acc.email || null, acc.passHash || '', acc.plan || 'free',
       acc.trialEnds || null, acc.consentDate || null, acc.created || now,
       JSON.stringify(acc.settings || {}), JSON.stringify(acc.usage || {}));
   }
@@ -308,6 +309,13 @@ async function getOrCreateCert() {
 }
 
 const app = express();
+// Render termine HTTPS devant un proxy ; les accès directs locaux restent sans confiance.
+if (process.env.RENDER) app.set('trust proxy', 1);
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
 app.use(express.json({ limit: '25mb' })); // pour les photos en base64
 // KaTeX (rendu des maths) servi depuis node_modules
 app.use('/katex', express.static(path.join(__dirname, 'node_modules', 'katex', 'dist')));
@@ -319,35 +327,77 @@ app.use(express.static(path.join(__dirname, 'public'), {
 // Si LUMI_ACCESS_CODE est defini, toutes les routes /api demandent ce code
 // (entre une fois dans le navigateur, retenu par un cookie 1 an).
 const ACCESS_CODE = process.env.LUMI_ACCESS_CODE || '';
+const loginAttempts = new Map();
+function allowLoginAttempt(req, res, prefix = 'login', max = 20) {
+  const key = prefix + ':' + (req.ip || req.socket?.remoteAddress || 'unknown');
+  const now = Date.now(), prev = loginAttempts.get(key);
+  const item = !prev || prev.until < now ? { count: 0, until: now + 900000 } : prev;
+  if (++item.count > max) { res.status(429).json({ error: 'Trop de tentatives. Réessaie dans quinze minutes.' }); return false; }
+  if (loginAttempts.size > 5000) loginAttempts.clear();
+  loginAttempts.set(key, item);
+  return true;
+}
 
 function hasAccess(req) {
-  const m = String(req.headers.cookie || '').match(/lumi_access=([a-f0-9]{8})/);
+  const m = String(req.headers.cookie || '').match(/lumi_access=([a-f0-9]{64})/);
   return !!(m && m[1] === accessCookieValue());
 }
 function accessCookieValue() {
   // valeur derivee du code (pas le code lui-meme)
-  let h = 5381;
-  for (const c of ACCESS_CODE) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
-  return h.toString(16).padStart(8, '0');
+  return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/gate', (req, res) => {
-  res.json({ locked: !!ACCESS_CODE, open: !ACCESS_CODE || hasAccess(req) });
+app.get('/api/gate', async (req, res, next) => {
+  try {
+    const cookies = parseCookies(req);
+    const family = !!cookies[SESSION_COOKIE] || cookies.lumi_family === '1';
+    const r = family ? await resolveAccount(req) : null;
+    res.json({ locked: !!ACCESS_CODE || family || !LOCAL_MODE, open: family ? !!r && !r.local : (LOCAL_MODE && (!ACCESS_CODE || hasAccess(req))) });
+  } catch (e) { next(e); }
 });
-app.post('/api/unlock', (req, res) => {
-  if (!ACCESS_CODE) return res.json({ ok: true });
-  if (String((req.body || {}).code || '').trim() === ACCESS_CODE) {
+app.post('/api/unlock', storedRoute(async (req, res) => {
+  if (!allowLoginAttempt(req, res)) return;
+  const code = String((req.body || {}).code || '').trim();
+  if (code.toUpperCase().startsWith('LUMI-')) {
+    const result = await connectFamilyCode(code, parseCookies(req)[SESSION_COOKIE], req.body.consent === true);
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.setHeader('Set-Cookie', [sessionCookie(result.token, req, SESSION_DAYS * 86400),
+      `lumi_family=1; Path=/; HttpOnly; Max-Age=${SESSION_DAYS * 86400}; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`]);
+    return res.json({ ok: true });
+  }
+  if ((!ACCESS_CODE && LOCAL_MODE) || (ACCESS_CODE && code === ACCESS_CODE && LOCAL_MODE)) {
     // Secure seulement en HTTPS : en http://IP-LAN, un cookie Secure serait ignore
     // et le gate ne s'ouvrirait jamais.
-    res.setHeader('Set-Cookie', `lumi_access=${accessCookieValue()}; Path=/; Max-Age=31536000; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
+    res.setHeader('Set-Cookie', [`lumi_access=${accessCookieValue()}; Path=/; HttpOnly; Max-Age=31536000; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
+      sessionCookie('', req, 0), 'lumi_family=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax']);
     res.json({ ok: true });
   } else {
     res.status(401).json({ error: 'Code incorrect.' });
   }
-});
+}));
+app.post('/api/access-request', storedRoute(async (req, res) => {
+  if (!allowLoginAttempt(req, res, 'request', 5)) return;
+  if (!ADMIN_CODE) return res.status(503).json({ error: 'Les demandes d’accès ne sont pas encore ouvertes.' });
+  const name = String(req.body.name || '').trim().slice(0, 80);
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || req.body.consent !== true)
+    return res.status(400).json({ error: 'Indique ton nom, ton e-mail et confirme que tu es le parent.' });
+  if (!await accountByEmail(email)) await accountPut({ id: 'a' + newToken().slice(0, 12), email,
+    passHash: '', plan: 'pending', created: new Date().toISOString(), consentDate: new Date().toISOString(),
+    settings: { label: name, blocked: true, pending: true, maxDevices: 1, dailyLimit: 20 }, usage: {} });
+  res.status(202).json({ ok: true, message: 'Demande enregistrée. Le responsable de Lumi te transmettra un code si ton accès est autorisé.' });
+}));
 app.use('/api', (req, res, next) => {
-  if (!ACCESS_CODE || req.path === '/gate' || req.path === '/unlock' || hasAccess(req)) return next();
-  res.status(401).json({ error: 'Code d\'accès requis.' });
+  if (req.path.startsWith('/admin/')) return next(); // protection admin indépendante
+  const cookies = parseCookies(req);
+  if (cookies[SESSION_COOKIE] || cookies.lumi_family === '1') {
+    return resolveAccount(req).then(r => {
+      if (r && !r.local) next();
+      else res.status(401).json({ error: 'Accès expiré ou bloqué. Entre ton code famille.' });
+    }).catch(next);
+  }
+  if (LOCAL_MODE && (!ACCESS_CODE || hasAccess(req))) return next();
+  res.status(401).json({ error: 'Code d’accès requis.' });
 });
 
 // Certificat telechargeable : l'iPhone doit l'installer dans ses reglages
@@ -435,9 +485,11 @@ async function resolveAccount(req) {
     const s = await sessionGet(token);
     if (s && (!s.expires || new Date(s.expires) > new Date())) {
       const acc = await accountById(s.accountId);
-      if (acc) return { account: acc, local: false };
+      if (acc && !acc.settings?.blocked) return { account: acc, local: false };
     }
+    return null; // une session révoquée ne doit jamais ouvrir l’espace maison
   }
+  if (parseCookies(req).lumi_family === '1') return null;
   if (LOCAL_MODE) {
     const acc = await accountById('local');
     return { account: acc || localAccount(), local: true };
@@ -465,15 +517,17 @@ function planLimit(acc) {
   if (!acc || acc.plan === 'local') return Infinity;
   // Plafond spécial posé par l'admin : il s'applique à tous les plans (sauf local),
   // pour garder la consommation IA maîtrisée même sur un compte payant.
-  const daily = Number(acc.settings && acc.settings.dailyLimit);
-  if (Number.isFinite(daily) && daily >= 0) return Math.round(daily);
+  const raw = acc.settings && acc.settings.dailyLimit;
+  const daily = Number(raw);
+  if (raw != null && Number.isFinite(daily) && daily >= 0) return Math.round(daily);
   if (acc.plan === 'trial' && (!acc.trialEnds || new Date(acc.trialEnds) > new Date())) return Infinity;
   if (acc.plan !== 'free' && acc.plan !== 'trial') return Infinity; // famille / payant : illimité par défaut
   return FREE_DAILY;
 }
 function quotaOk(acc, kind) {
   if (!acc || !Number.isFinite(planLimit(acc))) return true;
-  const used = ((acc.usage || {})[kind] || {})[todayKey()] || 0;
+  const u = acc.usage || {}, day = todayKey();
+  const used = (u.chat?.[day] || 0) + (u.quiz?.[day] || 0);
   return used < planLimit(acc);
 }
 async function countUsage(acc, kind) {
@@ -493,10 +547,15 @@ function messageTokens(messages) { let n = 0; for (const m of messages || []) n 
 // Jetons consommes, cumules par jour dans la meme base que les echanges.
 async function countTokens(acc, tokens) {
   if (!acc || acc.plan === 'local' || !Number.isFinite(tokens) || tokens <= 0) return;
-  if (!acc.usage) acc.usage = {};
-  if (!acc.usage.tok) acc.usage.tok = {};
-  acc.usage.tok[todayKey()] = (acc.usage.tok[todayKey()] || 0) + Math.round(tokens);
-  await accountPut(acc);
+  const save = async () => {
+    const current = typeof accountById === 'function' ? await accountById(acc.id) : acc;
+    if (!current) return;
+    current.usage ||= {}; current.usage.tok ||= {};
+    current.usage.tok[todayKey()] = (current.usage.tok[todayKey()] || 0) + Math.round(tokens);
+    await accountPut(current);
+  };
+  if (typeof writeQueue === 'undefined') return save(); // tests isolés
+  const task = writeQueue.then(save); writeQueue = task.catch(() => {}); await task;
 }
 // --- Acces aux donnees : base SQL si dispo, sinon blob (Redis/Deno pour l'hebergement) ---
 function rowToAccount(r) {
@@ -517,7 +576,7 @@ async function accountById(id) {
 async function accountPut(acc) {
   if (sql) {
     sql.prepare('INSERT OR REPLACE INTO accounts (id,email,pass_hash,plan,trial_ends,consent_date,created,settings,usage) VALUES (?,?,?,?,?,?,?,?,?)')
-      .run(acc.id, acc.email || '', acc.passHash || '', acc.plan || 'free', acc.trialEnds || null,
+      .run(acc.id, acc.email || null, acc.passHash || '', acc.plan || 'free', acc.trialEnds || null,
         acc.consentDate || null, acc.created || new Date().toISOString(),
         JSON.stringify(acc.settings || {}), JSON.stringify(acc.usage || {}));
     return;
@@ -542,6 +601,61 @@ async function sessionDel(token) {
   if (sql) { sql.prepare('DELETE FROM sessions WHERE token = ?').run(token); return; }
   const data = getData();
   if (data.sessions && data.sessions[token]) { delete data.sessions[token]; await setData(data); }
+}
+async function allAccounts() {
+  if (sql) return sql.prepare('SELECT * FROM accounts WHERE id != ? ORDER BY created DESC').all('local').map(rowToAccount);
+  return Object.values(getData().accounts || {}).filter(a => a && a.id !== 'local');
+}
+async function activeSessions(accountId) {
+  const rows = sql ? sql.prepare('SELECT token,account_id AS accountId,expires FROM sessions WHERE account_id = ?').all(accountId)
+    : Object.entries(getData().sessions || {}).map(([token, s]) => ({ token, ...s })).filter(s => s.accountId === accountId);
+  return rows.filter(s => new Date(s.expires) > new Date());
+}
+async function disconnectFamily(accountId) {
+  if (sql) { sql.prepare('DELETE FROM sessions WHERE account_id = ?').run(accountId); return; }
+  const data = getData();
+  for (const [token, s] of Object.entries(data.sessions || {})) if (s.accountId === accountId) delete data.sessions[token];
+  await setData(data);
+}
+function familyCodeHash(code) {
+  return createHash('sha256').update('lumi-family:' + String(code).toUpperCase().replace(/[\s-]/g, '')).digest('hex');
+}
+async function issueFamilyCode(acc) {
+  const code = 'LUMI-' + newToken().slice(0, 24).toUpperCase().match(/.{4}/g).join('-');
+  acc.settings ||= {};
+  acc.settings.accessCodeHash = familyCodeHash(code);
+  acc.settings.pending = false;
+  acc.settings.blocked = false;
+  if (acc.plan === 'pending') acc.plan = 'free';
+  // Ancien code invalidé et toutes ses sessions fermées.
+  await disconnectFamily(acc.id);
+  await accountPut(acc);
+  return code; // présenté une seule fois ; seul le condensat est enregistré
+}
+async function connectFamilyCode(code, existingToken, consent) {
+  const digest = familyCodeHash(code);
+  const acc = (await allAccounts()).find(a => a.settings?.accessCodeHash === digest);
+  if (!acc || acc.settings.blocked || acc.settings.pending) return { status: 401, error: 'Code incorrect ou accès bloqué.' };
+  const current = existingToken ? await sessionGet(existingToken) : null;
+  const reuse = current?.accountId === acc.id && new Date(current.expires) > new Date();
+  if (!reuse && (await activeSessions(acc.id)).length >= (acc.settings.maxDevices || 1))
+    return { status: 403, error: 'Tous les appareils autorisés sont déjà connectés. Demande au responsable de Lumi de libérer un appareil.' };
+  if (!acc.consentDate && !consent) return { status: 400, error: 'Pour le premier accès, confirme que tu es le parent.' };
+  if (!acc.consentDate) { acc.consentDate = new Date().toISOString(); await accountPut(acc); }
+  const token = reuse ? existingToken : newToken();
+  await sessionPut(token, { accountId: acc.id, expires: new Date(Date.now() + SESSION_DAYS * 86400000).toISOString() });
+  return { token, account: acc };
+}
+async function reserveUsage(req, kind) {
+  const task = writeQueue.then(async () => {
+    const r = await resolveAccount(req);
+    if (!r) return { status: 401, error: 'Entre ton code famille pour utiliser Lumi.' };
+    if (!quotaOk(r.account, kind)) return { status: 402, error: QUOTA_MESSAGE };
+    await countUsage(r.account, kind);
+    return { account: r.account };
+  });
+  writeQueue = task.catch(() => {});
+  return task;
 }
 // Espace (blob) : les enfants de CETTE famille seulement, ranges dans
 // spaces[accountId] = { profiles: [...], [idEnfant]: {...} }.
@@ -684,6 +798,9 @@ async function accountErase(accountId) {
 }
 
 app.post('/api/auth/register', storedRoute(async (req, res) => {
+  const existing = await resolveAccount(req);
+  if (existing?.account?.settings?.accessCodeHash || parseCookies(req).lumi_family === '1')
+    return res.status(403).json({ error: 'Ton code est déjà lié à un seul compte famille.' });
   const { email, password, consent } = req.body || {};
   const mail = String(email || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) return res.status(400).json({ error: 'Adresse e-mail invalide.' });
@@ -707,10 +824,11 @@ app.post('/api/auth/register', storedRoute(async (req, res) => {
 }));
 
 app.post('/api/auth/login', storedRoute(async (req, res) => {
+  if (parseCookies(req).lumi_family === '1') return res.status(403).json({ error: 'Déconnecte cet appareil avant de changer de compte.' });
   const { email, password } = req.body || {};
   const mail = String(email || '').trim().toLowerCase();
   const acc = await accountByEmail(mail);
-  if (!acc || !(await verifyPassword(password, acc.passHash))) {
+  if (!acc || acc.settings?.blocked || acc.settings?.accessCodeHash || !(await verifyPassword(password, acc.passHash))) {
     return res.status(401).json({ error: 'E-mail ou mot de passe incorrect.' });
   }
   const token = newToken();
@@ -741,9 +859,7 @@ app.get('/api/auth/me', async (req, res) => {
 const ADMIN_CODE = (typeof ENV !== 'undefined' && ENV.LUMI_ADMIN_CODE) || '';
 function adminCookieValue() {
   // Valeur derivee du code (pas le code lui-meme), comme pour le gate.
-  let h = 5381;
-  for (const c of ADMIN_CODE) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
-  return h.toString(16).padStart(8, '0');
+  return createHash('sha256').update('lumi-admin:' + ADMIN_CODE).digest('hex');
 }
 function hasAdmin(req) { return !!ADMIN_CODE && parseCookies(req).lumi_admin === adminCookieValue(); }
 function requireAdmin(req, res) {
@@ -753,37 +869,74 @@ function requireAdmin(req, res) {
 }
 app.get('/api/admin/session', (req, res) => res.json({ enabled: !!ADMIN_CODE, open: hasAdmin(req), localMode: LOCAL_MODE }));
 app.post('/api/admin/login', (req, res) => {
+  if (!allowLoginAttempt(req, res, 'admin', 10)) return;
   if (!ADMIN_CODE) return res.status(404).json({ error: 'Gestion des clients désactivée : définis LUMI_ADMIN_CODE.' });
   if (String((req.body || {}).code || '').trim() === ADMIN_CODE) {
     res.setHeader('Set-Cookie', `lumi_admin=${adminCookieValue()}; Path=/; HttpOnly; Max-Age=43200; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
     res.json({ ok: true });
   } else res.status(401).json({ error: 'Code admin incorrect.' });
 });
-app.get('/api/admin/accounts', async (req, res) => {
+app.post('/api/admin/logout', (req, res) => {
+  res.setHeader('Set-Cookie', `lumi_admin=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
+  res.json({ ok: true });
+});
+app.get('/api/admin/accounts', async (req, res, next) => {
+  try {
   if (!requireAdmin(req, res)) return;
   let rows;
-  if (sql) rows = sql.prepare('SELECT * FROM accounts WHERE id != ? ORDER BY created DESC').all('local');
-  else rows = Object.values(getData().accounts || {}).filter(a => a && a.id !== 'local');
+  rows = await allAccounts();
   res.json({
     freeDaily: FREE_DAILY, localMode: LOCAL_MODE,
-    accounts: rows.map(a => ({
+    accounts: await Promise.all(rows.map(async a => ({
       id: a.id, email: a.email || '', plan: a.plan || 'free',
+      label: a.settings?.label || a.email || 'Famille', blocked: !!a.settings?.blocked,
+      pending: !!a.settings?.pending, codeAccess: !!a.settings?.accessCodeHash,
+      maxDevices: a.settings?.maxDevices || 1, connectedDevices: (await activeSessions(a.id)).length,
       trialEnds: a.trial_ends || a.trialEnds || null, created: a.created || null,
       dailyLimit: (a.settings && Number.isFinite(Number(a.settings.dailyLimit)) && a.settings.dailyLimit !== null) ? Number(a.settings.dailyLimit) : null,
       usage: (a.usage || {})
-    }))
+    })))
   });
+  } catch (e) { next(e); }
 });
+app.post('/api/admin/create-access', storedRoute(async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const label = String(req.body.label || '').trim().slice(0, 80);
+  const maxDevices = Number(req.body.maxDevices), daily = Number(req.body.dailyLimit);
+  if (!label || !Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 20 ||
+      !['free', 'family'].includes(req.body.plan) || (req.body.plan === 'free' && (!Number.isInteger(daily) || daily < 1 || daily > 10000)))
+    return res.status(400).json({ error: 'Vérifie le nom, le quota et le nombre d’appareils (1 à 20).' });
+  const acc = { id: 'a' + newToken().slice(0, 12), email: '', passHash: '', plan: req.body.plan,
+    created: new Date().toISOString(), settings: { label, maxDevices, dailyLimit: req.body.plan === 'free' ? daily : null }, usage: {} };
+  const code = await issueFamilyCode(acc);
+  res.json({ ok: true, code, label });
+}));
 app.post('/api/admin/account', storedRoute(async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const { id, action, value } = req.body || {};
   const acc = await accountById(String(id || ''));
   if (!acc) return res.status(404).json({ error: 'Compte introuvable.' });
   if (acc.plan === 'local') return res.status(400).json({ error: 'Le compte maison reste illimité et n’est pas modifiable ici.' });
-  if (action === 'plan') {
+  if (action === 'issue-code') {
+    const code = await issueFamilyCode(acc);
+    return res.json({ ok: true, code, label: acc.settings.label });
+  } else if (action === 'blocked') {
+    acc.settings ||= {};
+    acc.settings.blocked = value === true;
+    if (acc.settings.blocked) await disconnectFamily(acc.id);
+  } else if (action === 'devices') {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1 || n > 20) return res.status(400).json({ error: 'Choisis de 1 à 20 appareils.' });
+    if (n < (await activeSessions(acc.id)).length) return res.status(409).json({ error: 'Déconnecte les appareils avant de réduire leur nombre.' });
+    acc.settings ||= {}; acc.settings.maxDevices = n;
+  } else if (action === 'disconnect') {
+    await disconnectFamily(acc.id);
+    return res.json({ ok: true });
+  } else if (action === 'plan') {
     if (!['trial', 'free', 'family'].includes(value)) return res.status(400).json({ error: 'Plan inconnu.' });
     if (value === 'trial' && !acc.trialEnds) acc.trialEnds = new Date(Date.now() + 14 * 86400000).toISOString();
     acc.plan = value;
+    if (value === 'family') { acc.settings ||= {}; acc.settings.dailyLimit = null; }
   } else if (action === 'extend') {
     acc.plan = 'trial';
     acc.trialEnds = new Date(Date.now() + (Number(value) > 0 ? Number(value) : 14) * 86400000).toISOString();
@@ -1090,12 +1243,11 @@ app.post('/api/chat', async (req, res) => {
     const { message, image, profile, history } = req.body || {};
     const text = String(message || '').trim();
     if (!text && !image) return res.status(400).json({ error: 'Message vide.' });
-    const acc = await resolveAccount(req);
-    if (!acc) return res.status(401).json({ error: 'Connecte-toi à ton compte famille pour utiliser Lumi.' });
+    const access = await reserveUsage(req, 'chat');
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const acc = access.account;
     // Freemium : le plan 'local' passe toujours ; seul un essai expiré ou le
     // plan gratuit est plafonné. Message en langage enfant (le front l'affiche tel quel).
-    if (!quotaOk(acc, 'chat')) return res.status(402).json({ error: QUOTA_MESSAGE });
-    await countUsage(acc, 'chat');
 
     let photoText = '';
     if (image) {
@@ -1185,10 +1337,9 @@ app.get('/api/curriculum', (req, res) => res.json(CURRICULUM));
 
 app.post('/api/quiz', async (req, res) => {
   try {
-    const acc = await resolveAccount(req);
-    if (!acc) return res.status(401).json({ error: 'Connecte-toi à ton compte famille pour utiliser Lumi.' });
-    if (!quotaOk(acc, 'quiz')) return res.status(402).json({ error: QUOTA_MESSAGE });
-    await countUsage(acc, 'quiz');
+    const access = await reserveUsage(req, 'quiz');
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const acc = access.account;
     const { topic, profile, count = 5 } = req.body || {};
     const age = (profile && profile.age) || 10;
     // Sans theme donne : une notion au hasard dans le programme du niveau de l'enfant.

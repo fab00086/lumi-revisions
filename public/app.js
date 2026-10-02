@@ -1504,14 +1504,15 @@ function enterGate() {
   if (!code) return;
   fetch('/api/unlock', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
-  }).then(r => {
+    body: JSON.stringify({ code, consent: $('gate-consent').checked })
+  }).then(async r => {
     if (r.ok) {
       $('screen-gate').classList.add('hidden');
       $('screen-profile').classList.remove('hidden');
       fetchProfiles().then(() => renderProfiles());
     } else {
-      $('gate-error').textContent = 'Code incorrect 🙂';
+      const j = await r.json().catch(() => ({}));
+      $('gate-error').textContent = j.error || 'Code incorrect 🙂';
     }
   }).catch(() => { $('gate-error').textContent = 'Impossible de contacter Lumi.'; });
 }
@@ -1566,4 +1567,47 @@ $('btn-test-sound').addEventListener('click', () => {
   soundCheck.play().catch(() => {
     $('voice-feedback').textContent = 'Le navigateur a bloqué le son. Rouvre Lumi dans Safari ou Chrome, puis retouche « Tester le son ».';
   });
+});
+
+
+// ---------- Partager Lumi et demander un accès ----------
+async function shareLumi() {
+  const url = new URL('/', location.href).href;
+  const text = 'Découvre Lumi pour les révisions. Ouvre le lien et choisis « Demander un accès » : le responsable pourra autoriser ta famille.';
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Lumi — révisions en famille', text, url }); return; }
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text + '\n' + url); toast('Lien copié. Colle-le dans ton message.'); return; }
+    toast('Copie ce lien dans ton message : ' + url, 12000);
+  } catch (e) { if (e.name !== 'AbortError') toast('Partage impossible. Copie ce lien : ' + url, 12000); }
+}
+$('btn-share-app').addEventListener('click', shareLumi);
+$('btn-share-gate').addEventListener('click', shareLumi);
+$('btn-request-access').addEventListener('click', () => {
+  $('request-modal').classList.remove('hidden'); $('request-name').focus();
+});
+$('btn-request-close').addEventListener('click', () => $('request-modal').classList.add('hidden'));
+$('request-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = $('btn-request-send');
+  if (button.disabled) return;
+  button.disabled = true; $('request-feedback').textContent = 'Envoi de la demande…';
+  try {
+    const r = await fetch('/api/access-request', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: $('request-name').value, email: $('request-email').value, consent: $('request-consent').checked }) });
+    const j = await r.json();
+    $('request-feedback').textContent = j.message || j.error || 'Impossible d’enregistrer la demande.';
+    if (r.ok) $('request-form').reset();
+  } catch { $('request-feedback').textContent = 'Connexion impossible. Réessaie dans un moment.'; }
+  finally { button.disabled = false; }
+});
+$('btn-switch-access').textContent = 'Déconnecter cet appareil';
+$('btn-switch-access').addEventListener('click', async () => {
+  try {
+    const r = await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!r.ok && r.status !== 401) throw new Error();
+    cancelChat(); currentProfile = null; history = []; profilesCache = [];
+    $('screen-profile').classList.add('hidden'); $('screen-chat').classList.add('hidden');
+    $('screen-gate').classList.remove('hidden'); $('gate-code').value = ''; $('gate-code').focus();
+    $('gate-error').textContent = 'Appareil déconnecté. Tu peux entrer un autre code famille.';
+  } catch { toast('Déconnexion impossible. Réessaie.'); }
 });

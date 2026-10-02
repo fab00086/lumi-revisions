@@ -22,12 +22,16 @@
     <div class="card">
       <div class="logo">🔒</div>
       <h1>Lumi</h1>
-      <p class="subtitle">C'est une appli de famille — entre le code d'accès</p>
+      <p class="subtitle">Entre le code de ta famille pour ouvrir son espace.</p>
       <div class="video-search">
         <input id="gate-code" type="text" placeholder="Code d'accès" autocomplete="off">
         <button id="btn-gate-enter" class="btn btn-primary">Entrer</button>
       </div>
       <p id="gate-error" class="hint"></p>
+      <label class="consent-row"><input id="gate-consent" type="checkbox"> Au premier accès, je confirme être le parent ou responsable légal.</label>
+      <button id="btn-request-access" class="btn install-btn" type="button">Demander un accès</button>
+      <button id="btn-share-gate" class="btn install-btn" type="button">Partager Lumi</button>
+      <a href="/admin.html" class="management-link">🔐 Gestion des familles</a>
     </div>
   </div>
 
@@ -60,6 +64,9 @@
       <p class="hint">Un profil par enfant — Lumi s'adapte à chaque âge.</p>
 
       <button id="btn-parent" class="btn" type="button">👨‍👩‍👧 Espace parent</button>
+      <a href="/admin.html" class="management-link">🔐 Gestion des familles</a>
+      <button id="btn-share-app" class="btn install-btn" type="button">🔗 Partager Lumi</button>
+      <button id="btn-switch-access" class="btn install-btn" type="button">Changer de code famille</button>
       <button id="btn-install" class="btn install-btn" type="button">📲 Installer Lumi sur mon téléphone</button>
 
       <div class="connect">
@@ -187,6 +194,20 @@
       </div>
       <div id="video-player" class="video-player hidden"></div>
       <div id="video-results" class="video-results"></div>
+    </div>
+  </div>
+
+  <div id="request-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="request-title">
+    <div class="modal-box">
+      <div class="modal-head"><strong id="request-title">Demander un accès à Lumi</strong><button id="btn-request-close" class="icon-btn" title="Fermer">✕</button></div>
+      <p class="hint">Le responsable de Lumi choisira les limites de ton accès et te transmettra un code.</p>
+      <form id="request-form">
+        <label class="field">Nom de la famille<input id="request-name" type="text" maxlength="80" required></label>
+        <label class="field">E-mail du parent<input id="request-email" type="email" maxlength="254" required></label>
+        <label class="consent-row"><input id="request-consent" type="checkbox" required> Je suis le parent ou responsable légal. J’accepte que ces coordonnées soient utilisées pour gérer ma demande d’accès.</label>
+        <button id="btn-request-send" class="btn btn-primary" type="submit">Envoyer ma demande</button>
+      </form>
+      <p id="request-feedback" class="audio-feedback" role="status"></p>
     </div>
   </div>
 

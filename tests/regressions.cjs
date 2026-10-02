@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '..');
 const front = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
 const back = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 function section(s,a,b) { const start=s.indexOf(a); assert.ok(start>=0,a); const end=s.indexOf(b,start);assert.ok(end>start,b);return s.slice(start,end); }
-function context(extra={}) { const c={console,structuredClone,AbortController,AbortSignal,TextDecoder,setTimeout,clearTimeout,...extra};vm.createContext(c);return c; }
+function context(extra={}) { const c={console,createHash:require("node:crypto").createHash,crypto:require("node:crypto").webcrypto,TextEncoder,allowLoginAttempt:()=>true,structuredClone,AbortController,AbortSignal,TextDecoder,setTimeout,clearTimeout,...extra};vm.createContext(c);return c; }
 function run(c,s) {return vm.runInContext(s,c);}
 function element() {const classes=new Set();return {value:'',innerHTML:'',textContent:'',handlers:{},classList:{add:k=>classes.add(k),remove:k=>classes.delete(k),contains:k=>classes.has(k)},addEventListener(k,fn){this.handlers[k]=fn;},appendChild(){},remove(){},removeAttribute(){},insertAdjacentHTML(pos,text){this.innerHTML+=text;},querySelectorAll(){return [];}};}
 function ui() {const els={};return {els,$:id=>els[id]||(els[id]=element())};}
@@ -172,9 +172,9 @@ test('freemium : local et essai illimités, free plafonné et compté par jour',
  assert.equal(famInf.usage.tok[day],9); // ceil(20/3.2)=7 + ceil(6/3.2)=2
  const local2=mk({id:'local',plan:'local',usage:{}});
  await c.countTokens(local2,500);assert.equal(local2.usage.tok,undefined);
- // quiz et chat sont des compteurs séparés
+ // chat et quiz partagent le plafond quotidien
  const both=mk({usage:{chat:{[day]:0},quiz:{[day]:run(c,'FREE_DAILY')}}});
- assert.ok(c.quotaOk(both,'chat'));assert.ok(!c.quotaOk(both,'quiz'));
+ assert.ok(!c.quotaOk(both,'chat'));assert.ok(!c.quotaOk(both,'quiz'));
 });
 test('espace parent : erreur ajoutée sans remplacer les contrôles',()=>{
  const u=ui();let replaced=false;const box=u.$('parent-content');Object.defineProperty(box,'innerHTML',{get:()=>'',set:()=>replaced=true});box.insertAdjacentHTML=()=>{};u.$('parent-gate').value='1';const c=context({...u,renderParentArea(){}});run(c,section(front,'function enterParentArea()','async function renderParentArea'));c.enterParentArea();assert.equal(replaced,false);
