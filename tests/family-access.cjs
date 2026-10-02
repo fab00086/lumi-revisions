@@ -87,3 +87,9 @@ test('partage natif : ouvre le choix de messagerie avec un lien sans code ni don
  vm.runInContext(front.slice(start,end),c);await c.shareLumi();
  assert.equal(shared.url,'https://lumi.test/');assert.match(shared.text,/Demander un accès/);assert.ok(!JSON.stringify(shared).includes('secret'));
 });
+test('une nouvelle famille ne récupère pas les anciens profils maison du navigateur',async()=>{
+ const front=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');let imports=0;
+ const c=vm.createContext({fetch:async url=>({ok:true,json:async()=>url==='/api/auth/me'?{local:false}:[]}),localStorage:{getItem(){imports++;return '[{"id":"maison"}]';}},saveProfiles:async()=>{throw Error('migration vers famille interdite');}});
+ vm.runInContext('let profilesCache=[];let profileFetchGeneration=0;'+front.slice(front.indexOf('async function fetchProfiles()'),front.indexOf('function loadProfiles()')),c);
+ await c.fetchProfiles();assert.equal(imports,0);assert.equal(vm.runInContext('profilesCache.length',c),0);
+});

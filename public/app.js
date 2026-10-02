@@ -99,17 +99,29 @@ function generateId() { return Date.now().toString(36) + Math.random().toString(
 // Profils partages entre tous les appareils via le serveur
 let profilesCache = [];
 const pendingLessons = new Map();
+let profileFetchGeneration = 0;
 
 async function fetchProfiles() {
+  const generation = ++profileFetchGeneration;
   try {
     const r = await fetch('/api/profiles');
+    if (r.status === 401 && generation === profileFetchGeneration) {
+      profilesCache = []; $('screen-profile').classList.add('hidden'); $('screen-gate').classList.remove('hidden');
+      $('gate-error').textContent = 'Accès expiré ou bloqué. Entre ton code famille.'; return;
+    }
     if (!r.ok) throw new Error('Chargement des profils impossible');
     let list = await r.json();
+    if (generation !== profileFetchGeneration) return;
+    // L'ancien stockage du navigateur appartient à la maison, jamais à une nouvelle famille.
     if (!Array.isArray(list) || !list.length) {
-      // migration depuis l'ancien stockage local du navigateur
-      try { list = JSON.parse(localStorage.getItem('lumiprofiles') || '[]'); } catch { list = []; }
-      if (list.length) await saveProfiles(list);
+      const me = await (await fetch('/api/auth/me')).json();
+      if (generation !== profileFetchGeneration) return;
+      if (me.local === true) {
+        try { list = JSON.parse(localStorage.getItem('lumiprofiles') || '[]'); } catch { list = []; }
+        if (list.length) await saveProfiles(list);
+      }
     }
+    if (generation !== profileFetchGeneration) return;
     profilesCache = (Array.isArray(list) ? list : []).map(p => { if (!p.id) p.id = generateId(); return p; });
   } catch {}
 }
@@ -1495,7 +1507,10 @@ async function initApp() {
       $('gate-code').focus();
       return;
     }
-  } catch {}
+  } catch {
+    $('screen-gate').classList.remove('hidden');
+    $('gate-error').textContent = 'Lumi ne peut pas vérifier ton accès. Vérifie la connexion puis réessaie.'; return;
+  }
   $('screen-profile').classList.remove('hidden');
   fetchProfiles().then(() => renderProfiles());
 }
@@ -1507,6 +1522,7 @@ function enterGate() {
     body: JSON.stringify({ code, consent: $('gate-consent').checked })
   }).then(async r => {
     if (r.ok) {
+      profilesCache = []; profileFetchGeneration++;
       $('screen-gate').classList.add('hidden');
       $('screen-profile').classList.remove('hidden');
       fetchProfiles().then(() => renderProfiles());
@@ -1605,7 +1621,7 @@ $('btn-switch-access').addEventListener('click', async () => {
   try {
     const r = await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     if (!r.ok && r.status !== 401) throw new Error();
-    cancelChat(); currentProfile = null; history = []; profilesCache = [];
+    cancelChat(); currentProfile = null; history = []; profilesCache = []; profileFetchGeneration++;
     $('screen-profile').classList.add('hidden'); $('screen-chat').classList.add('hidden');
     $('screen-gate').classList.remove('hidden'); $('gate-code').value = ''; $('gate-code').focus();
     $('gate-error').textContent = 'Appareil déconnecté. Tu peux entrer un autre code famille.';
