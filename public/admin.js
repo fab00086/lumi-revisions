@@ -90,9 +90,9 @@ $('mail-form').onsubmit = async e => {
   if ($('mail-save').disabled) return;
   $('mail-save').disabled = true;
   try {
-    await post('/api/admin/notifications', { email: $('mail-email').value, key: $('mail-key').value });
+    const saved = await post('/api/admin/notifications', { email: $('mail-email').value, key: $('mail-key').value });
     $('mail-key').value = '';
-    $('mail-result').textContent = 'Enregistré. Les demandes en attente seront également signalées.';
+    $('mail-result').textContent = saved.configured ? 'Enregistré. Les demandes en attente seront également signalées.' : 'Adresse enregistrée. Ajoute la clé Resend pour activer les envois.';
     await refresh();
   } catch (error) { $('mail-result').textContent = error.message; }
   finally { $('mail-save').disabled = false; }

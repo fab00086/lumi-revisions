@@ -454,7 +454,8 @@ app.post('/api/unlock', storedRoute(async (req, res) => {
     const result = await connectFamilyCode(code, parseCookies(req)[SESSION_COOKIE], req.body.consent === true);
     if (result.error) return res.status(result.status).json({ error: result.error });
     res.setHeader('Set-Cookie', [sessionCookie(result.token, req, SESSION_DAYS * 86400),
-      `lumi_family=1; Path=/; HttpOnly; Max-Age=${SESSION_DAYS * 86400}; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`]);
+      `lumi_family=1; Path=/; HttpOnly; Max-Age=${SESSION_DAYS * 86400}; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
+      `lumi_admin=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`]);
     return res.json({ ok: true });
   }
   if ((!ACCESS_CODE && LOCAL_MODE) || (ACCESS_CODE && code === ACCESS_CODE && LOCAL_MODE)) {
@@ -954,7 +955,9 @@ app.post('/api/auth/login', storedRoute(async (req, res) => {
 app.post('/api/auth/logout', storedRoute(async (req, res) => {
   const token = parseCookies(req)[SESSION_COOKIE];
   if (token) await sessionDel(token);
-  res.setHeader('Set-Cookie', sessionCookie('', req, 0));
+  const ending = '; Path=/; HttpOnly; Max-Age=0; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
+  res.setHeader('Set-Cookie', [sessionCookie('', req, 0), 'lumi_admin=' + ending,
+    'lumi_access=' + ending, 'lumi_family=1; Path=/; HttpOnly; Max-Age=2592000; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '')]);
   res.json({ ok: true });
 }));
 
@@ -990,7 +993,7 @@ app.post('/api/admin/notifications', storedRoute(async (req, res) => {
   if (!hasAdmin(req)) return res.status(401).json({ error: 'Connexion administrateur requise.' });
   const email = String(req.body?.email || '').trim();
   const key = String(req.body?.key || '').trim() || MAIL_API_KEY;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || !/^re_[A-Za-z0-9_-]{10,200}$/.test(key)) return res.status(400).json({ error: 'Indique ton adresse e-mail et une clé Resend valide.' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || (key && !/^re_[A-Za-z0-9_-]{10,200}$/.test(key))) return res.status(400).json({ error: 'Indique ton adresse e-mail et une clé Resend valide.' });
   await saveMailSettings(email, key);
   res.json({ ok: true, configured: accessMailConfigured() });
   notifyAccessRequests().catch(() => console.warn('Notification : reprise différée.'));

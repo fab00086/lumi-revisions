@@ -60,6 +60,24 @@ test('notifications : panne du service conserve la demande et la clé de dédupl
    assert.equal(f.messages.length,2);assert.equal(f.messages[0].headers['Idempotency-Key'],f.messages[1].headers['Idempotency-Key']);
  }finally{await f.close();}
 });
+
+test('session admin : changement de famille et déconnexion retirent aussi le droit admin du navigateur', async () => {
+ const f=await fixture();try {
+   const a=await f.create();const login=await f.unlock(a.code,f.admin);
+   assert.ok(login.r.headers.getSetCookie().some(v=>v.startsWith('lumi_admin=;')&&v.includes('Max-Age=0')));
+   const logout=await f.post('/api/auth/logout',{},login.cookie);
+   const cookies=logout.headers.getSetCookie();
+   assert.ok(cookies.some(v=>v.startsWith('lumi_admin=;')&&v.includes('Max-Age=0')));
+   assert.ok(cookies.some(v=>v.startsWith('lumi_access=;')&&v.includes('Max-Age=0')));
+ }finally{await f.close();}
+});
+
+test('notifications : enregistre une adresse privée sans prétendre activer un service sans clé', async () => {
+ const f=await fixture();try {
+   const result=await(await f.post('/api/admin/notifications',{email:'owner@example.test',key:''})).json();
+   assert.equal(result.ok,true);assert.equal(result.configured,false);
+ }finally{await f.close();}
+});
 test('code famille : un seul compte, consentement, plafond appareils et isolation de la maison',async()=>{
   const f=await fixture();try {
     assert.equal((await f.post('/api/admin/create-access',{label:'X'},'')).status,401);

@@ -1635,6 +1635,7 @@ function enterGate() {
   }).then(async r => {
     if (r.ok) {
       profilesCache = []; profileFetchGeneration++;
+      refreshAdminNavigation();
       $('screen-gate').classList.add('hidden');
       $('screen-profile').classList.remove('hidden');
       fetchProfiles().then(() => renderProfiles());
@@ -1733,6 +1734,7 @@ $('btn-switch-access').addEventListener('click', async () => {
   try {
     const r = await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     if (!r.ok && r.status !== 401) throw new Error();
+    refreshAdminNavigation();
     cancelChat(); currentProfile = null; history = []; profilesCache = []; profileFetchGeneration++;
     lastSpeechText = ''; voiceAudioText = '';
     if (voiceAudioUrl) { URL.revokeObjectURL(voiceAudioUrl); voiceAudioUrl = null; }
