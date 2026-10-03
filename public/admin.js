@@ -53,7 +53,7 @@ function confirmTwice(button, fn) {
 function renderFamily(a, freeDaily) {
   const card = document.createElement('div'); card.className='client-card';
   const limit = a.dailyLimit ?? (a.plan === 'free' ? freeDaily : null);
-  card.innerHTML = `<div class="client-id"><strong>${esc(a.label)}</strong><small>${esc(a.email)}</small>
+  card.innerHTML = `<div class="client-id"><strong>${esc(a.label)}</strong><small>${esc(a.email)}</small>${a.contactPhone?`<small>Téléphone SMS : ${esc(a.contactPhone)}</small>`:''}
     <div class="badges"><span class="badge-plan ${a.pending?'trial':a.blocked?'trial expired':'family'}">${a.pending?'Demande à approuver':a.blocked?'Accès bloqué':'Accès autorisé'}</span></div>
     <p>${a.connectedDevices} / ${a.maxDevices} appareils connectés</p><p><b>${count(a.usage)}</b> échanges aujourd’hui · ${limit === null?'illimité':limit+'/jour'}</p>${a.pending && a.notificationStatus?`<small>${a.notificationStatus==='sent'?'Notification transmise au service e-mail':a.notificationStatus==='review'?'Notification à vérifier auprès du service e-mail':'Notification en attente'}</small>`:''}</div>
     <div class="client-ctl"><label>Utilisation<select class="plan-select plan"><option value="free" ${a.plan==='free'||a.pending?'selected':''}>Quota quotidien</option><option value="family" ${a.plan==='family'?'selected':''}>Illimitée</option><option value="trial" ${a.plan==='trial'?'selected':''}>Essai 14 jours</option></select></label>
@@ -83,11 +83,15 @@ $('create-form').onsubmit = async e => {
   catch(e){toast(e.message);} finally{$('create-submit').disabled=false;}
 };
 $('copy-code').onclick = async () => {try {await navigator.clipboard.writeText($('issued-code').value);toast('Code copié.');}catch{$('issued-code').select();toast('Sélectionne et copie le code.');}};
-$('share-code').onclick = async () => {
-  const url = new URL('/',location.href).href, text='Ton accès à Lumi : '+$('issued-code').value;
+async function shareFamilyInvitation() {
+  const code = $('issued-code').value;
+  if (!code) { toast('Crée ou approuve un accès avant de le transmettre.'); return; }
+  const url = new URL('/',location.href).href, text='Ton accès à Lumi : '+code+'\nOuvre le lien, saisis ce code et confirme être le parent.\nConfidentialité : '+new URL('/confidentialite.html',location.href).href;
   try {if(navigator.share) await navigator.share({title:'Accès Lumi',text,url});else {await navigator.clipboard.writeText(text+'\n'+url);toast('Invitation copiée. Colle-la dans ton message.');}}
   catch(e){if(e.name!=='AbortError')toast('Utilise Copier pour transmettre le code.');}
-};
+}
+$('sms-code').onclick = shareFamilyInvitation;
+$('share-code').onclick = shareFamilyInvitation;
 $('close-code').onclick = () => {$('issued-code').value='';$('code-result').classList.add('hidden');};
 $('btn-refresh').onclick=refresh;
 $('admin-test').onclick = async () => {

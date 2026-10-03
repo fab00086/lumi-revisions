@@ -1739,7 +1739,7 @@ $('request-form').addEventListener('submit', async (event) => {
   button.disabled = true; $('request-feedback').textContent = 'Envoi de la demande…';
   try {
     const r = await fetch('/api/access-request', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: $('request-name').value, email: $('request-email').value, consent: $('request-consent').checked }) });
+      body: JSON.stringify({ name: $('request-name').value, phone: $('request-phone').value, email: $('request-email').value, consent: $('request-consent').checked }) });
     const j = await r.json();
     $('request-feedback').textContent = j.message || j.error || 'Impossible d’enregistrer la demande.';
     if (r.ok) $('request-form').reset();

@@ -205,11 +205,13 @@
   <div id="request-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="request-title">
     <div class="modal-box">
       <div class="modal-head"><strong id="request-title">Demander un accès à Lumi</strong><button id="btn-request-close" class="icon-btn" title="Fermer">✕</button></div>
-      <p class="hint">Le responsable de Lumi choisira les limites de ton accès. Après approbation, ton code et les instructions seront envoyés par e-mail lorsque le service d’envoi est activé.</p>
+      <p class="hint">Le responsable de Lumi choisira les limites de ton accès, puis te transmettra ton code par SMS. L’e-mail reste possible si le service d’envoi est activé.</p>
       <p class="hint"><a href="/confidentialite.html" target="_blank" rel="noopener">Confidentialité et droits sur tes données (RGPD)</a></p>
       <form id="request-form">
         <label class="field">Nom de la famille<input id="request-name" type="text" maxlength="80" required></label>
-        <label class="field">E-mail du parent<input id="request-email" type="email" maxlength="254" required></label>
+        <label class="field">Téléphone du parent pour le SMS<input id="request-phone" type="tel" maxlength="30" autocomplete="tel" placeholder="06… ou +33…"></label>
+        <label class="field">E-mail du parent (facultatif)<input id="request-email" type="email" maxlength="254"></label>
+        <p class="hint">Indique au moins un téléphone ou un e-mail. Ces coordonnées ne sont pas affichées aux autres familles.</p>
         <label class="consent-row"><input id="request-consent" type="checkbox" required> Je suis le parent ou responsable légal. J’accepte que ces coordonnées soient utilisées pour gérer ma demande d’accès.</label>
         <button id="btn-request-send" class="btn btn-primary" type="submit">Envoyer ma demande</button>
       </form>

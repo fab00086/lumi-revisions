@@ -40,6 +40,30 @@ test('Render : le code partagé est refusé et sa suppression ne rend jamais l�
  }
 });
 
+test('demande SMS : téléphone privé, aucune ouverture avant approbation et aucun e-mail famille automatique',async()=>{
+ const f=await fixture('test-admin',true);try {
+  const body={name:'Famille SMS',phone:'+33 1 23 45 67 89',consent:true};
+  assert.equal((await f.post('/api/access-request',body,'')).status,202);
+  assert.equal((await f.post('/api/access-request',body,'')).status,202);
+  assert.equal((await f.c.allAccounts()).length,1);
+  const account=(await f.c.allAccounts())[0];assert.equal(account.settings.pending,true);assert.equal(account.settings.contactPhone,'+33123456789');
+  assert.equal((await f.post('/api/access-request',{...body,phone:'invalid'},'')).status,400);
+  const list=await(await fetch(f.base+'/api/admin/accounts',{headers:{Cookie:f.admin}})).json();assert.equal(list.accounts[0].contactPhone,'+33123456789');
+  assert.equal((await fetch(f.base+'/api/admin/accounts')).status,401);
+  const code=await(await f.post('/api/admin/account',{id:account.id,action:'issue-code'})).json();
+  await f.c.notifyAccessRequests();assert.equal(code.approvalMailStatus,null);assert.ok(f.messages.every(m=>m.body.to[0]==='owner@example.test'));
+  assert.equal((await f.unlock(code.code)).r.status,200);
+ }finally{await f.close();}
+});
+
+test('invitation SMS : prépare le code, le lien et la confidentialité sans envoyer de message',async()=>{
+ const script=fs.readFileSync(path.join(__dirname,'../public/admin.js'),'utf8');
+ const start=script.indexOf('async function shareFamilyInvitation()'),end=script.indexOf("$('sms-code').onclick",start);
+ let shared;const c=vm.createContext({URL,location:{href:'https://lumi.test/admin.html'},$:()=>({value:'LUMI-TEST'}),navigator:{share:async v=>{shared=v;}},toast:()=>{}});
+ vm.runInContext(script.slice(start,end),c);await c.shareFamilyInvitation();
+ assert.equal(shared.url,'https://lumi.test/');assert.ok(shared.text.includes('LUMI-TEST'));assert.ok(shared.text.includes('/confidentialite.html'));assert.ok(shared.text.includes('parent'));
+});
+
 test('notifications : destinataire privé, aucune donnée enfant, une seule alerte par demande', async () => {
  const f=await fixture('test-admin',true);try {
    const body={name:'Nom privé',email:'parent@example.test',consent:true,to:'intrus@example.test'};

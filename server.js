@@ -485,7 +485,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.6' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.7' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -534,12 +534,14 @@ app.post('/api/access-request', storedRoute(async (req, res) => {
   if (!ADMIN_CODE) return res.status(503).json({ error: 'Les demandes d’accès ne sont pas encore ouvertes.' });
   const name = String(req.body.name || '').trim().slice(0, 80);
   const email = String(req.body.email || '').trim().toLowerCase();
-  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || req.body.consent !== true)
-    return res.status(400).json({ error: 'Indique ton nom, ton e-mail et confirme que tu es le parent.' });
-  if (!await accountByEmail(email)) {
+  const phone = String(req.body.phone || '').trim().replace(/[ .()-]/g, '');
+  if (!name || (!email && !phone) || (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)) || (phone && !/^\+?[0-9]{8,15}$/.test(phone)) || req.body.consent !== true)
+    return res.status(400).json({ error: 'Indique ton nom, un téléphone ou un e-mail valide et confirme que tu es le parent.' });
+  const duplicate = email ? await accountByEmail(email) : (await allAccounts()).find(a => a.settings?.contactPhone === phone);
+  if (!duplicate) {
     await accountPut({ id: 'a' + newToken().slice(0, 12), email,
       passHash: '', plan: 'pending', created: new Date().toISOString(), consentDate: new Date().toISOString(),
-      settings: { label: name, blocked: true, pending: true, maxDevices: 1, dailyLimit: 20,
+      settings: { label: name, contactPhone: phone, blocked: true, pending: true, maxDevices: 1, dailyLimit: 20,
         accessRequestMail: { status: 'pending', queuedAt: new Date().toISOString() } }, usage: {} });
     // Envoi séparé : le formulaire ne doit ni attendre l'e-mail, ni perdre sa demande en cas d'échec.
     notifyAccessRequests().catch(() => console.warn('Notification de demande : sauvegarde à réessayer.'));
@@ -813,7 +815,7 @@ async function issueFamilyCode(acc) {
   const code = 'LUMI-' + newToken().slice(0, 24).toUpperCase().match(/.{4}/g).join('-');
   acc.settings ||= {};
   acc.settings.accessCodeHash = familyCodeHash(code);
-  if (acc.email && acc.settings.pending) acc.settings.approvalMail = { status: 'pending', queuedAt: new Date().toISOString(), version: newToken().slice(0, 16), code: await sealMailKey(code) };
+  if (acc.email && !acc.settings.contactPhone && acc.settings.pending) acc.settings.approvalMail = { status: 'pending', queuedAt: new Date().toISOString(), version: newToken().slice(0, 16), code: await sealMailKey(code) };
   else delete acc.settings.approvalMail;
   acc.settings.pending = false;
   acc.settings.blocked = false;
@@ -1122,6 +1124,7 @@ app.get('/api/admin/accounts', async (req, res, next) => {
       pending: !!a.settings?.pending, codeAccess: !!a.settings?.accessCodeHash,
       notificationStatus: a.settings?.accessRequestMail?.status || null,
       approvalMailStatus: a.settings?.approvalMail?.status || null,
+      contactPhone: a.settings?.contactPhone || '',
       maxDevices: a.settings?.maxDevices || 1, connectedDevices: (await activeSessions(a.id)).length,
       trialEnds: a.trial_ends || a.trialEnds || null, created: a.created || null,
       dailyLimit: (a.settings && Number.isFinite(Number(a.settings.dailyLimit)) && a.settings.dailyLimit !== null) ? Number(a.settings.dailyLimit) : null,
