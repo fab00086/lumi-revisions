@@ -10,7 +10,7 @@ function section(a,b){const start=source.indexOf(a),end=source.indexOf(b,start);
 async function fixture(adminCode = 'test-admin', mail = false, hosting = {}) {
   const app=express();app.use(express.json());let remote='{}', fail=false;
   const messages=[]; let mailFail = false;
-  const c=vm.createContext({console,app,URL,path,Buffer,__dirname:path.join(__dirname,'..'),structuredClone,createHash,createHmac,crypto:webcrypto,TextEncoder,TextDecoder,AbortController,AbortSignal,setTimeout,clearTimeout,
+  const c=vm.createContext({console,app,URL,path,Buffer,__dirname:path.join(__dirname,'..'),structuredClone,createHash,createHmac,crypto:webcrypto,TextEncoder,TextDecoder,AbortController,AbortSignal,setTimeout,clearTimeout,btoa,atob,
     speechAvailable:()=>true,generateSpeech:async()=>Buffer.from('RIFFtest-audio'),generateSpeechSample:async()=>Buffer.from('RIFFtest-audio'),
     process:{env:{LUMI_ADMIN_CODE:adminCode,LUMI_ACCESS_CODE:'test-house',LUMI_PUBLIC_URL:'https://lumi.test',...(mail?{LUMI_ADMIN_EMAIL:'owner@example.test',RESEND_API_KEY:'re_test_key_123456'}:{}),...hosting}},ENV:{},DATA_FILE:'unused',DATA_DIR:'.',KV_URL:'https://storage.test',KV_TOKEN:'test',isDeno:false,denoKv:null,
     fetch:async(url,opt)=>{if(url==='https://api.resend.com/emails'){messages.push({body:JSON.parse(opt.body),headers:opt.headers});return {ok:!mailFail,json:async()=>({id:'fake-provider-id'})};}if(fail)throw Error('offline');if(opt?.method==='POST')remote=opt.body;return {ok:true,json:async()=>({result:remote})};}});
@@ -20,6 +20,7 @@ async function fixture(adminCode = 'test-admin', mail = false, hosting = {}) {
   vm.runInContext(section('// ---------- Comptes famille (V2) ----------','function buildSystemPrompt(profile = {})'),c);
   vm.runInContext(section('const speechRequests =','// pour que Safari autorise'),c);
   vm.runInContext(section("app.get(['/admin', '/admin.html']",'app.use(express.static'),c);
+  vm.runInContext(section("app.get('/api/profiles'","app.post('/api/quiz-score'"),c);
   app.get('/api/test-space',async(req,res)=>{const a=await c.resolveAccount(req);res.json({id:a.account.id});});
   const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
   const admin='lumi_admin='+vm.runInContext('adminCookieValue()',c);
@@ -175,8 +176,12 @@ test('invitation : sans service configuré, approbation conservée et envoyée l
    assert.equal(result.emailConfigured,false);assert.equal(f.messages.length,0);assert.ok(!f.remote().includes(result.code));
    await f.post('/api/admin/notifications',{email:'owner@example.test',key:'re_test_key_123456'});await f.c.notifyAccessRequests();
    assert.equal(f.messages.length,1);assert.equal(f.messages[0].body.to[0],'parent@example.test');
-   const login=await f.unlock(result.code);assert.equal((await f.post('/api/account/delete',{password:'wrong'},login.cookie)).status,401);
-   assert.equal((await f.post('/api/account/delete',{password:result.code},login.cookie)).status,200);
+   const login=await f.unlock(result.code);
+   // Seul le mot de passe parent peut tout effacer : le code famille ne suffit jamais.
+   assert.equal((await f.post('/api/account/delete',{password:'wrong'},login.cookie)).status,409);
+   assert.equal((await f.post('/api/account/parent-password',{password:'parent-secret'},login.cookie)).status,200);
+   assert.equal((await f.post('/api/account/delete',{password:result.code},login.cookie)).status,401);
+   assert.equal((await f.post('/api/account/delete',{password:'parent-secret'},login.cookie)).status,200);
    assert.equal(await f.c.accountById(acc.id),null);
  }finally{await f.close();}
 });
@@ -380,4 +385,62 @@ test('session famille seule : aucun statut admin, toutes les commandes admin son
    assert.equal((await fetch(f.base+'/api/admin/accounts',{headers:{Cookie:login.cookie}})).status,401);
    assert.equal((await f.post('/api/admin/account',{id:'local',action:'delete'},login.cookie)).status,401);
  }finally{await f.close();}
+});
+test('suppressions : le mot de passe parent bloque l’enfant avec le seul code famille',async()=>{
+ const f=await fixture();try {
+  const fam=await f.create('Famille');const login=await f.unlock(fam.code);const cookie=login.cookie;
+  const uid=(await f.c.resolveAccount({headers:{cookie}})).account.id;
+  await f.c.childSave(uid,'fille',{name:'Fille',age:9,history:[{role:'user',content:'ma leçon'}],sessions:[]});
+  await f.c.childSaveList(uid,[{id:'fille',name:'Fille',age:9}]);
+  assert.equal((await f.c.childList(uid)).length,1);
+  // Sauvegarde sans suppression : acceptée ; suppression : mot de passe parent requis.
+  assert.equal((await f.post('/api/profiles',{profiles:[{id:'fille',name:'Fille',age:9}]},cookie)).status,200);
+  const refused=await f.post('/api/profiles',{profiles:[]},cookie);
+  assert.equal(refused.status,409);assert.equal((await refused.json()).needParentPassword,true);
+  assert.equal((await f.c.childList(uid)).length,1,'rien supprimé sans mot de passe');
+  // Le code famille (que l'enfant connaît) ne suffit jamais — ni profils ni compte.
+  assert.equal((await f.post('/api/account/delete',{password:'wrong'},cookie)).status,409);
+  assert.equal((await f.post('/api/account/parent-password',{password:'parent-secret'},cookie)).status,200);
+  assert.equal((await f.post('/api/account/delete',{password:fam.code},cookie)).status,401);
+  assert.equal((await f.post('/api/profiles',{profiles:[],parentPassword:fam.code},cookie)).status,401);
+  assert.equal((await f.c.childList(uid)).length,1);
+  // Le parent, lui, supprime le profil puis le compte.
+  assert.equal((await f.post('/api/profiles',{profiles:[],parentPassword:'parent-secret'},cookie)).status,200);
+  assert.equal((await f.c.childList(uid)).length,0);
+  // Changer le mot de passe parent exige l'ancien.
+  assert.equal((await f.post('/api/account/parent-password',{password:'nouveau-secret'},cookie)).status,401);
+  assert.equal((await f.post('/api/account/parent-password',{current:'parent-secret',password:'nouveau-secret'},cookie)).status,200);
+  assert.equal((await f.post('/api/account/delete',{password:'parent-secret'},cookie)).status,401);
+  assert.equal((await f.post('/api/account/delete',{password:'nouveau-secret'},cookie)).status,200);
+  assert.equal(await f.c.accountById(uid),null);
+ }finally{await f.close();}
+});
+test('profils : niveau et selfie persistés malgré toutes les sauvegardes',async()=>{
+ const f=await fixture();try {
+  const fam=await f.create('Famille');const login=await f.unlock(fam.code);const cookie=login.cookie;
+  const uid=(await f.c.resolveAccount({headers:{cookie}})).account.id;
+  const photo='data:image/jpeg;base64,'+'A'.repeat(50000);
+  await f.c.childSaveList(uid,[{id:'fille',name:'Fille',age:9,level:'CE2',photo}]);
+  // La liste complète de sauvegarde du front ne contient pas level/photo (/api/child)…
+  await f.c.childSave(uid,'fille',{name:'Fille',age:9,history:[{role:'user',content:'leçon'}],sessions:[]});
+  // …ni les quiz (childMetaSave). Le niveau et la selfie doivent rester.
+  await f.c.childMetaSave(uid,'fille',{name:'Fille',age:9,sessions:[{type:'quiz',topic:'Interro'}]});
+  const list=await f.c.childList(uid);
+  assert.equal(list[0].level,'CE2');assert.equal(list[0].photo,photo);
+  const full=await f.c.childGetFull(uid,'fille');
+  assert.equal(full.level,'CE2');assert.equal(full.photo,photo);assert.equal(full.history.length,1);
+  assert.deepEqual(full.sessions,[{type:'quiz',topic:'Interro'}]);
+  // `childMetaParse` : une metadonnee corrompue renvoie {} au lieu de planter.
+  for (const bad of ['{corrompu','null','[1,2]'])
+    assert.equal(JSON.stringify(vm.runInContext('childMetaParse('+JSON.stringify(bad)+')',f.c)),'{}');
+ }finally{await f.close();}
+});
+test("erreurs IA : message enfant, jamais de détail interne à l'écran",()=>{
+ const seg=section('const CHILD_SAFE_ERROR','function lessonHistory');
+ const c=vm.createContext({});vm.runInContext(seg,c);
+ const busy=vm.runInContext('friendlyError(new Error("Ollama 500: {internal}"))',c);
+ assert.equal(busy,'Oups, Lumi est un peu occupée. Réessaie dans un instant ! 🕒');
+ assert.equal(vm.runInContext('friendlyError(new Error("Réponse interrompue : réessaie avec une question plus courte."))',c),'Réponse interrompue : réessaie avec une question plus courte.');
+ assert.match(vm.runInContext('friendlyError(new TypeError("fetch failed"))',c),/occupée/);
+ assert.match(vm.runInContext('friendlyError(new Error(undefined))',c),/Oups/);
 });

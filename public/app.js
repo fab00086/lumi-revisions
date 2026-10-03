@@ -147,12 +147,54 @@ async function fetchProfiles() {
 }
 
 function loadProfiles() { return profilesCache; }
-async function saveProfiles(list) {
+
+// Mot de passe parent : le pose la première fois (création), le vérifie ensuite.
+// Utilisé pour les actions destructrices (supprimer un profil, supprimer le
+// compte) que l'enfant avec le seul code famille ne peut pas faire.
+async function ensureParentPassword(pw) {
+  const r = await fetch('/api/account/parent-password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw })
+  });
+  let j = {}; try { j = await r.json(); } catch {}
+  if (!r.ok) { const e = new Error(j.error || 'Mot de passe refusé.'); e.status = r.status; throw e; }
+}
+// Boucle de confirmation parent pour supprimer les profils restants :
+// mot de passe à saisir (créé à la volée la première fois), 3 essais max.
+async function deleteProfileWithParent(reste, err0) {
+  let pw = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      await saveProfiles(reste, { parentPassword: pw });
+      return true;
+    } catch (err) {
+      if (err.status === 409 && err.needParentPassword) {
+        // Première fois : le parent crée son mot de passe, puis on réessaie avec.
+        pw = window.prompt('Ce profil contient des messages. Le parent crée un mot de passe pour autoriser la suppression :');
+        if (!pw) return false;
+        try { await ensureParentPassword(pw); }
+        catch (e2) { toast(e2.message || 'Mot de passe non créé.'); return false; }
+      } else if (err.status === 401) {
+        pw = window.prompt((err.message || 'Mot de passe parent incorrect.') + '\nMot de passe parent :');
+        if (!pw) return false;
+      } else { toast(err.message || "Oups, ça n'a pas marché. Réessaie !"); return false; }
+    }
+  }
+  toast('Mot de passe parent attendu : suppression annulée.');
+  return false;
+}
+async function saveProfiles(list, opts = {}) {
   const r = await fetch('/api/profiles', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ profiles: list })
+    body: JSON.stringify({ profiles: list, parentPassword: opts.parentPassword || undefined })
   });
-  if (!r.ok) throw new Error('Sauvegarde des profils impossible. Réessaie.');
+  if (!r.ok) {
+    let j = {}; try { j = await r.json(); } catch {}
+    const err = new Error(j.error || 'Sauvegarde des profils impossible. Réessaie.');
+    err.status = r.status;
+    err.needParentPassword = !!j.needParentPassword;
+    throw err;
+  }
   profilesCache = list;
 }
 
@@ -176,7 +218,16 @@ function renderProfiles() {
           return;
         }
         try { await saveProfiles(list.filter((_, index) => index !== i)); renderProfiles(); }
-        catch (err) { toast("Oups, la suppression n'a pas marchée. Réessaie !"); }
+        catch (err) {
+          if (err.status === 409 || err.status === 401) {
+            // Effacer un profil détruit ses messages : le PARENT confirme avec
+            // son mot de passe (créé à la volée la première fois). L'enfant
+            // avec le seul code famille ne peut plus rien supprimer.
+            const reste = list.filter((_, index) => index !== i);
+            const ok = await deleteProfileWithParent(reste, err);
+            if (ok) renderProfiles();
+          } else toast("Oups, la suppression n'a pas marchée. Réessaie !");
+        }
         return;
       }
       startChat(p);

@@ -892,11 +892,32 @@ function blobSpace(accountId) {
   if (!data.spaces[accountId] || typeof data.spaces[accountId] !== 'object') data.spaces[accountId] = { profiles: [] };
   return data;
 }
-// Liste des profils : [{id, name, age}] — c'est ce que le front affiche.
+// Metadonnees du profil (sessions, niveau, photo) vivent dans la colonne
+// `data` : lecture surveillee (une ligne corrompue ne fait pas planter la
+// route) et fusion par morceaux — childSave et childSaveList ecrivent des
+// morceaux differents, jamais l'un n'ecrase l'autre.
+function childMetaParse(raw) {
+  try {
+    const o = JSON.parse(raw || '{}');
+    return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
+  } catch { return {}; }
+}
+// Champ niveau (classe) et selfie du profil : valides et bornes avant d'aller
+// en base (photo = dataURL compresse par le front, ~300 Ko max).
+function profileExtras(p) {
+  const out = {};
+  if (p.level != null) {
+    const s = String(p.level).trim().slice(0, 40);
+    if (s) out.level = s;
+  }
+  if (typeof p.photo === 'string' && /^data:image\/(?:jpeg|png|webp);base64,/.test(p.photo) && p.photo.length <= 400000) out.photo = p.photo;
+  return out;
+}
+// Liste des profils : [{id, name, age, level, photo}] — c'est ce que le front affiche.
 async function childList(accountId) {
   if (sql) {
-    return sql.prepare('SELECT id,name,age FROM children WHERE account_id = ?').all(accountId)
-      .map(r => ({ id: r.id, name: r.name, age: r.age }));
+    return sql.prepare('SELECT id,name,age,data FROM children WHERE account_id = ?').all(accountId)
+      .map(r => { const meta = childMetaParse(r.data); return { id: r.id, name: r.name, age: r.age, level: meta.level || null, photo: meta.photo || null }; });
   }
   const space = (getData().spaces || {})[accountId];
   return Array.isArray(space && space.profiles) ? space.profiles : [];
@@ -904,10 +925,10 @@ async function childList(accountId) {
 async function childGetFull(accountId, childId) {
   if (sql) {
     const r = sql.prepare('SELECT * FROM children WHERE account_id = ? AND id = ?').get(accountId, childId);
-    if (!r) return { name: '', age: null, history: [], sessions: [] };
-    const meta = JSON.parse(r.data || '{}');
+    if (!r) return { name: '', age: null, level: null, photo: null, history: [], sessions: [] };
+    const meta = childMetaParse(r.data);
     return {
-      name: r.name, age: r.age,
+      name: r.name, age: r.age, level: meta.level || null, photo: meta.photo || null,
       history: sql.prepare('SELECT role,content FROM messages WHERE account_id = ? AND child_id = ? ORDER BY seq').all(accountId, childId)
         .map(m => ({ role: m.role, content: m.content })),
       sessions: Array.isArray(meta.sessions) ? meta.sessions : []
@@ -915,15 +936,28 @@ async function childGetFull(accountId, childId) {
   }
   const space = (getData().spaces || {})[accountId];
   const c = (space && typeof space === 'object') ? space[childId] : null;
-  return c && typeof c === 'object' ? c : { name: '', age: null, history: [], sessions: [] };
+  if (!(c && typeof c === 'object')) return { name: '', age: null, level: null, photo: null, history: [], sessions: [] };
+  // Le niveau et la selfie vivent sur la fiche profil (childSaveList) : on les
+  // réassemble avec la fiche complète (history/sessions) avant de répondre.
+  const pf = (Array.isArray(space.profiles) ? space.profiles : []).find(p => p && p.id === childId) || {};
+  return {
+    name: c.name || pf.name || '', age: c.age ?? pf.age ?? null,
+    level: c.level || pf.level || null, photo: c.photo || pf.photo || null,
+    history: Array.isArray(c.history) ? c.history : [],
+    sessions: Array.isArray(c.sessions) ? c.sessions : []
+  };
 }
 // Sauve le child complet (metadonnees + conversations remplacees par celles
 // envoyees — le front envoie toujours l'historique complet de la lecon).
 async function childSave(accountId, childId, child) {
   if (sql) {
+    // On fusionne avec les metadonnees existantes : ce sauvetage complet du
+    // child n'envoie ni niveau ni photo (l'ecran de chat les ignore) — ne
+    // jamais les perdre sous l'historique.
+    const prev = childMetaParse((sql.prepare('SELECT data FROM children WHERE account_id = ? AND id = ?').get(accountId, childId) || {}).data);
     sql.prepare('INSERT INTO children (account_id,id,name,age,data) VALUES (?,?,?,?,?) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name, age=excluded.age, data=excluded.data')
       .run(accountId, childId, child.name || '', child.age ?? null,
-        JSON.stringify({ sessions: Array.isArray(child.sessions) ? child.sessions : [] }));
+        JSON.stringify({ ...prev, sessions: Array.isArray(child.sessions) ? child.sessions : [] }));
     // Conserver le `created` des messages déjà stockés : le front renvoie
     // l'historique complet de la leçon à chaque sauvegarde. On réécrit les
     // lignes en gardant leur date d'origine (sinon la purge RGPD 12 mois ne
@@ -940,15 +974,19 @@ async function childSave(accountId, childId, child) {
     return;
   }
   const data = blobSpace(accountId);
-  data.spaces[accountId][childId] = child;
+  // Meme fusion que la branche SQL : ce child complet n'envoie ni niveau ni
+  // photo (l'ecran de chat les ignore) — ne jamais les perdre sous l'historique.
+  const prev = data.spaces[accountId][childId];
+  data.spaces[accountId][childId] = { ...prev, ...child, ...profileExtras(child) };
   await setData(data);
 }
 // Sauve seulement nom/age/resumes (sans toucher les conversations) — quiz etc.
 async function childMetaSave(accountId, childId, child) {
   if (sql) {
+    const prev = childMetaParse((sql.prepare('SELECT data FROM children WHERE account_id = ? AND id = ?').get(accountId, childId) || {}).data);
     sql.prepare('INSERT INTO children (account_id,id,name,age,data) VALUES (?,?,?,?,?) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name, age=excluded.age, data=excluded.data')
       .run(accountId, childId, child.name || '', child.age ?? null,
-        JSON.stringify({ sessions: Array.isArray(child.sessions) ? child.sessions : [] }));
+        JSON.stringify({ ...prev, sessions: Array.isArray(child.sessions) ? child.sessions : [] }));
     return;
   }
   const data = blobSpace(accountId);
@@ -966,8 +1004,11 @@ async function childSaveList(accountId, profiles) {
   const ids = clean.map(p => p.id);
   if (sql) {
     for (const p of clean) {
-      sql.prepare('INSERT INTO children (account_id,id,name,age,data) VALUES (?,?,?,?,?) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name, age=excluded.age')
-        .run(accountId, p.id, String(p.name || ''), (p.age ?? null) | 0 || null, JSON.stringify({}));
+      // Fusion : on garde les sessions existantes, on met a jour niveau/photo.
+      const prev = childMetaParse((sql.prepare('SELECT data FROM children WHERE account_id = ? AND id = ?').get(accountId, p.id) || {}).data);
+      sql.prepare('INSERT INTO children (account_id,id,name,age,data) VALUES (?,?,?,?,?) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name, age=excluded.age, data=excluded.data')
+        .run(accountId, p.id, String(p.name || ''), (p.age ?? null) | 0 || null,
+          JSON.stringify({ ...prev, ...profileExtras(p) }));
     }
     const kept = new Set(ids);
     for (const r of sql.prepare('SELECT id FROM children WHERE account_id = ?').all(accountId)) {
@@ -979,7 +1020,7 @@ async function childSaveList(accountId, profiles) {
     return;
   }
   const data = blobSpace(accountId);
-  data.spaces[accountId].profiles = clean.map(p => ({ id: p.id, name: String(p.name || ''), age: p.age ?? null }));
+  data.spaces[accountId].profiles = clean.map(p => ({ id: p.id, name: String(p.name || ''), age: p.age ?? null, ...profileExtras(p) }));
   for (const k of Object.keys(data.spaces[accountId])) {
     if (k !== 'profiles' && !ids.includes(k)) delete data.spaces[accountId][k];
   }
@@ -995,7 +1036,7 @@ async function accountExport(accountId) {
   };
   if (sql) {
     for (const r of sql.prepare('SELECT * FROM children WHERE account_id = ?').all(accountId)) {
-      const meta = JSON.parse(r.data || '{}');
+      const meta = childMetaParse(r.data);
       out.children.push({
         id: r.id, name: r.name, age: r.age, sessions: meta.sessions || [],
         conversations: sql.prepare('SELECT role,content,created FROM messages WHERE account_id = ? AND child_id = ? ORDER BY seq').all(accountId, r.id)
@@ -1241,19 +1282,41 @@ app.get('/api/account/export', async (req, res) => {
   res.json(await accountExport(r.account.id));
 });
 // Droit a l'effacement (art. 17) : suppression definitive de TOUT, mot de
-// passe exige. Rien n'est conserve (ni conversations, ni sessions, ni e-mail).
+// passe PARENT exige — le code famille est connu des enfants et ne doit
+// jamais suffire a tout detruire. Rien n'est conserve (ni conversations,
+// ni sessions, ni e-mail).
 app.post('/api/account/delete', storedRoute(async (req, res) => {
   const r = await requireAccount(req, res);
   if (!r) return;
   if (r.local) return res.status(400).json({ error: 'Le mode sans compte n’a pas de données à supprimer.' });
-  const { password } = req.body || {};
-  const credential = String(password || '').trim();
-  const valid = r.account.settings?.accessCodeHash ? familyCodeHash(credential) === r.account.settings.accessCodeHash : await verifyPassword(String(password || ''), r.account.passHash);
-  if (!valid || r.adminTest) {
-    return res.status(401).json({ error: 'Mot de passe incorrect : suppression refusée.' });
-  }
+  if (r.adminTest) return res.status(401).json({ error: 'Mot de passe incorrect : suppression refusée.' });
+  // Compte ouvert par un simple code famille : le parent doit d'abord poser
+  // son mot de passe (endpoint ci-dessous), la suppression reste possible.
+  if (!r.account.passHash)
+    return res.status(409).json({ error: 'Crée d’abord un mot de passe parent pour confirmer la suppression.', needParentPassword: true });
+  const valid = await verifyPassword(String((req.body || {}).password || ''), r.account.passHash);
+  if (!valid)
+    return res.status(401).json({ error: 'Mot de passe parent incorrect : suppression refusée.' });
   await accountErase(r.account.id);
   res.setHeader('Set-Cookie', sessionCookie('', req, 0));
+  res.json({ ok: true });
+}));
+
+// Mot de passe parent : protege les actions destructrices (effacement du
+// compte, suppression d'un profil) quand la famille a ete ouverte par un
+// simple code, que l'enfant connaît. Le parent le pose une fois ; ensuite le
+// changer exige l'ancien, et le code famille ne suffit jamais.
+app.post('/api/account/parent-password', storedRoute(async (req, res) => {
+  const r = await requireAccount(req, res);
+  if (!r) return;
+  if (r.local || r.adminTest) return res.status(400).json({ error: 'Ce mode n’a pas besoin de mot de passe parent.' });
+  const { current, password } = req.body || {};
+  const next = String(password || '');
+  if (next.length < 4) return res.status(400).json({ error: 'Choisis un mot de passe d’au moins 4 caractères.' });
+  if (r.account.passHash && !(await verifyPassword(String(current || ''), r.account.passHash)))
+    return res.status(401).json({ error: 'Ancien mot de passe parent incorrect.' });
+  r.account.passHash = await hashPassword(next);
+  await accountPut(r.account);
   res.json({ ok: true });
 }));
 function buildSystemPrompt(profile = {}) {
@@ -1485,6 +1548,17 @@ async function streamOllama(messages, { image, maxTokens, onDelta } = {}) {
   return full;
 }
 
+// Les erreurs affichees a l'enfant ne revelent jamais le detail interne (URL,
+// reponse du service IA, stack) : le detail complet reste en log serveur.
+// Seules les erreurs deja redigees pour l'enfant passent telles quelles.
+// (Audit B3 : « Ollama 500: {json} » n'apparait plus a l'ecran.)
+const CHILD_SAFE_ERROR = /^(?:Réponse interrompue|Le service IA|Le modèle n|La réponse de Lumi)/;
+function friendlyError(e) {
+  const msg = String((e && e.message) || e || '');
+  if (CHILD_SAFE_ERROR.test(msg)) return msg;
+  return 'Oups, Lumi est un peu occupée. Réessaie dans un instant ! 🕒';
+}
+
 // Conserve le début de la leçon et les lectures de photos même lors d'une longue session.
 function lessonHistory(list, maxChars = 48000) {
   const msgs = (Array.isArray(list) ? list : [])
@@ -1582,8 +1656,9 @@ PHOTO DU CAHIER (tres important) :
     res.end();
   } catch (e) {
     console.error(e);
-    if (headersSent) { send({ type: 'error', error: 'Erreur : ' + e.message }); res.end(); }
-    else res.status(500).json({ error: 'Erreur : ' + e.message });
+    const friendly = friendlyError(e);
+    if (headersSent) { send({ type: 'error', error: friendly }); res.end(); }
+    else res.status(500).json({ error: friendly });
   }
 });
 
@@ -1648,7 +1723,7 @@ app.post('/api/quiz', async (req, res) => {
     res.json({ quiz: [] });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: 'Erreur : ' + e.message });
+    res.status(500).json({ error: friendlyError(e) });
   }
 });
 
@@ -1791,8 +1866,21 @@ app.get('/api/profiles', async (req, res) => {
 app.post('/api/profiles', storedRoute(async (req, res) => {
   const r = await requireAccount(req, res);
   if (!r) return;
-  const { profiles } = req.body || {};
+  const { profiles, parentPassword } = req.body || {};
   if (!Array.isArray(profiles)) return res.status(400).json({ error: 'profiles invalide' });
+  // Effacer un profil detruit aussi ses messages : c'est une action du
+  // PARENT (mot de passe), jamais de l'enfant avec le seul code famille.
+  // Proprietaire (mode local) et essais Admin : sans mot de passe, par design.
+  const existing = await childList(r.account.id);
+  const kept = new Set(profiles.map(p => String((p && p.id) || '')));
+  const removed = existing.filter(e => e.id && !kept.has(String(e.id)));
+  if (removed.length && !r.local && !r.adminTest) {
+    const credential = String(parentPassword || '');
+    if (!r.account.passHash)
+      return res.status(409).json({ error: 'Crée d’abord un mot de passe parent pour supprimer un profil.', needParentPassword: true });
+    if (!(await verifyPassword(credential, r.account.passHash)))
+      return res.status(401).json({ error: 'Mot de passe parent incorrect : profil non supprimé.' });
+  }
   await childSaveList(r.account.id, profiles);
   res.json({ ok: true });
 }));
