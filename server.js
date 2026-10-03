@@ -485,7 +485,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.9' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.10' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -922,12 +922,12 @@ async function childMetaSave(accountId, childId, child) {
 // efface ce qui a disparu (donnees + conversations — minimisation RGPD).
 async function childSaveList(accountId, profiles) {
   const clean = profiles.filter(p => p && typeof p.id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(p.id));
+  const ids = clean.map(p => p.id);
   if (sql) {
     for (const p of clean) {
       sql.prepare('INSERT INTO children (account_id,id,name,age,data) VALUES (?,?,?,?,?) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name, age=excluded.age')
         .run(accountId, p.id, String(p.name || ''), (p.age ?? null) | 0 || null, JSON.stringify({}));
     }
-    const ids = clean.map(p => p.id);
     const kept = new Set(ids);
     for (const r of sql.prepare('SELECT id FROM children WHERE account_id = ?').all(accountId)) {
       if (!kept.has(r.id)) {

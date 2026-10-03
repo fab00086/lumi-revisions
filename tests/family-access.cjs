@@ -56,6 +56,25 @@ test('demande SMS : téléphone privé, aucune ouverture avant approbation et au
  }finally{await f.close();}
 });
 
+test('profils cloud : plusieurs enfants enregistrés, conversations conservées et familles isolées',async()=>{
+ const f=await fixture();try{
+  const family=await f.create('Famille A'),other=await f.create('Famille B');
+  const a=(await f.unlock(family.code)).cookie,b=(await f.unlock(other.code)).cookie;
+  const accountA=(await f.c.resolveAccount({headers:{cookie:a}})).account.id;
+  const accountB=(await f.c.resolveAccount({headers:{cookie:b}})).account.id;
+  await f.c.childSaveList(accountA,[{id:'fille',name:'Fille',age:9}]);
+  await f.c.childSave(accountA,'fille',{name:'Fille',age:9,history:[{role:'user',content:'Conversation existante'}],sessions:[]});
+  await f.c.childSaveList(accountA,[{id:'fille',name:'Fille',age:9},{id:'frere',name:'Frère',age:12}]);
+  assert.equal((await f.c.childList(accountA)).length,2);
+  assert.equal((await f.c.childGetFull(accountA,'fille')).history[0].content,'Conversation existante');
+  assert.equal((await f.c.childList(accountB)).length,0);
+  const stored=JSON.parse(f.remote());
+  assert.equal(stored.spaces[accountA].profiles.length,2);assert.equal(stored.spaces[accountA].fille.history.length,1);
+  await f.c.childSaveList(accountA,[{id:'fille',name:'Fille',age:9}]);
+  assert.equal((await f.c.childList(accountA)).length,1);assert.equal((await f.c.childGetFull(accountA,'fille')).history.length,1);
+ }finally{await f.close();}
+});
+
 test('invitation SMS : prépare le code, le lien et la confidentialité sans envoyer de message',async()=>{
  const script=fs.readFileSync(path.join(__dirname,'../public/admin.js'),'utf8');
  const start=script.indexOf('function familyInvitationText()'),end=script.indexOf("$('sms-code').onclick",start);

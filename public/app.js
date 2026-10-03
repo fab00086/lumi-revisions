@@ -1616,8 +1616,9 @@ function configureAdminTest(enabled) {
   $('admin-test-note').classList.toggle('hidden', !enabled);
   $('pf-age').max = enabled ? '110' : '18';
   $('pf-name').placeholder = enabled ? 'Ton nom (ex. Admin)' : "Prénom de l'enfant";
+  $('profile-form-title').textContent = enabled ? 'Ajouter un profil d’essai' : 'Ajouter un enfant';
   if (enabled && !$('pf-name').value) $('pf-name').value = 'Admin';
-  $('profile-hint').textContent = enabled ? 'Tes essais sont séparés des enfants et des familles. Saisis ton âge réel.' : "Un profil par enfant — Lumi s'adapte à chaque âge.";
+  $('profile-hint').textContent = enabled ? 'Tes essais sont séparés des enfants et des familles. Saisis ton âge réel.' : 'Tu peux ajouter plusieurs enfants. Depuis une conversation, touche « Profils » pour retrouver cette liste et ajouter un enfant.';
   $('btn-parent').classList.toggle('hidden', enabled);
   if (enabled) $('pf-age').focus();
 }

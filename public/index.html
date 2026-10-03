@@ -48,6 +48,7 @@
       <p id="admin-test-note" class="note hidden">🧪 Espace d’essai Admin : aucun enfant réel ici. Utilise ton nom et ton âge pour tester Lumi.</p>
 
       <form id="profile-form" class="profile-form">
+        <h2 id="profile-form-title">Ajouter un enfant</h2>
         <div class="pf-photo-wrap">
           <img id="pf-photo-preview" class="pf-photo hidden" alt="Photo">
           <button type="button" id="pf-photo-btn" class="pf-photo-btn">📷 Photo (selfie)</button>
@@ -62,9 +63,9 @@
           <option value="6e">6e</option><option value="5e">5e</option>
           <option value="4e">4e</option><option value="3e">3e</option>
         </select>
-        <button type="submit" class="btn btn-primary">Commencer ➜</button>
+        <button id="btn-create-profile" type="submit" class="btn btn-primary">Créer le profil et commencer ➜</button>
       </form>
-      <p id="profile-hint" class="hint">Un profil par enfant — Lumi s'adapte à chaque âge.</p>
+      <p id="profile-hint" class="hint">Tu peux ajouter plusieurs enfants. Depuis une conversation, touche « Profils » pour retrouver cette liste et ajouter un enfant.</p>
 
       <button id="btn-parent" class="btn" type="button">👨‍👩‍👧 Espace parent</button>
       <a href="/admin.html" class="management-link hidden" data-admin-link>🔐 Gestion des familles</a>
