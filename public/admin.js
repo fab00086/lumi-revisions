@@ -82,13 +82,18 @@ $('create-form').onsubmit = async e => {
   try {showCode(await post('/api/admin/create-access',{label:$('create-label').value,plan:$('create-plan').value,dailyLimit:Number($('create-daily').value),maxDevices:Number($('create-devices').value)}));$('create-label').value='';await refresh();}
   catch(e){toast(e.message);} finally{$('create-submit').disabled=false;}
 };
-$('copy-code').onclick = async () => {try {await navigator.clipboard.writeText($('issued-code').value);toast('Code copié.');}catch{$('issued-code').select();toast('Sélectionne et copie le code.');}};
-async function shareFamilyInvitation() {
+function familyInvitationText() {
   const code = $('issued-code').value;
-  if (!code) { toast('Crée ou approuve un accès avant de le transmettre.'); return; }
-  const url = new URL('/',location.href).href, text='Ton accès à Lumi : '+code+'\nOuvre le lien, saisis ce code et confirme être le parent.\nConfidentialité : '+new URL('/confidentialite.html',location.href).href;
-  try {if(navigator.share) await navigator.share({title:'Accès Lumi',text,url});else {await navigator.clipboard.writeText(text+'\n'+url);toast('Invitation copiée. Colle-la dans ton message.');}}
-  catch(e){if(e.name!=='AbortError')toast('Utilise Copier pour transmettre le code.');}
+  if (!code) return '';
+  return 'Ton code d’accès à Lumi : '+code+'\nLien : '+new URL('/',location.href).href+'\nOuvre le lien, saisis ce code et confirme être le parent.\nConfidentialité : '+new URL('/confidentialite.html',location.href).href;
+}
+$('copy-code').onclick = async () => {const text=familyInvitationText();if(!text)return;try {await navigator.clipboard.writeText(text);toast('Invitation copiée avec le code et le lien. Colle-la dans ton SMS.');}catch{$('issued-code').select();toast('Sélectionne et copie le code.');}};
+async function shareFamilyInvitation() {
+  const text = familyInvitationText();
+  if (!text) { toast('Crée ou approuve un accès avant de le transmettre.'); return; }
+  // Un seul élément texte : certaines messageries ignorent le texte lorsqu'une URL séparée est fournie.
+  try {if(navigator.share) await navigator.share({text});else {await navigator.clipboard.writeText(text);toast('Invitation copiée avec le code et le lien. Colle-la dans ton SMS.');}}
+  catch(e){if(e.name!=='AbortError')toast('Utilise Copier l’invitation pour transmettre le code et le lien.');}
 }
 $('sms-code').onclick = shareFamilyInvitation;
 $('share-code').onclick = shareFamilyInvitation;

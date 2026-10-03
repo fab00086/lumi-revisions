@@ -58,10 +58,14 @@ test('demande SMS : téléphone privé, aucune ouverture avant approbation et au
 
 test('invitation SMS : prépare le code, le lien et la confidentialité sans envoyer de message',async()=>{
  const script=fs.readFileSync(path.join(__dirname,'../public/admin.js'),'utf8');
- const start=script.indexOf('async function shareFamilyInvitation()'),end=script.indexOf("$('sms-code').onclick",start);
- let shared;const c=vm.createContext({URL,location:{href:'https://lumi.test/admin.html'},$:()=>({value:'LUMI-TEST'}),navigator:{share:async v=>{shared=v;}},toast:()=>{}});
+ const start=script.indexOf('function familyInvitationText()'),end=script.indexOf("$('sms-code').onclick",start);
+ const nodes={'issued-code':{value:'LUMI-TEST'},'copy-code':{}};
+ let shared;const c=vm.createContext({URL,location:{href:'https://lumi.test/admin.html'},$:id=>nodes[id],navigator:{share:async v=>{shared=v;}},toast:()=>{}});
  vm.runInContext(script.slice(start,end),c);await c.shareFamilyInvitation();
- assert.equal(shared.url,'https://lumi.test/');assert.ok(shared.text.includes('LUMI-TEST'));assert.ok(shared.text.includes('/confidentialite.html'));assert.ok(shared.text.includes('parent'));
+ assert.equal(shared.url,undefined);assert.deepEqual(Object.keys(shared),['text']);assert.ok(shared.text.includes('https://lumi.test/'));assert.ok(shared.text.includes('LUMI-TEST'));assert.ok(shared.text.includes('/confidentialite.html'));assert.ok(shared.text.includes('parent'));
+ let copied;c.navigator={clipboard:{writeText:async text=>{copied=text;}}};await c.shareFamilyInvitation();assert.equal(copied,shared.text);
+ await nodes['copy-code'].onclick();assert.equal(copied,shared.text);
+ nodes['issued-code'].value='';shared=null;await c.shareFamilyInvitation();assert.equal(shared,null);
 });
 
 test('notifications : destinataire privé, aucune donnée enfant, une seule alerte par demande', async () => {
