@@ -644,7 +644,27 @@ async function speakAudio(text) {
     if (!remaining && voiceRequest === controller) voiceRequest = null;
   }
 }
-$('btn-listen').addEventListener('click', () => speak(lastSpeechText || 'Bonjour ! Je suis Lumi.'));
+$('btn-listen').addEventListener('click', () => {
+  const player = $('voice-player');
+  if (player?.open && !voiceAudioBusy && voiceAudio && voiceAudioText === lastSpeechText && Date.now() - voiceAudioCreated < 240000) {
+    // Relancer le morceau prêt, sans requête ni changement de source dans le toucher.
+    // Si Safari a bloqué la suite, ne pas repartir en boucle à la première phrase.
+    stopListening(); setAudioSession('playback'); voiceAudioBusy = true;
+    const gen = speakGen;
+    voiceAudio.play().then(() => {
+      if (gen !== speakGen) return;
+      player.open = false;
+      $('avatar').classList.add('talking'); $('btn-stop').classList.remove('hidden');
+      setStatus('Je parle 🗣️ (appuie sur ✋ pour me couper)');
+    }).catch(() => {
+      if (gen !== speakGen) return;
+      voiceAudioBusy = false; player.open = true;
+      setStatus('Touche ▶ dans le lecteur audio pour lancer la voix.');
+    });
+    return;
+  }
+  speak(lastSpeechText || 'Bonjour ! Je suis Lumi.');
+});
 $('btn-test-voice').addEventListener('click', () => speak('Bonjour ! Je suis Lumi. Est-ce que tu entends ma voix ?'));
 
 // Decoupe le texte aux fins de phrases : iOS coupe le son sur les

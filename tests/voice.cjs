@@ -86,6 +86,18 @@ test('voix longue : Stop pendant la préparation de la suite interdit une lectur
  assert.equal(t.audioPlays.length,plays);assert.ok(!t.$('avatar').classList.contains('talking'));
 });
 
+test('iPhone : une suite bloquée se relance depuis le bouton sans répéter la première phrase',async()=>{
+ const t=setup(true,false,true);
+ t.c.speak('Une phrase qui explique calmement la première étape du calcul, avec un exemple facile pour commencer. '+ 'La suite de la leçon. '.repeat(30));
+ await t.finishVoice('a');t.click('btn-listen');await new Promise(r=>setImmediate(r));
+ const next=t.audio.onended();await t.finishVoice('b');await next;
+ assert.equal(t.$('voice-player').open,true);
+ t.click('btn-listen');await new Promise(r=>setImmediate(r));
+ assert.ok(t.audioPlays.at(-1).src.endsWith('b'.repeat(48)));assert.equal(t.audioPlays.at(-1).gesture,true);
+ assert.equal(t.voiceRequests.length,2);await t.audio.onended();
+ assert.equal(t.$('voice-player').classList.contains('hidden'),true);
+});
+
 test('voix fichier : active la sortie dans le toucher, lit la réponse et reprend le micro après la fin', async () => {
   const t = setup(true); t.click('btn-mic-live');
   t.click('btn-test-voice');
