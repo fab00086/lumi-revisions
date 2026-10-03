@@ -131,6 +131,16 @@ test('connexion Admin : jeton expiré, modifié ou cookie propriétaire seul ref
    assert.equal(f.c.hasAdmin({headers:{cookie:'lumi_admin='+parts[0]+'.'+parts[1]+'.'+'0'.repeat(64)}}),false);
  }finally{await f.close();}
 });
+
+test('session Admin ouverte : Lumi utilise toujours les essais, jamais les enfants de la maison',async()=>{
+ const f=await fixture();try {
+   await f.c.childSaveList('local',[{id:'maison',name:'Enfant maison',age:9}]);
+   const owner=await f.c.resolveAccount({headers:{cookie:f.admin}});
+   assert.equal(owner.adminTest,true);assert.equal(owner.account.id,'__lumi_admin_test');
+   assert.equal((await f.c.childList(owner.account.id)).length,0);
+   assert.equal((await(await fetch(f.base+'/api/gate',{headers:{Cookie:f.admin}})).json()).open,true);
+ }finally{await f.close();}
+});
 test('code famille : un seul compte, consentement, plafond appareils et isolation de la maison',async()=>{
   const f=await fixture();try {
     assert.equal((await f.post('/api/admin/create-access',{label:'X'},'')).status,401);

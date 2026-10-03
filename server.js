@@ -452,7 +452,7 @@ app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.3' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
-    if (cookies.lumi_demo === '1') return res.json({ locked: true, open: hasAdmin(req) });
+    if (hasAdmin(req) || cookies.lumi_demo === '1') return res.json({ locked: true, open: hasAdmin(req) });
     const family = !!cookies[SESSION_COOKIE] || cookies.lumi_family === '1';
     const r = family ? await resolveAccount(req) : null;
     res.json({ locked: !!ACCESS_CODE || family || !LOCAL_MODE, open: family ? !!r && !r.local : (LOCAL_MODE && (!ACCESS_CODE || hasAccess(req))) });
@@ -502,7 +502,7 @@ app.post('/api/access-request', storedRoute(async (req, res) => {
 app.use('/api', (req, res, next) => {
   if (req.path.startsWith('/admin/')) return next(); // protection admin indépendante
   const cookies = parseCookies(req);
-  if (cookies.lumi_demo === '1') {
+  if (hasAdmin(req) || cookies.lumi_demo === '1') {
     if (hasAdmin(req)) return next();
     return res.status(401).json({ error: 'Ta session d’essai admin est fermée.' });
   }
@@ -610,10 +610,14 @@ function isSecureReq(req) {
 function sessionCookie(token, req, maxAgeSec) {
   return SESSION_COOKIE + '=' + token + '; Path=/; HttpOnly; Max-Age=' + maxAgeSec + '; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
 }
+function familyLoginCookies(token, req) {
+  const ending = '; Path=/; HttpOnly; Max-Age=0; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
+  return [sessionCookie(token, req, SESSION_DAYS * 86400), 'lumi_admin=' + ending, 'lumi_owner=' + ending, 'lumi_demo=' + ending];
+}
 // Trouve le compte de la requete : session valide, sinon compte local (mode
 // local), sinon rien (mode vente : le front montre l'ecran de connexion).
 async function resolveAccount(req) {
-  if (parseCookies(req).lumi_demo === '1') {
+  if (hasAdmin(req) || parseCookies(req).lumi_demo === '1') {
     if (!hasAdmin(req)) return null;
     return { account: { ...localAccount(), id: '__lumi_admin_test' }, local: false, adminTest: true };
   }
@@ -956,7 +960,7 @@ app.post('/api/auth/register', storedRoute(async (req, res) => {
   });
   const token = newToken();
   await sessionPut(token, { accountId: id, expires: new Date(Date.now() + SESSION_DAYS * 86400000).toISOString() });
-  res.setHeader('Set-Cookie', sessionCookie(token, req, SESSION_DAYS * 86400));
+  res.setHeader('Set-Cookie', familyLoginCookies(token, req));
   res.json({ ok: true, account: { email: mail, plan: 'trial' } });
 }));
 
@@ -970,7 +974,7 @@ app.post('/api/auth/login', storedRoute(async (req, res) => {
   }
   const token = newToken();
   await sessionPut(token, { accountId: acc.id, expires: new Date(Date.now() + SESSION_DAYS * 86400000).toISOString() });
-  res.setHeader('Set-Cookie', sessionCookie(token, req, SESSION_DAYS * 86400));
+  res.setHeader('Set-Cookie', familyLoginCookies(token, req));
   res.json({ ok: true, account: { email: acc.email, plan: acc.plan, trialEnds: acc.trialEnds || null } });
 }));
 
