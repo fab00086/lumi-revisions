@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
 function section(a, b) { return source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a))); }
-function setup(serverVoice = false) {
+function setup(serverVoice = false, blockedSilent = false) {
   const elements = new Map(), timers = new Map(), bubbles = [], spoken = [], sessions = [], documentHandlers = {};
   let timerId = 0, gesture = false;
   const $ = id => {
@@ -25,7 +25,7 @@ function setup(serverVoice = false) {
   const synth = { paused: false, resumedInGesture: false, cancel() {},
     resume() { this.paused = false; this.resumedInGesture = gesture; },
     speak(u) { spoken.push({ utterance: u, gesture, paused: this.paused }); } };
-  const audioPlays = [], audio = { src: '/audio-ready.wav', pause() { this.paused = true; }, play() { audioPlays.push({ gesture, src: this.src }); return Promise.resolve(); } };
+  const audioPlays = [], audio = { src: '/audio-ready.wav', pause() { this.paused = true; }, play() { audioPlays.push({ gesture, src: this.src }); return blockedSilent && this.src === '/audio-ready.wav' ? new Promise(()=>{}) : Promise.resolve(); } };
   let pendingVoice;
   const c = vm.createContext({ $, navigator: { userAgent: 'iPhone' },
     voiceMode: serverVoice ? 'server' : 'native', AbortController,
@@ -61,6 +61,11 @@ test('voix fichier : active la sortie dans le toucher, lit la réponse et repren
   assert.equal(t.audio.src, 'blob:voice'); assert.match(t.c.status, /Je parle/);
   t.c.micLiveResume(); assert.equal(t.timers.size, 0, 'aucun micro pendant la lecture');
   t.audio.onended(); assert.equal(t.timers.size, 1, 'reprise après la voix');
+});
+
+test('voix mobile : un déverrouillage sonore bloqué ne bloque pas la génération ni le lecteur visible',async()=>{
+ const t=setup(true,true);t.click('btn-test-voice');await t.finishVoice();
+ assert.equal(t.audio.src,'blob:voice');assert.equal(t.audio.controls,true);assert.equal(t.audio.hidden,false);assert.equal(t.audio.muted,false);assert.match(t.c.status,/Je parle/);
 });
 
 test('voix fichier : Stop ignore une réponse tardive, et une deuxième lecture utilise le fichier dans le toucher', async () => {

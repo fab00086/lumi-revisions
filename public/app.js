@@ -12,6 +12,10 @@ function cancelChat() {
   stopListening();
   stopSpeech();
   lastSpeechText = '';
+  if (voiceAudioUrl) { URL.revokeObjectURL(voiceAudioUrl); voiceAudioUrl = null; }
+  voiceAudioText = '';
+  if (voiceAudio) { voiceAudio.src = '/audio-ready.wav'; voiceAudio.hidden = true; }
+  $('voice-playback').classList.add('hidden');
   chatGeneration++;
   if (activeChat) activeChat.abort();
   activeChat = null;
@@ -487,11 +491,14 @@ let voiceAudioUrl = null;
 let voiceAudioText = '';
 let voiceAudioBusy = false;
 let voiceRequest = null;
+function setAudioSession(type) {
+  try { if (navigator.audioSession) navigator.audioSession.type = type; } catch { /* API facultative. */ }
+}
 function unlockVoiceAudio() {
   if (!voiceAudio) {
     voiceAudio = new Audio('/audio-ready.wav');
     voiceAudio.id = 'lumi-audio'; voiceAudio.hidden = true;
-    document.body?.appendChild?.(voiceAudio);
+    $('voice-playback')?.appendChild?.(voiceAudio);
   }
   // Native media uses the same output as the melody confirmed on the iPhone.
   // A short silent WAV activates this very element within the button touch.
@@ -501,6 +508,7 @@ function unlockVoiceAudio() {
 async function speakAudio(text) {
   stopListening();
   stopSpeech();
+  setAudioSession('playback');
   const gen = ++speakGen;
   voiceAudioBusy = true;
   const controller = new AbortController();
@@ -510,9 +518,9 @@ async function speakAudio(text) {
   const timeout = setTimeout(() => controller.abort(), 90000);
   try {
     const cached = voiceAudioUrl && voiceAudioText === text;
-    const ready = cached ? Promise.resolve() : unlockVoiceAudio();
+    // Le pré-déverrouillage peut rester bloqué sur mobile : il ne doit pas bloquer la requête vocale.
+    if (!cached) unlockVoiceAudio().catch(() => {});
     if (!cached) {
-    await ready;
     const response = await fetch('/api/speech', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: text.slice(0, 3000) }), signal: controller.signal,
@@ -523,8 +531,11 @@ async function speakAudio(text) {
     if (voiceAudioUrl) URL.revokeObjectURL(voiceAudioUrl);
     voiceAudioUrl = URL.createObjectURL(blob);
     voiceAudioText = text;
-    voiceAudio.src = voiceAudioUrl;
     }
+    // Réaffecter aussi la source lors d'une relance après retour au premier plan (Safari/PWA).
+    voiceAudio.src = voiceAudioUrl;
+    voiceAudio.controls = true; voiceAudio.hidden = false; voiceAudio.muted = false;
+    $('voice-playback').classList.remove('hidden');
     voiceAudio.currentTime = 0;
     voiceAudio.volume = 1;
     voiceAudio.playbackRate = Math.max(0.6, Math.min(1.5, voiceRate || 1));
@@ -613,6 +624,7 @@ function speak(text) {
     if (!text) return;
     stopListening();
     stopSpeech();
+    setAudioSession('playback');
     // cancel() vide la file, mais ne retire pas l'état pause du navigateur.
     // Reprendre dans le toucher permet au bouton de sortir de cet état.
     if (speechSynthesis.paused) speechSynthesis.resume();
@@ -885,6 +897,7 @@ function micLiveResume() {
   if (liveMic && !speechUtterances.length) micLiveRestart(350);
 }
 function startListening() {
+  setAudioSession('play-and-record');
   if (typeof voiceAudioBusy !== 'undefined' && voiceAudioBusy) return;
   if (recog || chatLoading || activeChat || archiving || document.hidden || speechUtterances.length) return;
   if (!window.isSecureContext) {
