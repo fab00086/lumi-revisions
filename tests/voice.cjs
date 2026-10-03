@@ -356,3 +356,41 @@ test('une dictée : ignore les résultats intermédiaires et un doublon final', 
   session.onresult({results:[final]});session.onresult({results:[final]});
   assert.equal(sends,1);
 });
+
+test('micro actif : chaque résultat renouvelle la surveillance sans couper la phrase',()=>{
+ const t=setup();t.click('btn-mic-live');const session=t.sessions[0];const original=[...t.timers.keys()][0];
+ const interim=[{transcript:'Une explication longue'}];interim.isFinal=false;
+ session.onresult({results:[interim]});assert.equal(t.timers.has(original),false);assert.equal(session.aborted,undefined);
+ const next=[...t.timers.keys()][0];session.onspeechstart();assert.equal(t.timers.has(next),false);
+ const final=[{transcript:'Une explication longue et complète'}];final.isFinal=true;
+ session.onresult({results:[final]});assert.equal(t.c.sent,'Une explication longue et complète');
+});
+test('micro interrompu : début conservé, continuation assemblée et validation manuelle',()=>{
+ const t=setup();t.click('btn-mic-live');const result=[{transcript:'Combien font vingt plus'}];result.isFinal=false;
+ t.sessions[0].onresult({results:[result]});t.sessions[0].onend();
+ const [id,fn]=[...t.timers.entries()][0];t.timers.delete(id);fn();
+ const final=[{transcript:'trente'}];final.isFinal=true;t.sessions[1].onresult({results:[final]});
+ assert.equal(t.$('input').value,'Combien font vingt plus trente');assert.equal(t.c.sent,undefined);
+ assert.match(t.c.status,/vérifie-la.*Envoyer/);t.c.micLiveResume();assert.equal(t.timers.size,0);
+});
+test('micro : brouillon tapé conservé quand on ajoute une dictée',()=>{
+ const t=setup();t.$('input').value='Mon exercice :';t.click('btn-mic');
+ t.sessions[0].onresult({results:[[{transcript:'calculer une moitié'}]]});
+ assert.equal(t.$('input').value,'Mon exercice : calculer une moitié');assert.equal(t.c.sent,undefined);
+});
+test('micro dictée : blocage après résultat intermédiaire garde le texte sans envoi',()=>{
+ const t=setup();t.click('btn-mic');const result=[{transcript:'Mon début de question'}];result.isFinal=false;
+ t.sessions[0].onresult({results:[result]});const [id,fn]=[...t.timers.entries()][0];t.timers.delete(id);fn();
+ assert.equal(t.$('input').value,'Mon début de question');assert.equal(t.c.sent,undefined);assert.match(t.c.status,/Phrase conservée/);
+});
+test('lecteur en pause : micro reprend et nouvelle lecture arrête à nouveau le micro',async()=>{
+ const t=setup(true);t.click('btn-mic-live');t.c.speak('Une réponse.');await t.finishVoice();t.audio.onplay();
+ t.audio.paused=true;t.audio.ended=false;t.audio.onpause();assert.equal(vm.runInContext('voiceAudioBusy',t.c),false);
+ const [id,fn]=[...t.timers.entries()][0];t.timers.delete(id);fn();assert.equal(t.sessions.length,2);
+ t.audio.paused=false;t.audio.onplay();assert.equal(t.sessions[1].aborted,true);assert.equal(vm.runInContext('voiceAudioBusy',t.c),true);
+});
+test('lecteur : pause de fin ou événement tardif après Stop ne relance pas une ancienne voix',async()=>{
+ const t=setup(true);t.click('btn-mic-live');t.c.speak('Une réponse.');await t.finishVoice();const oldPause=t.audio.onpause;
+ t.audio.paused=true;t.audio.ended=true;oldPause();assert.equal(vm.runInContext('voiceAudioBusy',t.c),true);
+ t.click('btn-stop');assert.equal(t.audio.onpause,null);const before=t.timers.size;oldPause();assert.equal(t.timers.size,before);
+});

@@ -311,6 +311,7 @@ async function send(text, imageBase64) {
   const messages = history;
   const controller = new AbortController();
   activeChat = controller;
+  micDraftReview = false;
   const timeout = setTimeout(() => controller.abort(), imageBase64 ? 260000 : 130000);
   if (typeof stopListening === 'function') stopListening();
   stopSpeech(); // l'enfant "coupe la parole" en envoyant un nouveau message
@@ -370,7 +371,7 @@ async function send(text, imageBase64) {
           try { await saveChild(profile, messages); }
           catch (err) { addBubble('assistant', '⚠️ ' + escapeHtml(err.message)); }
         } else if (ev.type === 'delta') {
-          if (firstDelta) { firstDelta = false; removeTyping(); setStatus("Je t'écoute 👂"); }
+          if (firstDelta) { firstDelta = false; removeTyping(); setStatus("Je prépare ma réponse…"); }
           full += ev.text;
           bubble.innerHTML = renderMarkdown(full);
           const chat = $('chat'); chat.scrollTop = chat.scrollHeight;
@@ -606,9 +607,19 @@ async function speakAudio(text) {
     voiceAudio.volume = 1;
     voiceAudio.playbackRate = Math.max(0.6, Math.min(1.5, voiceRate || 1));
     let partIndex = 0;
+    let switchingPart = false;
+    voiceAudio.onpause = () => {
+      if (gen !== speakGen || switchingPart || !voiceAudio.paused || voiceAudio.ended) return;
+      voiceAudioBusy = false;
+      $('avatar').classList.remove('talking');
+      if (player) { player.classList.remove('hidden'); player.open = true; }
+      setStatus('Voix en pause — touche Écouter Lumi pour reprendre.');
+      if (typeof micLiveResume === 'function') micLiveResume();
+    };
     voiceAudio.onended = async () => {
       if (gen !== speakGen) return;
       if (++partIndex < voiceAudioParts.length) {
+        switchingPart = true;
         try {
           setStatus('Lumi continue…');
           const next = await voiceAudioParts[partIndex];
@@ -618,6 +629,7 @@ async function speakAudio(text) {
           await voiceAudio.play();
           if (gen === speakGen) setStatus('Je parle 🗣️ (appuie sur ✋ pour me couper)');
         } catch (error) { failed(error); }
+        finally { switchingPart = false; }
         return;
       }
       voiceAudioBusy = false;
@@ -693,7 +705,7 @@ function stopSpeech() {
     voiceRequest.abort(); voiceRequest = null;
   }
   $('voice-player')?.classList.add('hidden');
-  if (voiceAudio) { voiceAudio.onended = null; voiceAudio.onerror = null; voiceAudio.pause(); }
+  if (voiceAudio) { voiceAudio.onended = null; voiceAudio.onerror = null; voiceAudio.onpause = null; voiceAudio.pause(); }
   clearTimeout(speechTimer);
   speechUtterances = [];
   try {
@@ -953,6 +965,7 @@ let micTimer = null;
 // rappuie sur le bouton 🎙️. Un appui sur 🎤 coupe aussi le mode.
 let liveMic = false;
 let emptyMicSessions = 0;
+let micDraftReview = false;
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let phoneSoundReminderShown = false;
@@ -1031,7 +1044,7 @@ function micLiveRestart(delay = 300) {
   clearTimeout(micTimer);
   micTimer = setTimeout(() => {
     if (liveMic && !document.hidden) keepScreenAwake(true);
-    if (liveMic && !recog && !chatLoading && !activeChat && !archiving) startListening();
+    if (liveMic && !recog && !micDraftReview && !chatLoading && !activeChat && !archiving) startListening();
   }, delay);
 }
 // Appele par la voix quand Lumi a fini (ou echoue) de parler : le micro
@@ -1039,7 +1052,10 @@ function micLiveRestart(delay = 300) {
 // chargee avant celle-ci.
 function micLiveResume() {
   if (typeof voiceAudioBusy !== 'undefined' && voiceAudioBusy) return;
-  if (liveMic && !speechUtterances.length) micLiveRestart(350);
+  if (liveMic && !micDraftReview && !speechUtterances.length) {
+    setStatus('Reprise du micro…');
+    micLiveRestart(350);
+  }
 }
 function startListening() {
   if (typeof voiceAudioBusy !== 'undefined' && voiceAudioBusy) return;
@@ -1060,6 +1076,8 @@ function startListening() {
     recog = session;
     const generation = chatGeneration;
     let heardSpeech = false;
+    const draftPrefix = $('input').value.trim();
+    micDraftReview = false;
     session.lang = 'fr-FR';
     session.continuous = false;
     session.interimResults = true;
@@ -1072,46 +1090,61 @@ function startListening() {
       const text = String(result?.[0]?.transcript || '').trim();
       if (!text) return;
       heardSpeech = true;
+      armWatchdog();
+      const completeText = [draftPrefix, text].filter(Boolean).join(' ');
       if (result?.isFinal === false) {
         // Un son a ete entendu : ce n'est pas une session vide. En mode
         // discussion, les pauses de reflexion de l'enfant ne doivent plus
         // eteindre le micro — seul un vrai silence complet y arrive.
         emptyMicSessions = 0;
-        $('input').value = text;
+        $('input').value = completeText;
         setStatus('Je t’entends 🎤 — tu peux toucher Envoyer dès que ta phrase est prête.');
         return;
       }
       emptyMicSessions = 0;
       stopListening();
-      $('input').value = text;
-      send(text);
+      $('input').value = completeText;
+      if (draftPrefix) {
+        micDraftReview = true;
+        setStatus('Phrase conservée et complétée — vérifie-la puis touche Envoyer.');
+        return;
+      }
+      send(completeText);
     };
     session.onerror = (e) => {
       if (recog !== session) return;
       stopListening();
       if ((e.error === 'no-speech' || e.error === 'aborted') && liveMic) {
         emptyMicSessions = heardSpeech ? 0 : emptyMicSessions + 1;
-        setStatus('Mode conversation actif — prends ton temps, je t’écoute 🎙️');
+        setStatus(heardSpeech ? 'Phrase conservée — reprise du micro…' : 'Conversation activée — reprise du micro…');
         micLiveRestart(Math.min(1500, 600 + emptyMicSessions * 150));
         return;
       }
       if (e.error !== 'aborted') micError(e.error);
     };
-    session.onspeechend = () => { if (recog === session) { try { session.stop?.(); } catch {} } };
+    session.onspeechstart = session.onsoundstart = () => { if (recog === session) armWatchdog(); };
+    session.onspeechend = () => {
+      if (recog !== session) return;
+      setStatus('Je termine la dictée…');
+      armWatchdog(8000);
+      try { session.stop?.(); } catch {}
+    };
     session.onend = () => {
       if (recog !== session) return;
       stopListening();
       if (liveMic) {
         emptyMicSessions = heardSpeech ? 0 : emptyMicSessions + 1;
         // Une fin normale ou un silence n'est pas une panne du micro.
-        setStatus('Mode conversation actif — prends ton temps, je t’écoute 🎙️');
+        setStatus(heardSpeech ? 'Phrase conservée — reprise du micro…' : 'Conversation activée — reprise du micro…');
         micLiveRestart(heardSpeech ? 300 : Math.min(1500, 600 + emptyMicSessions * 150)); return;
       }
-      setStatus("Je t'écoute 👂");
+      setStatus(heardSpeech ? 'Phrase conservée — vérifie-la puis touche Envoyer.' : 'Micro arrêté — touche 🎤 pour dicter.');
     };
     $('btn-mic').classList.add('recording');
     setStatus('Démarrage du micro… Autorise-le si Safari le demande.');
-    micTimer = setTimeout(() => {
+    function armWatchdog(delay = 30000) {
+      clearTimeout(micTimer);
+      micTimer = setTimeout(() => {
       if (recog !== session) return;
       stopListening();
       if (liveMic && !document.hidden) {
@@ -1119,9 +1152,16 @@ function startListening() {
         micLiveRestart(1500);
         return;
       }
-      // En dictée simple, une session bloquée demande un nouveau toucher.
+      // Ne pas perdre une phrase reconnue si le résultat final manque.
+      if (heardSpeech) {
+        micDraftReview = true;
+        setStatus('Phrase conservée — vérifie-la puis touche Envoyer, ou 🎤 pour compléter.');
+        return;
+      }
       micError('timeout');
-    }, 30000);
+      }, delay);
+    }
+    armWatchdog();
     // Safari gère lui-même ses permissions. Ne pas attendre getUserMedia
     // avant start() : cela peut perdre le geste et monopoliser le micro.
     session.start();
