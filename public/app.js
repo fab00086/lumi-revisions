@@ -1496,6 +1496,26 @@ async function renderParentArea() {
   box.innerHTML = html;
 }
 
+// ---------- Navigation réservée à la session administrateur ----------
+let adminNavigationGeneration = 0;
+async function refreshAdminNavigation() {
+  const generation = ++adminNavigationGeneration;
+  const links = document.querySelectorAll('a[href="/admin.html"]');
+  // Masquer immédiatement : aucun droit déduit d'un profil ou du stockage local.
+  links.forEach(link => link.classList.add('hidden'));
+  try {
+    const response = await fetch('/api/admin/session', { cache: 'no-store' });
+    if (!response.ok) return;
+    const session = await response.json();
+    if (generation !== adminNavigationGeneration) return;
+    links.forEach(link => link.classList.toggle('hidden', session.open !== true));
+  } catch { /* En cas de doute, le bouton reste masqué. */ }
+}
+window.addEventListener('focus', refreshAdminNavigation);
+window.addEventListener('pageshow', refreshAdminNavigation);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshAdminNavigation(); });
+refreshAdminNavigation();
+
 // ---------- Démarrage ----------
 // Si l'app est protégée par un code d'accès (mode hébergé), on l'affiche
 // d'abord ; sinon on ouvre directement l'écran des profils.

@@ -103,3 +103,24 @@ test('admin : les espaces de copie autour de la variable Render ne rendent pas l
    assert.equal((await f.post('/api/admin/login',{code:'autre-code'},'')).status,401);
  }finally{await f.close();}
 });
+test('bouton Admin : invisible pour une famille, visible pour la session admin et masqué après déconnexion ou échec réseau',async()=>{
+ const front=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');
+ const links=[{hidden:false},{hidden:false}];for(const l of links)l.classList={add:()=>l.hidden=true,toggle:(_,v)=>l.hidden=v};
+ let open=false,fail=false;
+ const c=vm.createContext({document:{querySelectorAll:()=>links},fetch:async()=>{if(fail)throw Error('offline');return {ok:true,json:async()=>({open})};}});
+ vm.runInContext(front.slice(front.indexOf('let adminNavigationGeneration'),front.indexOf("window.addEventListener('focus', refreshAdminNavigation)")),c);
+ await c.refreshAdminNavigation();assert.ok(links.every(l=>l.hidden));
+ open=true;await c.refreshAdminNavigation();assert.ok(links.every(l=>!l.hidden));
+ open=false;await c.refreshAdminNavigation();assert.ok(links.every(l=>l.hidden));
+ open=true;await c.refreshAdminNavigation();fail=true;await c.refreshAdminNavigation();assert.ok(links.every(l=>l.hidden));
+ const html=fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8');
+ assert.equal((html.match(/href="\/admin.html" class="management-link hidden" data-admin-link/g)||[]).length,2);
+});
+test('session famille seule : aucun statut admin, toutes les commandes admin sont refusées',async()=>{
+ const f=await fixture();try {
+   const a=await f.create(),login=await f.unlock(a.code);
+   const session=await(await fetch(f.base+'/api/admin/session',{headers:{Cookie:login.cookie}})).json();assert.equal(session.open,false);
+   assert.equal((await fetch(f.base+'/api/admin/accounts',{headers:{Cookie:login.cookie}})).status,401);
+   assert.equal((await f.post('/api/admin/account',{id:'local',action:'delete'},login.cookie)).status,401);
+ }finally{await f.close();}
+});
