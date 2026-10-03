@@ -30,6 +30,7 @@ function cancelChat() {
   voiceAudioText = '';
   if (voiceAudio) { voiceAudio.src = '/audio-ready.wav'; voiceAudio.hidden = true; }
   $('voice-playback').classList.add('hidden');
+  $('voice-player')?.classList.add('hidden');
   chatGeneration++;
   if (activeChat) activeChat.abort();
   activeChat = null;
@@ -505,10 +506,21 @@ let voiceAudio = null;
 let voiceAudioUrl = null;
 let voiceAudioText = '';
 let voiceAudioCreated = 0;
+let voiceAudioParts = [];
 let voiceAudioBusy = false;
 let voiceRequest = null;
 function setAudioSession(type) {
   try { if (navigator.audioSession) navigator.audioSession.type = type; } catch { /* API facultative. */ }
+}
+function serverSpeechParts(text) {
+  const value = text.slice(0, 3000);
+  if (value.length <= 400) return [value];
+  // Une première phrase courte démarre pendant la préparation du reste.
+  const opening = value.slice(0, 320);
+  const ends = [...opening.matchAll(/[.!?](?:\s|$)/g)];
+  const boundary = ends.find(match => match.index >= 90)?.index + 1;
+  const cut = Number.isFinite(boundary) ? boundary : (opening.lastIndexOf(' ') > 0 ? opening.lastIndexOf(' ') : opening.length);
+  return [value.slice(0, cut).trim(), value.slice(cut).trim()];
 }
 function unlockVoiceAudio() {
   if (!voiceAudio) {
@@ -516,10 +528,10 @@ function unlockVoiceAudio() {
     voiceAudio.id = 'lumi-audio'; voiceAudio.hidden = true;
     voiceAudio.onplay = () => {
       stopListening(); setAudioSession('playback'); voiceAudioBusy = true;
-      voiceAudio.onended = () => {
-        voiceAudioBusy = false; $('avatar').classList.remove('talking'); $('btn-stop').classList.add('hidden');
-        setStatus("Je t'écoute 👂"); if (typeof micLiveResume === 'function') micLiveResume();
-      };
+      if (voiceAudioUrl && voiceAudio.src !== '/audio-ready.wav' && !voiceAudio.src.endsWith('/audio-ready.wav')) {
+        $('avatar').classList.add('talking'); $('btn-stop').classList.remove('hidden');
+        setStatus('Je parle 🗣️ (appuie sur ✋ pour me couper)');
+      }
     };
     $('voice-playback')?.appendChild?.(voiceAudio);
   }
@@ -538,37 +550,80 @@ async function speakAudio(text) {
   voiceRequest = controller;
   $('btn-stop').classList.remove('hidden');
   setStatus('Lumi prépare sa voix…');
-  const timeout = setTimeout(() => controller.abort(), 90000);
+  const requestPart = async part => {
+    const timeout = setTimeout(() => controller.abort(), 90000);
+    try {
+      const response = await fetch('/api/speech', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: part, format: 'url' }), signal: controller.signal,
+      });
+      if (!response.ok) throw Error((await response.json()).error || 'Voix indisponible.');
+      const result = await response.json();
+      if (!/^\/api\/speech\/audio\/[a-f0-9]{48}$/.test(result.url)) throw Error('Fichier vocal indisponible.');
+      return result.url;
+    } finally { clearTimeout(timeout); }
+  };
+  let remaining = null;
+  const failed = error => {
+    if (gen !== speakGen) return;
+    voiceAudioBusy = false;
+    $('avatar').classList.remove('talking');
+    if (error.name !== 'NotAllowedError') voiceAudioCreated = 0;
+    $('btn-stop').classList.add('hidden');
+    const player = $('voice-player');
+    if (player && voiceAudioUrl) { player.classList.remove('hidden'); player.open = true; }
+    setStatus(error.name === 'NotAllowedError' ? 'La voix est prête. Appuie sur 🔊 Écouter Lumi ou sur le lecteur audio.' : error.name === 'AbortError' ? 'Voix trop longue à préparer. Appuie sur Écouter Lumi pour réessayer.' : error.message);
+    if (typeof micLiveResume === 'function') micLiveResume();
+  };
   try {
     const cached = voiceAudioUrl && voiceAudioText === text && Date.now() - voiceAudioCreated < 240000;
     // Le pré-déverrouillage peut rester bloqué sur mobile : il ne doit pas bloquer la requête vocale.
     if (!cached) unlockVoiceAudio().catch(() => {});
     if (!cached) {
-    const response = await fetch('/api/speech', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text.slice(0, 3000), format: 'url' }), signal: controller.signal,
-    });
-    if (!response.ok) throw Error((await response.json()).error || 'Voix indisponible.');
-    const result = await response.json();
-    if (!/^\/api\/speech\/audio\/[a-f0-9]{48}$/.test(result.url)) throw Error('Fichier vocal indisponible.');
+    const parts = serverSpeechParts(text);
+    const firstUrl = await requestPart(parts[0]);
     if (gen !== speakGen) return;
     if (voiceAudioUrl) URL.revokeObjectURL(voiceAudioUrl);
-    voiceAudioUrl = result.url;
+    voiceAudioUrl = firstUrl;
     voiceAudioCreated = Date.now();
     voiceAudioText = text;
+    voiceAudioParts = [Promise.resolve(firstUrl)];
+    if (parts.length > 1) {
+      remaining = requestPart(parts[1]).then(url => ({ url }), error => ({ error })).finally(() => {
+        if (voiceRequest === controller) voiceRequest = null;
+      });
+      // Une promesse résolue d'erreur évite un rejet sans gestion pendant la première phrase.
+      voiceAudioParts.push(remaining);
     }
-    // Réaffecter aussi la source lors d'une relance après retour au premier plan (Safari/PWA).
-    voiceAudio.src = voiceAudioUrl;
+    }
+    // Sur iPhone, garder le fichier déjà prêt permet au bouton de le jouer dans le toucher.
+    if (!cached || !voiceAudio.src.endsWith(voiceAudioUrl)) voiceAudio.src = voiceAudioUrl;
     voiceAudio.controls = true; voiceAudio.hidden = false; voiceAudio.muted = false;
     $('voice-playback').classList.remove('hidden');
+    const player = $('voice-player');
+    if (player) { player.classList.remove('hidden'); player.open = false; }
     voiceAudio.currentTime = 0;
     voiceAudio.volume = 1;
     voiceAudio.playbackRate = Math.max(0.6, Math.min(1.5, voiceRate || 1));
-    voiceAudio.onended = () => {
+    let partIndex = 0;
+    voiceAudio.onended = async () => {
       if (gen !== speakGen) return;
+      if (++partIndex < voiceAudioParts.length) {
+        try {
+          setStatus('Lumi continue…');
+          const next = await voiceAudioParts[partIndex];
+          if (gen !== speakGen) return;
+          if (next.error) throw next.error;
+          voiceAudio.src = next.url;
+          await voiceAudio.play();
+          if (gen === speakGen) setStatus('Je parle 🗣️ (appuie sur ✋ pour me couper)');
+        } catch (error) { failed(error); }
+        return;
+      }
       voiceAudioBusy = false;
       $('avatar').classList.remove('talking');
       $('btn-stop').classList.add('hidden');
+      if (player) { player.open = false; player.classList.add('hidden'); }
       setStatus("Je t'écoute 👂");
       if (typeof micLiveResume === 'function') micLiveResume();
     };
@@ -584,14 +639,9 @@ async function speakAudio(text) {
     $('avatar').classList.add('talking');
     setStatus('Je parle 🗣️ (appuie sur ✋ pour me couper)');
   } catch (error) {
-    if (gen !== speakGen) return;
-    voiceAudioBusy = false;
-    $('btn-stop').classList.add('hidden');
-    setStatus(error.name === 'NotAllowedError' ? 'La voix est prête. Appuie sur 🔊 Écouter Lumi pour la lancer.' : error.name === 'AbortError' ? 'Voix trop longue à préparer. Appuie sur Écouter Lumi pour réessayer.' : error.message);
-    if (typeof micLiveResume === 'function') micLiveResume();
+    failed(error);
   } finally {
-    clearTimeout(timeout);
-    if (voiceRequest === controller) voiceRequest = null;
+    if (!remaining && voiceRequest === controller) voiceRequest = null;
   }
 }
 $('btn-listen').addEventListener('click', () => speak(lastSpeechText || 'Bonjour ! Je suis Lumi.'));
@@ -618,11 +668,18 @@ let speakGen = 0;
 function stopSpeech() {
   speakGen++; // invalide les fins d'ecoute des morceaux en cours
   voiceAudioBusy = false;
-  if (voiceRequest) { voiceRequest.abort(); voiceRequest = null; }
+  if (voiceRequest) {
+    if (voiceAudioParts.length > 1) voiceAudioCreated = 0;
+    voiceRequest.abort(); voiceRequest = null;
+  }
+  $('voice-player')?.classList.add('hidden');
   if (voiceAudio) { voiceAudio.onended = null; voiceAudio.onerror = null; voiceAudio.pause(); }
   clearTimeout(speechTimer);
   speechUtterances = [];
-  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch {}
+  try {
+    // Éviter cancel() sur une file vide : Safari peut annuler le nouvel énoncé qui suit.
+    if ('speechSynthesis' in window && (speechSynthesis.speaking || speechSynthesis.pending || speechSynthesis.paused)) speechSynthesis.cancel();
+  } catch {}
   $('avatar').classList.remove('talking');
   $('btn-stop').classList.add('hidden');
   setStatus("Je t'écoute 👂");
@@ -673,7 +730,7 @@ function speak(text) {
       };
       for (const part of parts) {
         const u = new SpeechSynthesisUtterance(part);
-        u.lang = 'fr-FR';
+        u.lang = voice?.lang || 'fr-FR';
         u.rate = voiceRate || 1;
         u.volume = 1;
         if (voice) u.voice = voice;

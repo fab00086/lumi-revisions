@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
 function section(a, b) { return source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a))); }
-function setup(serverVoice = false, blockedSilent = false) {
+function setup(serverVoice = false, blockedSilent = false, blockedAuto = false) {
   const elements = new Map(), timers = new Map(), bubbles = [], spoken = [], sessions = [], documentHandlers = {};
   let timerId = 0, gesture = false;
   const $ = id => {
@@ -23,16 +23,21 @@ function setup(serverVoice = false, blockedSilent = false) {
     abort() { this.aborted = true; if (this.onend) this.onend(); }
     stop() { this.stopped = true; }
   }
-  const synth = { paused: false, resumedInGesture: false, cancel() {},
+  const synth = { paused: false, resumedInGesture: false, cancelled: 0, cancel() { this.cancelled++; },
     resume() { this.paused = false; this.resumedInGesture = gesture; },
     speak(u) { spoken.push({ utterance: u, gesture, paused: this.paused }); } };
-  const audioPlays = [], audio = { src: '/audio-ready.wav', pause() { this.paused = true; }, play() { audioPlays.push({ gesture, src: this.src }); return blockedSilent && this.src === '/audio-ready.wav' ? new Promise(()=>{}) : Promise.resolve(); } };
-  let pendingVoice;
+  const audioPlays = [], audio = { src: '/audio-ready.wav', pause() { this.paused = true; }, play() {
+    audioPlays.push({ gesture, src: this.src });
+    if (blockedSilent && this.src === '/audio-ready.wav') return new Promise(()=>{});
+    if (blockedAuto && this.src !== '/audio-ready.wav' && !gesture) return Promise.reject(Object.assign(Error('Toucher requis'),{name:'NotAllowedError'}));
+    return Promise.resolve();
+  } };
+  const pendingVoices = [], voiceRequests = [];
   const c = vm.createContext({ $, navigator: { userAgent: 'iPhone' },
     voiceMode: serverVoice ? 'server' : 'native', AbortController,
     Audio: class { constructor() { return audio; } },
     URL: { createObjectURL: () => '/api/speech/audio/'+'a'.repeat(48), revokeObjectURL() {} },
-    fetch: () => new Promise(resolve => { pendingVoice = resolve; }),
+    fetch: (url, options) => new Promise(resolve => { voiceRequests.push({url,...options}); pendingVoices.push(resolve); }),
     document: { hidden: false, addEventListener(type, fn) { documentHandlers[type] = fn; } },
     window: { webkitSpeechRecognition: Recognition, isSecureContext: true, speechSynthesis: synth },
     speechSynthesis: synth, SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
@@ -47,8 +52,39 @@ function setup(serverVoice = false, blockedSilent = false) {
   vm.runInContext(section('// ---------- Micro (voix)', '// ---------- Envoi'), c);
   const click = id => { gesture = true; try { $(id).handlers.click(); documentHandlers.click?.(); } finally { gesture = false; } };
   return { c, $, click, timers, bubbles, spoken, sessions, documentHandlers, synth, audioPlays, audio,
-    finishVoice: async () => { pendingVoice({ ok: true, json: async () => ({url:'/api/speech/audio/'+'a'.repeat(48)}) }); await new Promise(resolve => setImmediate(resolve)); } };
+    voiceRequests,
+    finishVoice: async (letter='a') => { pendingVoices.shift()({ ok: true, json: async () => ({url:'/api/speech/audio/'+letter.repeat(48)}) }); await new Promise(resolve => setImmediate(resolve)); } };
 }
+
+test('voix longue : première phrase jouée sans attendre la suite, micro repris après le dernier morceau',async()=>{
+ const t=setup(true);t.click('btn-mic-live');
+ const text='Imagine une pizza coupée en quatre parts égales pour partager ton goûter avec tes amis. Chaque part représente un quart. '+ 'Deux parts font une moitié. '.repeat(30);
+ t.c.speak(text);assert.equal(t.voiceRequests.length,1);
+ await t.finishVoice('a');assert.equal(t.voiceRequests.length,2);
+ const parts=t.voiceRequests.map(r=>JSON.parse(r.body).text);
+ assert.ok(parts[0].length<=320);assert.equal(parts.join(' '),text.trim());
+ assert.ok(t.audioPlays.some(p=>p.src.endsWith('a'.repeat(48))));
+ assert.equal(t.$('voice-player').open,false);
+ const next=t.audio.onended();assert.equal(t.sessions.length,1);
+ await t.finishVoice('b');await next;assert.ok(t.audio.src.endsWith('b'.repeat(48)));
+ assert.equal(t.timers.size,0);await t.audio.onended();assert.equal(t.timers.size,1);
+ assert.equal(t.$('voice-player').classList.contains('hidden'),true);
+});
+
+test('iPhone : lecture automatique refusée ouvre le secours, bouton Écouter joue le fichier prêt dans le toucher',async()=>{
+ const t=setup(true,false,true);t.click('btn-test-voice');await t.finishVoice();
+ assert.equal(t.$('voice-player').open,true);assert.match(t.c.status,/lecteur audio/);
+ const requests=t.voiceRequests.length;t.click('btn-listen');await new Promise(r=>setImmediate(r));
+ assert.equal(t.voiceRequests.length,requests);assert.equal(t.audioPlays.at(-1).gesture,true);
+ assert.match(t.c.status,/Je parle/);assert.equal(t.$('voice-player').open,false);
+});
+
+test('voix longue : Stop pendant la préparation de la suite interdit une lecture tardive',async()=>{
+ const t=setup(true);t.c.speak('Une phrase qui explique calmement la première étape du calcul, avec un exemple facile pour commencer. '+ 'La suite de la leçon. '.repeat(30));
+ await t.finishVoice();const next=t.audio.onended();t.click('btn-stop');
+ const plays=t.audioPlays.length;await t.finishVoice('b');await next;
+ assert.equal(t.audioPlays.length,plays);assert.ok(!t.$('avatar').classList.contains('talking'));
+});
 
 test('voix fichier : active la sortie dans le toucher, lit la réponse et reprend le micro après la fin', async () => {
   const t = setup(true); t.click('btn-mic-live');
@@ -93,6 +129,12 @@ test('voix iPhone : le bouton reprend une synthèse en pause dans le toucher', (
   assert.equal(t.synth.resumedInGesture, true);
   assert.equal(t.spoken[0].paused, false);
   assert.equal(t.spoken[0].utterance.volume, 1);
+});
+
+test('voix Safari : premier toucher ne vide pas une file déjà vide, et respecte la langue de la voix choisie',()=>{
+ const t=setup();t.c.pickBestVoice=()=>({name:'Amélie',lang:'fr-CA'});
+ t.click('btn-test-voice');assert.equal(t.synth.cancelled,0);assert.equal(t.spoken[0].utterance.lang,'fr-CA');
+ t.synth.pending=true;t.click('btn-stop');assert.equal(t.synth.cancelled,1);
 });
 
 test('voix mobile : laisse le téléphone choisir, sans forcer une voix distante', () => {

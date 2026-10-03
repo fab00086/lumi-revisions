@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lumi — vérifier les voix du téléphone</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    main { max-width: 440px; margin: 24px auto; padding: 20px; }
+    h1 { font-size: 24px; margin-bottom: 12px; }
+    p { line-height: 1.6; margin: 12px 0; }
+    button, select { display: block; width: 100%; margin: 12px 0; }
+    select { font-size: 16px; padding: 12px; border-radius: 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Les voix du téléphone</h1>
+    <p>Ce test utilise seulement la voix de l’iPhone ou d’Android. Aucun micro, aucune voix Lumi et aucun envoi de données.</p>
+    <label for="voices">Voix à essayer</label>
+    <select id="voices"><option value="">Voix automatique</option></select>
+    <button id="play" class="btn btn-primary">🔊 Faire parler le téléphone</button>
+    <button id="stop" class="btn">Arrêter</button>
+    <p id="status" role="status" aria-live="polite">Choisis une voix, puis touche le bouton. Monte le volume et désactive le mode silencieux.</p>
+    <p id="heard" hidden>As-tu entendu la phrase ? Le démarrage annoncé par Safari ne garantit pas qu’un son soit sorti.</p>
+    <a href="/">Revenir à Lumi</a>
+  </main>
+  <script>
+    'use strict';
+    const select = document.getElementById('voices');
+    const status = document.getElementById('status');
+    const synth = window.speechSynthesis;
+    let utterance = null, timer = null, revision = 0;
+    function populate() {
+      const previous = select.value;
+      select.replaceChildren(new Option('Voix automatique', ''));
+      if (!synth) return;
+      for (const voice of synth.getVoices().filter(v => /^fr/i.test(v.lang))) {
+        select.add(new Option(voice.name + ' · ' + voice.lang, voice.voiceURI));
+      }
+      if ([...select.options].some(o => o.value === previous)) select.value = previous;
+    }
+    populate();
+    if (synth) synth.addEventListener('voiceschanged', populate);
+    document.getElementById('stop').addEventListener('click', () => {
+      revision++; clearTimeout(timer); utterance = null;
+      if (synth) synth.cancel();
+      status.textContent = 'Lecture arrêtée. Attends un instant, puis retouche le bouton pour réessayer.';
+    });
+    document.getElementById('play').addEventListener('click', () => {
+      if (!synth) { status.textContent = 'Ce navigateur ne propose pas de voix du téléphone.'; return; }
+      if (synth.speaking || synth.pending) { status.textContent = 'Une lecture est déjà en cours ou bloquée. Touche Arrêter, puis réessaie.'; return; }
+      const current = ++revision;
+      clearTimeout(timer); document.getElementById('heard').hidden = true;
+      // Une seule phrase, dans le toucher, sans cancel() avant speak().
+      utterance = new SpeechSynthesisUtterance('Bonjour. Ceci est la voix de ton téléphone. Est-ce que tu m’entends ?');
+      const voice = synth.getVoices().find(v => v.voiceURI === select.value);
+      utterance.lang = voice?.lang || 'fr-FR';
+      if (voice) utterance.voice = voice;
+      utterance.volume = 1; utterance.rate = 1;
+      utterance.onstart = () => { if (current !== revision) return; clearTimeout(timer); status.textContent = 'Safari annonce que la voix a démarré.'; document.getElementById('heard').hidden = false; };
+      utterance.onend = () => { if (current !== revision) return; clearTimeout(timer); status.textContent = 'Le téléphone annonce que la phrase est terminée.'; document.getElementById('heard').hidden = false; utterance = null; };
+      utterance.onerror = event => { if (current !== revision) return; clearTimeout(timer); status.textContent = 'Le téléphone a refusé la voix : ' + event.error + '.'; utterance = null; };
+      status.textContent = 'Demande de lecture envoyée au téléphone…';
+      timer = setTimeout(() => { if (current === revision) status.textContent = 'Le téléphone ne signale aucun démarrage après 5 secondes. Touche Arrêter pour réessayer une autre voix.'; }, 5000);
+      if (synth.paused) synth.resume();
+      synth.speak(utterance);
+    });
+  </script>
+</body>
+</html>

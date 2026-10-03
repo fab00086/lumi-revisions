@@ -150,7 +150,10 @@
       </div>
     </div>
 
-    <div id="voice-playback" class="hidden" aria-label="Lecteur de la réponse de Lumi"></div>
+    <details id="voice-player" class="voice-player hidden">
+      <summary>🔊 Lecteur audio</summary>
+      <div id="voice-playback" class="hidden" aria-label="Lecteur de la réponse de Lumi"></div>
+    </details>
     <div id="chat" class="chat"></div>
 
     <div class="inputbar">
@@ -240,6 +243,7 @@
       </label>
       <p class="hint">Choisis « Lumi — voix française » sur iPhone et Android. La première lecture peut prendre quelques secondes.</p>
       <button id="btn-test-voice" class="btn" type="button">🔊 Tester la voix</button>
+      <a class="btn" href="/test-voix.html" target="_blank" rel="noopener">Tester les voix du téléphone seules</a>
       <button class="btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
       <a class="btn" href="/confidentialite.html" target="_blank" rel="noopener">Confidentialité et mes données</a>
       <button id="btn-test-sound" class="btn" type="button">🎵 Tester le son du téléphone</button>

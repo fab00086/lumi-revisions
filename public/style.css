@@ -524,6 +524,8 @@ body {
 #screen-chat .chat { min-height: 0; padding: 12px; }
 #screen-chat #voice-playback { flex-shrink: 0; padding: 4px 12px; }
 #screen-chat #voice-playback audio { height: 40px; }
+.voice-player { flex-shrink: 0; background: var(--card); }
+.voice-player summary { min-height: 30px; padding: 5px 12px; color: var(--violet-dark); font-size: 13px; cursor: pointer; }
 #screen-chat .inputbar { flex-shrink: 0; grid-template-columns: 44px minmax(0,1fr) minmax(0,1fr) 52px; gap: 6px; padding: 8px 10px; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
 #screen-chat .inputbar input[type="text"] { grid-column: 2 / 4; grid-row: 1; padding: 10px; }
 #screen-chat #btn-camera { grid-column: 1; grid-row: 1; height: 48px; }
