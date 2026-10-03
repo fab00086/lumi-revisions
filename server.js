@@ -10,6 +10,7 @@ import http from 'http';
 import https from 'https';
 import selfsigned from 'selfsigned';
 import { createHash } from 'node:crypto';
+import { speechAvailable, generateSpeech } from './speech.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -327,6 +328,97 @@ app.use(express.static(path.join(__dirname, 'public'), {
 // Si LUMI_ACCESS_CODE est defini, toutes les routes /api demandent ce code
 // (entre une fois dans le navigateur, retenu par un cookie 1 an).
 const ACCESS_CODE = String(process.env.LUMI_ACCESS_CODE || '').trim();
+// ---------- Notifications privées des demandes d'accès ----------
+let ADMIN_EMAIL = String(process.env.LUMI_ADMIN_EMAIL || '').trim();
+let MAIL_API_KEY = String(process.env.RESEND_API_KEY || '').trim();
+const MAIL_FROM = String(process.env.LUMI_EMAIL_FROM || 'Lumi <onboarding@resend.dev>').trim();
+const MAIL_PUBLIC_URL = String(process.env.LUMI_PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || '').trim();
+async function mailEncryptionKey() {
+  return crypto.subtle.importKey('raw', new Uint8Array(createHash('sha256').update(ADMIN_CODE).digest()), 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+async function sealMailKey(value) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await mailEncryptionKey(), new TextEncoder().encode(value));
+  return { iv: Array.from(iv), bytes: Array.from(new Uint8Array(encrypted)) };
+}
+async function loadMailSettings() {
+  let settings;
+  if (sql) {
+    sql.exec('CREATE TABLE IF NOT EXISTS app_settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    const row = sql.prepare('SELECT value FROM app_settings WHERE name=?').get('notifications');
+    settings = row ? JSON.parse(row.value) : null;
+  } else settings = getData()._notifications;
+  if (!settings) return;
+  ADMIN_EMAIL = String(settings.email || '').trim();
+  try {
+    const bytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(settings.key.iv) }, await mailEncryptionKey(), new Uint8Array(settings.key.bytes));
+    MAIL_API_KEY = new TextDecoder().decode(bytes);
+  } catch { MAIL_API_KEY = ''; }
+}
+async function saveMailSettings(email, key) {
+  const settings = { email, key: await sealMailKey(key) };
+  if (sql) {
+    sql.exec('CREATE TABLE IF NOT EXISTS app_settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    sql.prepare('INSERT OR REPLACE INTO app_settings(name,value) VALUES (?,?)').run('notifications', JSON.stringify(settings));
+  } else { const data = getData(); data._notifications = settings; await setData(data); }
+  ADMIN_EMAIL = email;
+  MAIL_API_KEY = key;
+}
+function accessMailConfigured() {
+  return !!MAIL_API_KEY && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ADMIN_EMAIL) && /^https:\/\//.test(MAIL_PUBLIC_URL);
+}
+async function updateAccessMail(id, update) {
+  const task = writeQueue.then(async () => {
+    const acc = await accountById(id);
+    if (!acc?.settings?.pending || !acc.settings.accessRequestMail) return null;
+    if (update(acc.settings.accessRequestMail) === false) return null;
+    await accountPut(acc);
+    return acc;
+  });
+  writeQueue = task.catch(() => {});
+  return task;
+}
+let accessMailTask = null;
+function notifyAccessRequests() {
+  if (!accessMailConfigured()) return Promise.resolve();
+  if (accessMailTask) return accessMailTask;
+  accessMailTask = (async () => {
+    const candidates = (await allAccounts()).filter(a => a.settings?.pending && a.settings.accessRequestMail && !['sent', 'review'].includes(a.settings.accessRequestMail.status) && !(Number(a.settings.accessRequestMail.nextAttemptAt) > Date.now()));
+    for (const candidate of candidates.slice(0, 25)) {
+      const now = Date.now();
+      const acc = await updateAccessMail(candidate.id, mail => {
+        if (mail.status === 'sent' || mail.status === 'review' || Number(mail.nextAttemptAt) > now) return false;
+        // La déduplication du fournisseur dure 24 h : aucune reprise automatique au-delà.
+        if (mail.firstAttemptAt && now - mail.firstAttemptAt > 20 * 3600000) { mail.status = 'review'; return; }
+        mail.firstAttemptAt ||= now;
+        mail.attempts = (mail.attempts || 0) + 1;
+        mail.status = 'sending';
+        mail.nextAttemptAt = now + Math.min(3600000, 60000 * 2 ** Math.min(mail.attempts, 6));
+      });
+      if (!acc || acc.settings.accessRequestMail.status !== 'sending') continue;
+      try {
+        // Destinataire exclusivement issu de la configuration, jamais d'un formulaire public.
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST', signal: AbortSignal.timeout(10000),
+          headers: { Authorization: 'Bearer ' + MAIL_API_KEY, 'Content-Type': 'application/json',
+            'Idempotency-Key': 'lumi-access-' + acc.id + '-' + createHash('sha256').update(ADMIN_EMAIL).digest('hex').slice(0, 16) },
+          body: JSON.stringify({ from: MAIL_FROM, to: [ADMIN_EMAIL], subject: 'Lumi — nouvelle demande d’accès',
+            text: 'Une famille vient de demander un accès à Lumi.\n\nConsulte la demande dans ta gestion privée :\n' + new URL('/admin.html', MAIL_PUBLIC_URL).href +
+              '\n\nAucun accès n’est accordé automatiquement. Tu choisis les limites et transmets le code après approbation.' })
+        });
+        if (!response.ok) throw new Error('Envoi refusé');
+        const result = await response.json();
+        if (!result.id) throw new Error('Confirmation absente');
+        await updateAccessMail(acc.id, mail => { mail.status = 'sent'; mail.sentAt = new Date().toISOString(); mail.providerId = result.id; });
+      } catch {
+        await updateAccessMail(acc.id, mail => { mail.status = 'retry'; });
+        console.warn('Notification de demande : envoi différé, demande conservée.');
+      }
+    }
+  })().finally(() => { accessMailTask = null; });
+  return accessMailTask;
+}
+// ---------- Limitation des tentatives ----------
 const loginAttempts = new Map();
 function allowLoginAttempt(req, res, prefix = 'login', max = 20) {
   const key = prefix + ':' + (req.ip || req.socket?.remoteAddress || 'unknown');
@@ -382,9 +474,14 @@ app.post('/api/access-request', storedRoute(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || req.body.consent !== true)
     return res.status(400).json({ error: 'Indique ton nom, ton e-mail et confirme que tu es le parent.' });
-  if (!await accountByEmail(email)) await accountPut({ id: 'a' + newToken().slice(0, 12), email,
-    passHash: '', plan: 'pending', created: new Date().toISOString(), consentDate: new Date().toISOString(),
-    settings: { label: name, blocked: true, pending: true, maxDevices: 1, dailyLimit: 20 }, usage: {} });
+  if (!await accountByEmail(email)) {
+    await accountPut({ id: 'a' + newToken().slice(0, 12), email,
+      passHash: '', plan: 'pending', created: new Date().toISOString(), consentDate: new Date().toISOString(),
+      settings: { label: name, blocked: true, pending: true, maxDevices: 1, dailyLimit: 20,
+        accessRequestMail: { status: 'pending', queuedAt: new Date().toISOString() } }, usage: {} });
+    // Envoi séparé : le formulaire ne doit ni attendre l'e-mail, ni perdre sa demande en cas d'échec.
+    notifyAccessRequests().catch(() => console.warn('Notification de demande : sauvegarde à réessayer.'));
+  }
   res.status(202).json({ ok: true, message: 'Demande enregistrée. Le responsable de Lumi te transmettra un code si ton accès est autorisé.' });
 }));
 app.use('/api', (req, res, next) => {
@@ -401,6 +498,23 @@ app.use('/api', (req, res, next) => {
 });
 
 // Certificat telechargeable : l'iPhone doit l'installer dans ses reglages
+// The family gate above also protects speech, including when accessed directly.
+const speechRequests = new Map();
+app.get('/api/speech/status', (_req, res) => res.json({ available: speechAvailable() }));
+app.post('/api/speech', async (req, res) => {
+  const owner = await resolveAccount(req);
+  if (!owner) return res.status(401).json({ error: 'Accès famille requis.' });
+  const text = req.body?.text;
+  if (typeof text !== 'string' || !text.trim() || text.length > 3000) return res.status(400).json({ error: 'Texte vocal invalide ou trop long.' });
+  const now = Date.now(), id = owner.account.id;
+  for (const [key, value] of speechRequests) if (now - value.start >= 60000) speechRequests.delete(key);
+  const limit = speechRequests.get(id) || { start: now, count: 0 };
+  if (++limit.count > 20) return res.status(429).json({ error: 'Trop de lectures. Réessaie dans une minute.' });
+  speechRequests.set(id, limit);
+  try { res.type('audio/wav').send(await generateSpeech(text)); }
+  catch (error) { res.status(error.status || 503).json({ error: error.message }); }
+});
+
 // pour que Safari autorise le micro et la reconnaissance vocale.
 // (Le simple bouton "Continuer" de l'avertissement ne suffit pas pour le micro.)
 app.get('/lumi-cert.crt', (req, res) => {
@@ -868,6 +982,19 @@ function requireAdmin(req, res) {
   return true;
 }
 app.get('/api/admin/session', (req, res) => res.json({ enabled: !!ADMIN_CODE, open: hasAdmin(req), localMode: LOCAL_MODE }));
+app.get('/api/admin/notifications', (req, res) => {
+  if (!hasAdmin(req)) return res.status(401).json({ error: 'Connexion administrateur requise.' });
+  res.json({ email: ADMIN_EMAIL, hasKey: !!MAIL_API_KEY, configured: accessMailConfigured() });
+});
+app.post('/api/admin/notifications', storedRoute(async (req, res) => {
+  if (!hasAdmin(req)) return res.status(401).json({ error: 'Connexion administrateur requise.' });
+  const email = String(req.body?.email || '').trim();
+  const key = String(req.body?.key || '').trim() || MAIL_API_KEY;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || !/^re_[A-Za-z0-9_-]{10,200}$/.test(key)) return res.status(400).json({ error: 'Indique ton adresse e-mail et une clé Resend valide.' });
+  await saveMailSettings(email, key);
+  res.json({ ok: true, configured: accessMailConfigured() });
+  notifyAccessRequests().catch(() => console.warn('Notification : reprise différée.'));
+}));
 app.post('/api/admin/login', (req, res) => {
   if (!allowLoginAttempt(req, res, 'admin', 10)) return;
   if (!ADMIN_CODE) return res.status(404).json({ error: 'Gestion des clients désactivée : définis LUMI_ADMIN_CODE.' });
@@ -886,11 +1013,12 @@ app.get('/api/admin/accounts', async (req, res, next) => {
   let rows;
   rows = await allAccounts();
   res.json({
-    freeDaily: FREE_DAILY, localMode: LOCAL_MODE,
+    freeDaily: FREE_DAILY, localMode: LOCAL_MODE, emailNotificationsEnabled: accessMailConfigured(),
     accounts: await Promise.all(rows.map(async a => ({
       id: a.id, email: a.email || '', plan: a.plan || 'free',
       label: a.settings?.label || a.email || 'Famille', blocked: !!a.settings?.blocked,
       pending: !!a.settings?.pending, codeAccess: !!a.settings?.accessCodeHash,
+      notificationStatus: a.settings?.accessRequestMail?.status || null,
       maxDevices: a.settings?.maxDevices || 1, connectedDevices: (await activeSessions(a.id)).length,
       trialEnds: a.trial_ends || a.trialEnds || null, created: a.created || null,
       dailyLimit: (a.settings && Number.isFinite(Number(a.settings.dailyLimit)) && a.settings.dailyLimit !== null) ? Number(a.settings.dailyLimit) : null,
@@ -1576,6 +1704,9 @@ app.post('/api/child', storedRoute(async (req, res) => {
 // ---------- Demarrage ----------
 (async () => {
   await initStore();
+  await loadMailSettings();
+  notifyAccessRequests().catch(() => console.warn('Notification de demande : reprise différée.'));
+  setInterval(() => { notifyAccessRequests().catch(() => console.warn('Notification de demande : reprise différée.')); }, 60000).unref();
 
   // HTTP : pour l'ordinateur (localhost = contexte sécurisé, pas d'avertissement)
   http.createServer(app).listen(PORT, '0.0.0.0', () => {

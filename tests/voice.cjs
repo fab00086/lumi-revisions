@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
 function section(a, b) { return source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a))); }
-function setup() {
+function setup(serverVoice = false) {
   const elements = new Map(), timers = new Map(), bubbles = [], spoken = [], sessions = [], documentHandlers = {};
   let timerId = 0, gesture = false;
   const $ = id => {
@@ -25,7 +25,13 @@ function setup() {
   const synth = { paused: false, resumedInGesture: false, cancel() {},
     resume() { this.paused = false; this.resumedInGesture = gesture; },
     speak(u) { spoken.push({ utterance: u, gesture, paused: this.paused }); } };
+  const audioPlays = [], audio = { src: '/audio-ready.wav', pause() { this.paused = true; }, play() { audioPlays.push({ gesture, src: this.src }); return Promise.resolve(); } };
+  let pendingVoice;
   const c = vm.createContext({ $, navigator: { userAgent: 'iPhone' },
+    voiceMode: serverVoice ? 'server' : 'native', AbortController,
+    Audio: class { constructor() { return audio; } },
+    URL: { createObjectURL: () => 'blob:voice', revokeObjectURL() {} },
+    fetch: () => new Promise(resolve => { pendingVoice = resolve; }),
     document: { hidden: false, addEventListener(type, fn) { documentHandlers[type] = fn; } },
     window: { webkitSpeechRecognition: Recognition, isSecureContext: true, speechSynthesis: synth },
     speechSynthesis: synth, SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
@@ -39,8 +45,32 @@ function setup() {
   vm.runInContext(section('// Un vrai bouton', '// ---------- Caméra'), c);
   vm.runInContext(section('// ---------- Micro (voix)', '// ---------- Envoi'), c);
   const click = id => { gesture = true; try { $(id).handlers.click(); documentHandlers.click?.(); } finally { gesture = false; } };
-  return { c, $, click, timers, bubbles, spoken, sessions, documentHandlers, synth };
+  return { c, $, click, timers, bubbles, spoken, sessions, documentHandlers, synth, audioPlays, audio,
+    finishVoice: async () => { pendingVoice({ ok: true, blob: async () => ({}) }); await new Promise(resolve => setImmediate(resolve)); } };
 }
+
+test('voix fichier : active la sortie dans le toucher, lit la réponse et reprend le micro après la fin', async () => {
+  const t = setup(true); t.click('btn-mic-live');
+  t.click('btn-test-voice');
+  assert.equal(t.audioPlays[0].gesture, true);
+  assert.equal(t.spoken.length, 0);
+  await new Promise(resolve => setImmediate(resolve));
+  t.c.micLiveResume();
+  assert.equal(t.timers.size, 1, 'seul le délai réseau reste actif pendant la préparation');
+  await t.finishVoice();
+  assert.equal(t.audio.src, 'blob:voice'); assert.match(t.c.status, /Je parle/);
+  t.c.micLiveResume(); assert.equal(t.timers.size, 0, 'aucun micro pendant la lecture');
+  t.audio.onended(); assert.equal(t.timers.size, 1, 'reprise après la voix');
+});
+
+test('voix fichier : Stop ignore une réponse tardive, et une deuxième lecture utilise le fichier dans le toucher', async () => {
+  const t = setup(true); t.click('btn-test-voice'); await new Promise(resolve => setImmediate(resolve));
+  t.click('btn-stop'); await t.finishVoice(); assert.ok(!t.$('avatar').classList.contains('talking'));
+  t.click('btn-test-voice'); await new Promise(resolve => setImmediate(resolve)); await t.finishVoice();
+  t.click('btn-stop'); t.click('btn-listen');
+  assert.equal(t.audioPlays.at(-1).src, 'blob:voice'); assert.equal(t.audioPlays.at(-1).gesture, true);
+  await new Promise(resolve => setImmediate(resolve));
+});
 
 test('voix iPhone : le bouton reprend une synthèse en pause dans le toucher', () => {
   const t = setup(); t.synth.paused = true;

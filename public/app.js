@@ -403,6 +403,7 @@ function setStatus(txt) {
 
 // ---------- Voix (lecture + avatar qui parle) ----------
 let voicePref = localStorage.getItem('lumivoice') || null;
+let voiceMode = localStorage.getItem('lumivoiceengine') || 'server';
 let voiceRate = parseFloat(localStorage.getItem('lumirate') || '1.0');
 
 function frenchVoices() {
@@ -439,21 +440,24 @@ function populateVoiceSelect() {
   const sel = $('voice-select');
   const fr = frenchVoices();
   const best = pickBestVoice();
-  sel.innerHTML = '<option value="__auto__">Voix du téléphone (automatique)</option>';
+  sel.innerHTML = '<option value="__server__">Lumi — voix française</option><option value="__auto__">Voix du téléphone (automatique)</option>';
+  sel.value = voiceMode === 'server' ? '__server__' : (voicePref || '__auto__');
   if (!fr.length) {
     return;
   }
   fr.forEach(v => {
     const o = document.createElement('option');
     o.value = v.name;
-    o.textContent = `${v.name}${v.lang === 'fr-FR' ? '' : ' (' + v.lang + ')'}${(!voicePref && v === best) ? ' ✨' : ''}`;
-    if (voicePref !== '__auto__' && (voicePref ? v.name === voicePref : v === best)) o.selected = true;
+    o.textContent = `${v.name}${v.lang === 'fr-FR' ? '' : ' (' + v.lang + ')'}${(voiceMode !== 'server' && !voicePref && v === best) ? ' ✨' : ''}`;
+    if (voiceMode !== 'server' && voicePref !== '__auto__' && (voicePref ? v.name === voicePref : v === best)) o.selected = true;
     sel.appendChild(o);
   });
 }
 
 $('voice-select').addEventListener('change', (e) => {
   voicePref = e.target.value;
+  voiceMode = voicePref === '__server__' ? 'server' : 'native';
+  localStorage.setItem('lumivoiceengine', voiceMode);
   localStorage.setItem('lumivoice', voicePref);
   speak('Bonjour ! Voici ma nouvelle voix.');
 });
@@ -464,6 +468,7 @@ $('rate-slider').addEventListener('input', (e) => {
   localStorage.setItem('lumirate', String(voiceRate));
 });
 
+populateVoiceSelect();
 if ('speechSynthesis' in window) {
   speechSynthesis.onvoiceschanged = () => populateVoiceSelect();
   populateVoiceSelect();
@@ -476,6 +481,82 @@ if ('speechSynthesis' in window) {
 let lastSpeechText = '';
 let speechTimer = null;
 let speechUtterances = [];
+let voiceAudio = null;
+let voiceAudioUrl = null;
+let voiceAudioText = '';
+let voiceAudioBusy = false;
+let voiceRequest = null;
+function unlockVoiceAudio() {
+  if (!voiceAudio) {
+    voiceAudio = new Audio('/audio-ready.wav');
+    voiceAudio.id = 'lumi-audio'; voiceAudio.hidden = true;
+    document.body?.appendChild?.(voiceAudio);
+  }
+  // Native media uses the same output as the melody confirmed on the iPhone.
+  // A short silent WAV activates this very element within the button touch.
+  if (!voiceAudioUrl) return voiceAudio.play();
+  return Promise.resolve();
+}
+async function speakAudio(text) {
+  stopListening();
+  stopSpeech();
+  const gen = ++speakGen;
+  voiceAudioBusy = true;
+  const controller = new AbortController();
+  voiceRequest = controller;
+  $('btn-stop').classList.remove('hidden');
+  setStatus('Lumi prépare sa voix…');
+  const timeout = setTimeout(() => controller.abort(), 90000);
+  try {
+    const cached = voiceAudioUrl && voiceAudioText === text;
+    const ready = cached ? Promise.resolve() : unlockVoiceAudio();
+    if (!cached) {
+    await ready;
+    const response = await fetch('/api/speech', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text.slice(0, 3000) }), signal: controller.signal,
+    });
+    if (!response.ok) throw Error((await response.json()).error || 'Voix indisponible.');
+    const blob = await response.blob();
+    if (gen !== speakGen) return;
+    if (voiceAudioUrl) URL.revokeObjectURL(voiceAudioUrl);
+    voiceAudioUrl = URL.createObjectURL(blob);
+    voiceAudioText = text;
+    voiceAudio.src = voiceAudioUrl;
+    }
+    voiceAudio.currentTime = 0;
+    voiceAudio.volume = 1;
+    voiceAudio.playbackRate = Math.max(0.6, Math.min(1.5, voiceRate || 1));
+    voiceAudio.onended = () => {
+      if (gen !== speakGen) return;
+      voiceAudioBusy = false;
+      $('avatar').classList.remove('talking');
+      $('btn-stop').classList.add('hidden');
+      setStatus("Je t'écoute 👂");
+      if (typeof micLiveResume === 'function') micLiveResume();
+    };
+    voiceAudio.onerror = () => {
+      if (gen !== speakGen) return;
+      stopSpeech();
+      setStatus('Lecture audio interrompue. Appuie sur Écouter Lumi pour réessayer.');
+      if (typeof micLiveResume === 'function') micLiveResume();
+    };
+    // When Safari requires another touch, retry plays this cached file directly.
+    await voiceAudio.play();
+    if (gen !== speakGen) return;
+    $('avatar').classList.add('talking');
+    setStatus('Je parle 🗣️ (appuie sur ✋ pour me couper)');
+  } catch (error) {
+    if (gen !== speakGen) return;
+    voiceAudioBusy = false;
+    $('btn-stop').classList.add('hidden');
+    setStatus(error.name === 'NotAllowedError' ? 'La voix est prête. Appuie sur 🔊 Écouter Lumi pour la lancer.' : error.name === 'AbortError' ? 'Voix trop longue à préparer. Appuie sur Écouter Lumi pour réessayer.' : error.message);
+    if (typeof micLiveResume === 'function') micLiveResume();
+  } finally {
+    clearTimeout(timeout);
+    if (voiceRequest === controller) voiceRequest = null;
+  }
+}
 $('btn-listen').addEventListener('click', () => speak(lastSpeechText || 'Bonjour ! Je suis Lumi.'));
 $('btn-test-voice').addEventListener('click', () => speak('Bonjour ! Je suis Lumi. Est-ce que tu entends ma voix ?'));
 
@@ -499,6 +580,9 @@ let speakGen = 0;
 // Coupe la parole en cours (bouton ✋, micro, ou envoi d'un message)
 function stopSpeech() {
   speakGen++; // invalide les fins d'ecoute des morceaux en cours
+  voiceAudioBusy = false;
+  if (voiceRequest) { voiceRequest.abort(); voiceRequest = null; }
+  if (voiceAudio) { voiceAudio.onended = null; voiceAudio.onerror = null; voiceAudio.pause(); }
   clearTimeout(speechTimer);
   speechUtterances = [];
   try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch {}
@@ -514,6 +598,10 @@ $('btn-stop').addEventListener('click', () => { stopSpeech(); if (typeof micLive
 
 function speak(text) {
   lastSpeechText = cleanForSpeech(text);
+  if (typeof voiceMode !== 'undefined' && voiceMode === 'server') {
+    if (lastSpeechText) speakAudio(lastSpeechText);
+    return;
+  }
   if (!('speechSynthesis' in window)) {
     setStatus('La lecture vocale est indisponible dans ce navigateur.');
     if (typeof micLiveResume === 'function') micLiveResume();
@@ -792,9 +880,11 @@ function micLiveRestart(delay = 300) {
 // reprend tout seul en mode discussion. typeof : la section voix peut etre
 // chargee avant celle-ci.
 function micLiveResume() {
+  if (typeof voiceAudioBusy !== 'undefined' && voiceAudioBusy) return;
   if (liveMic && !speechUtterances.length) micLiveRestart(350);
 }
 function startListening() {
+  if (typeof voiceAudioBusy !== 'undefined' && voiceAudioBusy) return;
   if (recog || chatLoading || activeChat || archiving || document.hidden || speechUtterances.length) return;
   if (!window.isSecureContext) {
     setLiveMic(false);
@@ -859,6 +949,7 @@ function startListening() {
   }
 }
 $('btn-mic-live').addEventListener('click', () => {
+  if (typeof voiceMode !== 'undefined' && voiceMode === 'server') unlockVoiceAudio().catch(() => {});
   if (liveMic) { setLiveMic(false); setStatus('Mode discussion éteint. Appuie sur 🎤 quand tu veux parler.'); return; }
   if (chatLoading || activeChat || archiving) {
     setStatus('Attends la fin du chargement ou de la réponse, puis appuie sur 🎙️.');
@@ -876,6 +967,7 @@ document.addEventListener('visibilitychange', () => {
   stopSpeech();
 });
 $('btn-mic').addEventListener('click', () => {
+  if (typeof voiceMode !== 'undefined' && voiceMode === 'server') unlockVoiceAudio().catch(() => {});
   if (recog) { setLiveMic(false); setStatus('Micro arrêté. Appuie sur 🎤 pour une question ou 🎙️ pour discuter.'); return; }
   setLiveMic(false); // annule aussi toute relance automatique encore en attente
   stopSpeech();
@@ -1642,6 +1734,9 @@ $('btn-switch-access').addEventListener('click', async () => {
     const r = await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     if (!r.ok && r.status !== 401) throw new Error();
     cancelChat(); currentProfile = null; history = []; profilesCache = []; profileFetchGeneration++;
+    lastSpeechText = ''; voiceAudioText = '';
+    if (voiceAudioUrl) { URL.revokeObjectURL(voiceAudioUrl); voiceAudioUrl = null; }
+    if (voiceAudio) voiceAudio.src = '/audio-ready.wav';
     $('screen-profile').classList.add('hidden'); $('screen-chat').classList.add('hidden');
     $('screen-gate').classList.remove('hidden'); $('gate-code').value = ''; $('gate-code').focus();
     $('gate-error').textContent = 'Appareil déconnecté. Tu peux entrer un autre code famille.';

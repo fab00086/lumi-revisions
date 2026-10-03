@@ -8,6 +8,8 @@
     "node": ">=22.13.0 <25"
   },
   "scripts": {
+    "postinstall": "node scripts/setup-voice.mjs --render-only",
+    "setup:voice": "node scripts/setup-voice.mjs",
     "start": "node server.js",
     "test": "node --test tests/*.cjs"
   },

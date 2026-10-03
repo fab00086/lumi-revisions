@@ -1,4 +1,5 @@
 node_modules/
+.lumi-voice/
 .env
 npm-debug.log*
 .DS_Store

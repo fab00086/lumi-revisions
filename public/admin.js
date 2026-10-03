@@ -19,6 +19,12 @@ async function refresh() {
     if (r.status === 401) { $('admin-view').classList.add('hidden'); $('login-box').classList.remove('hidden'); return; }
     if (!r.ok) throw new Error('Chargement impossible.');
     const j = await r.json();
+    $('mail-note').textContent = j.emailNotificationsEnabled ? 'Notifications par e-mail configurées pour les nouvelles demandes.' : 'Notifications par e-mail à activer ci-dessous. Les demandes sont bien conservées ici.';
+    if (!$('mail-email').value) {
+      const settings = await (await fetch('/api/admin/notifications', { cache: 'no-store' })).json();
+      $('mail-email').value = settings.email || '';
+      $('mail-key').placeholder = settings.hasKey ? 'Clé enregistrée — laisser vide pour conserver' : 're_…';
+    }
     $('admin-view').classList.remove('hidden'); $('login-box').classList.add('hidden');
     const list = (j.accounts || []).sort((a,b) => Number(b.pending)-Number(a.pending));
     const pending = list.filter(a=>a.pending).length;
@@ -45,7 +51,7 @@ function renderFamily(a, freeDaily) {
   const limit = a.dailyLimit ?? (a.plan === 'free' ? freeDaily : null);
   card.innerHTML = `<div class="client-id"><strong>${esc(a.label)}</strong><small>${esc(a.email)}</small>
     <div class="badges"><span class="badge-plan ${a.pending?'trial':a.blocked?'trial expired':'family'}">${a.pending?'Demande à approuver':a.blocked?'Accès bloqué':'Accès autorisé'}</span></div>
-    <p>${a.connectedDevices} / ${a.maxDevices} appareils connectés</p><p><b>${count(a.usage)}</b> échanges aujourd’hui · ${limit === null?'illimité':limit+'/jour'}</p></div>
+    <p>${a.connectedDevices} / ${a.maxDevices} appareils connectés</p><p><b>${count(a.usage)}</b> échanges aujourd’hui · ${limit === null?'illimité':limit+'/jour'}</p>${a.pending && a.notificationStatus?`<small>${a.notificationStatus==='sent'?'Notification transmise au service e-mail':a.notificationStatus==='review'?'Notification à vérifier auprès du service e-mail':'Notification en attente'}</small>`:''}</div>
     <div class="client-ctl"><label>Utilisation<select class="plan-select plan"><option value="free" ${a.plan==='free'||a.pending?'selected':''}>Quota quotidien</option><option value="family" ${a.plan==='family'?'selected':''}>Illimitée</option><option value="trial" ${a.plan==='trial'?'selected':''}>Essai 14 jours</option></select></label>
     <label>Échanges par jour<input class="limit-input daily" type="number" min="1" max="10000" value="${limit ?? freeDaily}"></label><button class="btn-sm save-limit">Enregistrer l’utilisation</button>
     <label>Appareils autorisés<input class="limit-input devices" type="number" min="1" max="20" value="${a.maxDevices}"></label><button class="btn-sm save-devices">Enregistrer les appareils</button></div>
@@ -79,8 +85,20 @@ $('share-code').onclick = async () => {
 };
 $('close-code').onclick = () => {$('issued-code').value='';$('code-result').classList.add('hidden');};
 $('btn-refresh').onclick=refresh;
+$('mail-form').onsubmit = async e => {
+  e.preventDefault();
+  if ($('mail-save').disabled) return;
+  $('mail-save').disabled = true;
+  try {
+    await post('/api/admin/notifications', { email: $('mail-email').value, key: $('mail-key').value });
+    $('mail-key').value = '';
+    $('mail-result').textContent = 'Enregistré. Les demandes en attente seront également signalées.';
+    await refresh();
+  } catch (error) { $('mail-result').textContent = error.message; }
+  finally { $('mail-save').disabled = false; }
+};
 setInterval(()=>{if(!document.hidden&&!$('admin-view').classList.contains('hidden'))refresh();},30000);
-$('admin-logout').onclick=async()=>{try{await post('/api/admin/logout',{});$('close-code').click();$('admin-view').classList.add('hidden');$('login-box').classList.remove('hidden');$('admin-code').value='';}catch(e){toast(e.message);}};
+$('admin-logout').onclick=async()=>{try{await post('/api/admin/logout',{});$('close-code').click();$('admin-view').classList.add('hidden');$('login-box').classList.remove('hidden');$('admin-code').value='';$('mail-key').value='';$('mail-email').value='';}catch(e){toast(e.message);}};
 $('admin-login').onclick=async()=>{try{await post('/api/admin/login',{code:$('admin-code').value});$('admin-code').value='';$('login-err').textContent='';await refresh();}catch(e){$('login-err').textContent=e.message;}};
 $('admin-code').onkeydown=e=>{if(e.key==='Enter')$('admin-login').click();};
 (async()=>{try {const j=await(await fetch('/api/admin/session')).json();if(!j.enabled){$('login-err').textContent='Configure ton code administrateur dans Render : Environment → LUMI_ADMIN_CODE, puis sauvegarde. Ce code reste réservé à la gestion.';$('admin-login').disabled=true;return;}if(j.open)await refresh();}catch{$('login-err').textContent='Connexion impossible. Recharge la page.';}})();

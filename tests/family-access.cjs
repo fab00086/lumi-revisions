@@ -7,11 +7,12 @@ const express = require('express');
 const {createHash,webcrypto} = require('node:crypto');
 const source=fs.readFileSync(path.join(__dirname,'../server.js'),'utf8');
 function section(a,b){const start=source.indexOf(a),end=source.indexOf(b,start);assert.ok(start>=0&&end>start);return source.slice(start,end);}
-async function fixture(adminCode = 'test-admin') {
+async function fixture(adminCode = 'test-admin', mail = false) {
   const app=express();app.use(express.json());let remote='{}', fail=false;
-  const c=vm.createContext({console,app,structuredClone,createHash,crypto:webcrypto,TextEncoder,TextDecoder,AbortController,AbortSignal,setTimeout,clearTimeout,
-    process:{env:{LUMI_ADMIN_CODE:adminCode,LUMI_ACCESS_CODE:'test-house'}},ENV:{},DATA_FILE:'unused',DATA_DIR:'.',KV_URL:'https://storage.test',KV_TOKEN:'test',isDeno:false,denoKv:null,
-    fetch:async(url,opt)=>{if(fail)throw Error('offline');if(opt?.method==='POST')remote=opt.body;return {ok:true,json:async()=>({result:remote})};}});
+  const messages=[]; let mailFail = false;
+  const c=vm.createContext({console,app,URL,structuredClone,createHash,crypto:webcrypto,TextEncoder,TextDecoder,AbortController,AbortSignal,setTimeout,clearTimeout,
+    process:{env:{LUMI_ADMIN_CODE:adminCode,LUMI_ACCESS_CODE:'test-house',LUMI_PUBLIC_URL:'https://lumi.test',...(mail?{LUMI_ADMIN_EMAIL:'owner@example.test',RESEND_API_KEY:'re_test_key_123456'}:{})}},ENV:{},DATA_FILE:'unused',DATA_DIR:'.',KV_URL:'https://storage.test',KV_TOKEN:'test',isDeno:false,denoKv:null,
+    fetch:async(url,opt)=>{if(url==='https://api.resend.com/emails'){messages.push({body:JSON.parse(opt.body),headers:opt.headers});return {ok:!mailFail,json:async()=>({id:'fake-provider-id'})};}if(fail)throw Error('offline');if(opt?.method==='POST')remote=opt.body;return {ok:true,json:async()=>({result:remote})};}});
   vm.runInContext(section('function loadData()','function topicLabel'),c);await c.initStore();
   // Même ordre de protection que dans le serveur complet.
   vm.runInContext(section('const ACCESS_CODE =','// Certificat telechargeable'),c);
@@ -22,8 +23,43 @@ async function fixture(adminCode = 'test-admin') {
   const post=(route,body,cookie=admin)=>fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify(body)});
   const create=async(label='Test',maxDevices=1,plan='free',dailyLimit=2)=>(await post('/api/admin/create-access',{label,maxDevices,plan,dailyLimit})).json();
   const unlock=async(code,cookie='')=>{const r=await post('/api/unlock',{code,consent:true},cookie);return {r,cookie:r.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ')};};
-  return {c,base,admin,post,create,unlock,remote:()=>remote,fail:()=>{fail=true;},close:async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));}};
+  return {c,base,admin,post,create,unlock,messages,failMail:()=>{mailFail=true;},remote:()=>remote,fail:()=>{fail=true;},close:async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));}};
 }
+
+test('notifications : destinataire privé, aucune donnée enfant, une seule alerte par demande', async () => {
+ const f=await fixture('test-admin',true);try {
+   const body={name:'Nom privé',email:'parent@example.test',consent:true,to:'intrus@example.test'};
+   await f.post('/api/access-request',body,''); await f.c.notifyAccessRequests();
+   assert.equal(f.messages.length,1);assert.deepEqual(f.messages[0].body.to,['owner@example.test']);
+   assert.ok(!JSON.stringify(f.messages[0].body).includes('parent@example.test'));assert.ok(!JSON.stringify(f.messages[0].body).includes('Nom privé'));
+   await f.post('/api/access-request',body,'');await f.c.notifyAccessRequests();assert.equal(f.messages.length,1);
+   assert.equal((await f.c.allAccounts())[0].settings.accessRequestMail.status,'sent');
+   assert.equal((await fetch(f.base+'/api/admin/notifications')).status,401);
+   const j=await(await fetch(f.base+'/api/admin/notifications',{headers:{Cookie:f.admin}})).json();assert.equal(j.email,'owner@example.test');assert.ok(!JSON.stringify(j).includes('re_test_key'));
+ }finally{await f.close();}
+});
+
+test('notifications : réglages chiffrés, réservés au propriétaire et récupérables après redémarrage', async () => {
+ const f=await fixture();try {
+   const body={email:'private@example.test',key:'re_private_key_123456'};
+   assert.equal((await f.post('/api/admin/notifications',body,'')).status,401);
+   assert.equal((await f.post('/api/admin/notifications',body)).status,200);
+   assert.ok(!f.remote().includes(body.key));
+   vm.runInContext("ADMIN_EMAIL='';MAIL_API_KEY='';",f.c);await f.c.loadMailSettings();
+   const j=await(await fetch(f.base+'/api/admin/notifications',{headers:{Cookie:f.admin}})).json();assert.equal(j.email,body.email);assert.equal(j.configured,true);
+   assert.equal((await f.c.allAccounts()).length,0,'les réglages ne deviennent pas un compte famille');
+   const publicResult=await(await fetch(f.base+'/api/gate')).text();assert.ok(!publicResult.includes(body.email));
+ }finally{await f.close();}
+});
+
+test('notifications : panne du service conserve la demande et la clé de déduplication à la reprise', async () => {
+ const f=await fixture('test-admin',true);try {
+   f.failMail();await f.post('/api/access-request',{name:'Test',email:'parent@example.test',consent:true},'');await f.c.notifyAccessRequests();
+   const acc=(await f.c.allAccounts())[0];assert.equal(acc.settings.accessRequestMail.status,'retry');
+   await f.c.updateAccessMail(acc.id,m=>{m.nextAttemptAt=0;});await f.c.notifyAccessRequests();
+   assert.equal(f.messages.length,2);assert.equal(f.messages[0].headers['Idempotency-Key'],f.messages[1].headers['Idempotency-Key']);
+ }finally{await f.close();}
+});
 test('code famille : un seul compte, consentement, plafond appareils et isolation de la maison',async()=>{
   const f=await fixture();try {
     assert.equal((await f.post('/api/admin/create-access',{label:'X'},'')).status,401);

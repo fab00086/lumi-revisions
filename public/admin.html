@@ -71,6 +71,18 @@ select.plan-select, input.limit-input {
   <div id="admin-view" class="hidden">
     <h1 class="admin-title">🧑‍🤝‍🧑 Gestion des familles</h1>
     <p class="admin-sub" id="admin-sub"></p>
+    <p id="mail-note" class="note" style="margin-bottom:16px"></p>
+    <details class="note" style="margin-bottom:20px">
+      <summary>📨 Recevoir les demandes par e-mail</summary>
+      <p>Ces réglages sont privés. Les familles ne voient jamais ton adresse ni ta clé.</p>
+      <form id="mail-form" class="client-ctl">
+        <label>Ton adresse e-mail<input id="mail-email" class="limit-input" type="email" maxlength="254" required autocomplete="email"></label>
+        <label>Clé du service Resend<input id="mail-key" class="limit-input" type="password" autocomplete="new-password" placeholder="re_…"></label>
+        <p class="hint">Crée une clé sur <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer">Resend</a> avec le même e-mail que ci-dessus. Une fois enregistrée, laisse ce champ vide pour conserver la clé.</p>
+        <button id="mail-save" class="btn-sm" type="submit">Enregistrer les notifications</button>
+        <p id="mail-result" role="status"></p>
+      </form>
+    </details>
     <div class="bar">
       <button id="btn-refresh" class="btn btn-sm wide" style="min-width:120px">↻ Rafraîchir</button>
       <button id="admin-logout" class="btn-sm">Fermer la gestion</button><div class="spacer"></div>
