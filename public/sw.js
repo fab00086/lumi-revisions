@@ -2,7 +2,7 @@
 // Cache l'interface ; les appels /api/* passent toujours par le reseau.
 'use strict';
 
-const CACHE = 'lumi-v16';
+const CACHE = 'lumi-v17';
 const SHELL = [
   '/',
   '/index.html',
@@ -45,11 +45,16 @@ self.addEventListener('fetch', (e) => {
   // L'IA, les donnees et le quiz : toujours le reseau, jamais de cache
   if (url.pathname.startsWith('/api/')) return;
   if (e.request.method !== 'GET') return;
+  // Opening Admin must reach the server to require a fresh password.
+  if (url.origin === location.origin && ['/admin', '/admin.html'].includes(url.pathname)) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
 
   // Les correctifs de l'interface doivent arriver dès la prochaine ouverture.
   // Le cache ne sert de secours que si le réseau est réellement indisponible.
   if (url.origin === location.origin &&
-      (e.request.mode === 'navigate' || ['/app.js', '/update.js', '/style.css', '/index.html', '/'].includes(url.pathname))) {
+      (e.request.mode === 'navigate' || ['/app.js', '/update.js', '/admin.js', '/admin.html', '/style.css', '/index.html', '/'].includes(url.pathname))) {
     e.respondWith(fetch(e.request).then(async r => {
       if (r.ok) {
         const c = await caches.open(CACHE);

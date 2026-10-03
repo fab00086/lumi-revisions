@@ -9,7 +9,7 @@ import fs from 'fs';
 import http from 'http';
 import https from 'https';
 import selfsigned from 'selfsigned';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { speechAvailable, generateSpeech } from './speech.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -320,6 +320,14 @@ app.use('/api', (_req, res, next) => {
 app.use(express.json({ limit: '25mb' })); // pour les photos en base64
 // KaTeX (rendu des maths) servi depuis node_modules
 app.use('/katex', express.static(path.join(__dirname, 'node_modules', 'katex', 'dist')));
+app.get(['/admin', '/admin.html'], (req, res) => {
+  const cookies = [`lumi_admin=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`];
+  const wasOwner = hasAdmin(req) || hasOwner(req) || (!!ADMIN_CODE && parseCookies(req).lumi_admin === createHash('sha256').update('lumi-admin:' + ADMIN_CODE).digest('hex'));
+  if (wasOwner) cookies.push(ownerCookie(req));
+  res.setHeader('Set-Cookie', cookies);
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') // Safari garde trop le cache
 }));
@@ -440,7 +448,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.2' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.3' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -458,6 +466,7 @@ app.post('/api/unlock', storedRoute(async (req, res) => {
     if (result.error) return res.status(result.status).json({ error: result.error });
     res.setHeader('Set-Cookie', [sessionCookie(result.token, req, SESSION_DAYS * 86400),
       `lumi_family=1; Path=/; HttpOnly; Max-Age=${SESSION_DAYS * 86400}; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
+      `lumi_owner=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
       `lumi_demo=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
       `lumi_admin=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`]);
     return res.json({ ok: true });
@@ -970,6 +979,7 @@ app.post('/api/auth/logout', storedRoute(async (req, res) => {
   if (token) await sessionDel(token);
   const ending = '; Path=/; HttpOnly; Max-Age=0; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
   res.setHeader('Set-Cookie', [sessionCookie('', req, 0), 'lumi_admin=' + ending,
+    'lumi_owner=' + ending,
     'lumi_demo=' + ending,
     'lumi_access=' + ending, 'lumi_family=1; Path=/; HttpOnly; Max-Age=2592000; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '')]);
   res.json({ ok: true });
@@ -990,16 +1000,25 @@ app.get('/api/auth/me', async (req, res) => {
 // qui font tourner cette section sans le serveur complet).
 const ADMIN_CODE = String((typeof ENV !== 'undefined' && ENV.LUMI_ADMIN_CODE) || '').trim();
 function adminCookieValue() {
-  // Valeur derivee du code (pas le code lui-meme), comme pour le gate.
-  return createHash('sha256').update('lumi-admin:' + ADMIN_CODE).digest('hex');
+  const payload = newToken() + '.' + (Date.now() + 30 * 60000);
+  return payload + '.' + createHmac('sha256', ADMIN_CODE).update('lumi-admin-v2:' + payload).digest('hex');
 }
-function hasAdmin(req) { return !!ADMIN_CODE && parseCookies(req).lumi_admin === adminCookieValue(); }
+function hasAdmin(req) {
+  if (!ADMIN_CODE) return false;
+  const token = parseCookies(req).lumi_admin || '';
+  const match = /^([a-f0-9]{48})\.([0-9]{13})\.([a-f0-9]{64})$/.exec(token);
+  if (!match || Number(match[2]) <= Date.now()) return false;
+  return match[3] === createHmac('sha256', ADMIN_CODE).update('lumi-admin-v2:' + match[1] + '.' + match[2]).digest('hex');
+}
+function ownerCookieValue() { return createHmac('sha256', ADMIN_CODE).update('lumi-owner').digest('hex'); }
+function hasOwner(req) { return !!ADMIN_CODE && parseCookies(req).lumi_owner === ownerCookieValue(); }
+function ownerCookie(req) { return `lumi_owner=${ownerCookieValue()}; Path=/; HttpOnly; Max-Age=2592000; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`; }
 function requireAdmin(req, res) {
   if (!ADMIN_CODE) { res.status(404).json({ error: 'Gestion des clients désactivée : définis LUMI_ADMIN_CODE.' }); return false; }
   if (!hasAdmin(req)) { res.status(401).json({ error: 'Code admin requis.' }); return false; }
   return true;
 }
-app.get('/api/admin/session', (req, res) => res.json({ enabled: !!ADMIN_CODE, open: hasAdmin(req), localMode: LOCAL_MODE }));
+app.get('/api/admin/session', (req, res) => res.json({ enabled: !!ADMIN_CODE, open: hasAdmin(req), owner: hasOwner(req), localMode: LOCAL_MODE }));
 app.post('/api/admin/demo', (req, res) => {
   if (!requireAdmin(req, res)) return;
   res.setHeader('Set-Cookie', `lumi_demo=1; Path=/; HttpOnly; Max-Age=43200; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
@@ -1022,12 +1041,13 @@ app.post('/api/admin/login', (req, res) => {
   if (!allowLoginAttempt(req, res, 'admin', 10)) return;
   if (!ADMIN_CODE) return res.status(404).json({ error: 'Gestion des clients désactivée : définis LUMI_ADMIN_CODE.' });
   if (String((req.body || {}).code || '').trim() === ADMIN_CODE) {
-    res.setHeader('Set-Cookie', `lumi_admin=${adminCookieValue()}; Path=/; HttpOnly; Max-Age=43200; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
+    res.setHeader('Set-Cookie', [`lumi_admin=${adminCookieValue()}; Path=/; HttpOnly; Max-Age=1800; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`, ownerCookie(req)]);
     res.json({ ok: true });
   } else res.status(401).json({ error: 'Code admin incorrect.' });
 });
 app.post('/api/admin/logout', (req, res) => {
   res.setHeader('Set-Cookie', [`lumi_admin=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
+    `lumi_owner=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
     `lumi_demo=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`]);
   res.json({ ok: true });
 });

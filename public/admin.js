@@ -1,4 +1,7 @@
 'use strict';
+window.addEventListener('pageshow', event => {
+  if (event.persisted) { document.getElementById('admin-view').classList.add('hidden'); location.reload(); }
+});
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let toastTimer;

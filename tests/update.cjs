@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../public/update.js'), 'utf8');
-function setup({ online = true, text = '', version = '2026-10-03.2' } = {}) {
+function setup({ online = true, text = '', version = '2026-10-03.3' } = {}) {
  const buttons = [{ disabled: false, addEventListener() {} }];
  let reloads = 0, checks = 0, message = '';
  const c = vm.createContext({ chatLoading:false,activeChat:null,archiving:false,

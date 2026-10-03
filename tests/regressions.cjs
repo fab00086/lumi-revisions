@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '..');
 const front = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
 const back = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 function section(s,a,b) { const start=s.indexOf(a); assert.ok(start>=0,a); const end=s.indexOf(b,start);assert.ok(end>start,b);return s.slice(start,end); }
-function context(extra={}) { const c={console,createHash:require("node:crypto").createHash,crypto:require("node:crypto").webcrypto,TextEncoder,allowLoginAttempt:()=>true,accessMailConfigured:()=>false,structuredClone,AbortController,AbortSignal,TextDecoder,setTimeout,clearTimeout,...extra};vm.createContext(c);return c; }
+function context(extra={}) { const c={console,createHash:require("node:crypto").createHash,createHmac:require("node:crypto").createHmac,crypto:require("node:crypto").webcrypto,TextEncoder,allowLoginAttempt:()=>true,accessMailConfigured:()=>false,structuredClone,AbortController,AbortSignal,TextDecoder,setTimeout,clearTimeout,...extra};vm.createContext(c);return c; }
 function run(c,s) {return vm.runInContext(s,c);}
 function element() {const classes=new Set();return {value:'',innerHTML:'',textContent:'',handlers:{},classList:{add:k=>classes.add(k),remove:k=>classes.delete(k),contains:k=>classes.has(k)},addEventListener(k,fn){this.handlers[k]=fn;},appendChild(){},remove(){},removeAttribute(){},insertAdjacentHTML(pos,text){this.innerHTML+=text;},querySelectorAll(){return [];}};}
 function ui() {const els={};return {els,$:id=>els[id]||(els[id]=element())};}

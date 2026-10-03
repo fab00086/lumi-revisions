@@ -4,19 +4,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const express = require('express');
-const {createHash,webcrypto} = require('node:crypto');
+const {createHash,createHmac,webcrypto} = require('node:crypto');
 const source=fs.readFileSync(path.join(__dirname,'../server.js'),'utf8');
 function section(a,b){const start=source.indexOf(a),end=source.indexOf(b,start);assert.ok(start>=0&&end>start);return source.slice(start,end);}
 async function fixture(adminCode = 'test-admin', mail = false) {
   const app=express();app.use(express.json());let remote='{}', fail=false;
   const messages=[]; let mailFail = false;
-  const c=vm.createContext({console,app,URL,structuredClone,createHash,crypto:webcrypto,TextEncoder,TextDecoder,AbortController,AbortSignal,setTimeout,clearTimeout,
+  const c=vm.createContext({console,app,URL,path,__dirname:path.join(__dirname,'..'),structuredClone,createHash,createHmac,crypto:webcrypto,TextEncoder,TextDecoder,AbortController,AbortSignal,setTimeout,clearTimeout,
     process:{env:{LUMI_ADMIN_CODE:adminCode,LUMI_ACCESS_CODE:'test-house',LUMI_PUBLIC_URL:'https://lumi.test',...(mail?{LUMI_ADMIN_EMAIL:'owner@example.test',RESEND_API_KEY:'re_test_key_123456'}:{})}},ENV:{},DATA_FILE:'unused',DATA_DIR:'.',KV_URL:'https://storage.test',KV_TOKEN:'test',isDeno:false,denoKv:null,
     fetch:async(url,opt)=>{if(url==='https://api.resend.com/emails'){messages.push({body:JSON.parse(opt.body),headers:opt.headers});return {ok:!mailFail,json:async()=>({id:'fake-provider-id'})};}if(fail)throw Error('offline');if(opt?.method==='POST')remote=opt.body;return {ok:true,json:async()=>({result:remote})};}});
   vm.runInContext(section('function loadData()','function topicLabel'),c);await c.initStore();
   // Même ordre de protection que dans le serveur complet.
   vm.runInContext(section('const ACCESS_CODE =','// Certificat telechargeable'),c);
   vm.runInContext(section('// ---------- Comptes famille (V2) ----------','function buildSystemPrompt(profile = {})'),c);
+  vm.runInContext(section("app.get(['/admin', '/admin.html']",'app.use(express.static'),c);
   app.get('/api/test-space',async(req,res)=>{const a=await c.resolveAccount(req);res.json({id:a.account.id});});
   const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
   const admin='lumi_admin='+vm.runInContext('adminCookieValue()',c);
@@ -104,6 +105,30 @@ test('essais Admin : espace séparé, invisible aux familles et fermé avec la s
    assert.equal(await f.c.resolveAccount({headers:{cookie:'lumi_demo=1'}}),null);
    const a=await f.create('Famille');const connected=await f.unlock(a.code);
    assert.notEqual((await f.c.resolveAccount({headers:{cookie:connected.cookie}})).account.id,resolved.account.id);
+ }finally{await f.close();}
+});
+
+test('ouverture Admin : efface la connexion précédente, reconnaître le propriétaire ne donne aucun droit API',async()=>{
+ const f=await fixture();try {
+   const page=await fetch(f.base+'/admin.html',{headers:{Cookie:f.admin}});
+   assert.equal(page.status,200);assert.equal(page.headers.get('Cache-Control'),'no-store');
+   const cookies=page.headers.getSetCookie();assert.ok(cookies.some(v=>v.startsWith('lumi_admin=;')&&v.includes('Max-Age=0')));
+   const owner=cookies.find(v=>v.startsWith('lumi_owner=')).split(';')[0];
+   assert.equal((await fetch(f.base+'/api/admin/accounts',{headers:{Cookie:owner}})).status,401);
+   const status=await(await fetch(f.base+'/api/admin/session',{headers:{Cookie:owner}})).json();assert.equal(status.open,false);assert.equal(status.owner,true);
+   assert.equal((await f.post('/api/admin/login',{code:'incorrect'},owner)).status,401);
+   assert.equal((await f.post('/api/admin/login',{code:'test-admin'},owner)).status,200);
+   const old=createHash('sha256').update('lumi-admin:test-admin').digest('hex');
+   assert.equal(f.c.hasAdmin({headers:{cookie:'lumi_admin='+old}}),false,'ancienne connexion permanente refusée');
+ }finally{await f.close();}
+});
+
+test('connexion Admin : jeton expiré, modifié ou cookie propriétaire seul refusés',async()=>{
+ const f=await fixture();try {
+   const token=f.admin.slice('lumi_admin='.length);const parts=token.split('.');
+   const expired=parts[0]+'.'+(Date.now()-1000);const signature=createHmac('sha256','test-admin').update('lumi-admin-v2:'+expired).digest('hex');
+   assert.equal(f.c.hasAdmin({headers:{cookie:'lumi_admin='+expired+'.'+signature}}),false);
+   assert.equal(f.c.hasAdmin({headers:{cookie:'lumi_admin='+parts[0]+'.'+parts[1]+'.'+'0'.repeat(64)}}),false);
  }finally{await f.close();}
 });
 test('code famille : un seul compte, consentement, plafond appareils et isolation de la maison',async()=>{

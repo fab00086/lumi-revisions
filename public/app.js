@@ -1601,7 +1601,7 @@ async function refreshAdminNavigation() {
     if (!response.ok) return;
     const session = await response.json();
     if (generation !== adminNavigationGeneration) return;
-    links.forEach(link => link.classList.toggle('hidden', session.open !== true));
+    links.forEach(link => link.classList.toggle('hidden', session.open !== true && session.owner !== true));
   } catch { /* En cas de doute, le bouton reste masqué. */ }
 }
 window.addEventListener('focus', refreshAdminNavigation);
