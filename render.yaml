@@ -21,7 +21,9 @@ services:
         sync: false
       - key: OLLAMA_VISION_MODEL
         sync: false
-      - key: LUMI_ACCESS_CODE
+      - key: LUMI_LOCAL_MODE
+        value: "0"
+      - key: LUMI_ADMIN_CODE
         sync: false
       - key: UPSTASH_REDIS_REST_URL
         sync: false

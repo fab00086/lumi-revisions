@@ -2,7 +2,7 @@
 // Cache l'interface ; les appels /api/* passent toujours par le reseau.
 'use strict';
 
-const CACHE = 'lumi-v19';
+const CACHE = 'lumi-v20';
 const SHELL = [
   '/',
   '/index.html',

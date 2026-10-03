@@ -485,7 +485,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.5' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.6' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -601,7 +601,8 @@ app.get('/lumi-cert.crt', (req, res) => {
 // sans compte connecte et LUMI_LOCAL_MODE=1 (defaut), on attribue le compte
 // implicite "local" (illimite). Pour vendre : LUMI_LOCAL_MODE=0.
 const ENV = (globalThis.process && globalThis.process && globalThis.process.env) || {};
-const LOCAL_MODE = ENV.LUMI_LOCAL_MODE !== '0';
+// Render exige toujours une famille approuvée ou une session Admin.
+const LOCAL_MODE = !ENV.RENDER && ENV.LUMI_LOCAL_MODE !== '0';
 const SESSION_COOKIE = 'lumi_session';
 const SESSION_DAYS = 30;
 

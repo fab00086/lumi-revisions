@@ -7,11 +7,11 @@ const express = require('express');
 const {createHash,createHmac,webcrypto} = require('node:crypto');
 const source=fs.readFileSync(path.join(__dirname,'../server.js'),'utf8');
 function section(a,b){const start=source.indexOf(a),end=source.indexOf(b,start);assert.ok(start>=0&&end>start);return source.slice(start,end);}
-async function fixture(adminCode = 'test-admin', mail = false) {
+async function fixture(adminCode = 'test-admin', mail = false, hosting = {}) {
   const app=express();app.use(express.json());let remote='{}', fail=false;
   const messages=[]; let mailFail = false;
   const c=vm.createContext({console,app,URL,path,__dirname:path.join(__dirname,'..'),structuredClone,createHash,createHmac,crypto:webcrypto,TextEncoder,TextDecoder,AbortController,AbortSignal,setTimeout,clearTimeout,
-    process:{env:{LUMI_ADMIN_CODE:adminCode,LUMI_ACCESS_CODE:'test-house',LUMI_PUBLIC_URL:'https://lumi.test',...(mail?{LUMI_ADMIN_EMAIL:'owner@example.test',RESEND_API_KEY:'re_test_key_123456'}:{})}},ENV:{},DATA_FILE:'unused',DATA_DIR:'.',KV_URL:'https://storage.test',KV_TOKEN:'test',isDeno:false,denoKv:null,
+    process:{env:{LUMI_ADMIN_CODE:adminCode,LUMI_ACCESS_CODE:'test-house',LUMI_PUBLIC_URL:'https://lumi.test',...(mail?{LUMI_ADMIN_EMAIL:'owner@example.test',RESEND_API_KEY:'re_test_key_123456'}:{}),...hosting}},ENV:{},DATA_FILE:'unused',DATA_DIR:'.',KV_URL:'https://storage.test',KV_TOKEN:'test',isDeno:false,denoKv:null,
     fetch:async(url,opt)=>{if(url==='https://api.resend.com/emails'){messages.push({body:JSON.parse(opt.body),headers:opt.headers});return {ok:!mailFail,json:async()=>({id:'fake-provider-id'})};}if(fail)throw Error('offline');if(opt?.method==='POST')remote=opt.body;return {ok:true,json:async()=>({result:remote})};}});
   vm.runInContext(section('function loadData()','function topicLabel'),c);await c.initStore();
   // Même ordre de protection que dans le serveur complet.
@@ -26,6 +26,19 @@ async function fixture(adminCode = 'test-admin', mail = false) {
   const unlock=async(code,cookie='')=>{const r=await post('/api/unlock',{code,consent:true},cookie);return {r,cookie:r.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ')};};
   return {c,base,admin,post,create,unlock,messages,failMail:()=>{mailFail=true;},remote:()=>remote,fail:()=>{fail=true;},close:async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));}};
 }
+
+test('Render : le code partagé est refusé et sa suppression ne rend jamais l’app publique',async()=>{
+ for(const access of ['test-house','']) {
+  const f=await fixture('test-admin',false,{RENDER:'true',LUMI_LOCAL_MODE:'1',LUMI_ACCESS_CODE:access});try {
+   const gate=await(await fetch(f.base+'/api/gate')).json();assert.equal(gate.locked,true);assert.equal(gate.open,false);
+   assert.equal((await f.unlock('test-house')).r.status,401);
+   const house='lumi_access='+f.c.accessCookieValue();assert.equal((await fetch(f.base+'/api/test-space',{headers:{Cookie:house}})).status,401);
+   assert.equal((await f.unlock('test-admin')).r.status,200);
+   const family=await f.create();assert.equal((await f.unlock(family.code)).r.status,200);
+   assert.equal((await f.post('/api/access-request',{name:'Demande',email:'new@example.test',consent:true},'')).status,202);
+  }finally{await f.close();}
+ }
+});
 
 test('notifications : destinataire privé, aucune donnée enfant, une seule alerte par demande', async () => {
  const f=await fixture('test-admin',true);try {
