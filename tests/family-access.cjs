@@ -78,6 +78,15 @@ test('notifications : enregistre une adresse privée sans prétendre activer un 
    assert.equal(result.ok,true);assert.equal(result.configured,false);
  }finally{await f.close();}
 });
+
+test('notifications : signale aussi une demande déposée avant l’installation des e-mails', async () => {
+ const f=await fixture();try {
+   await f.post('/api/access-request',{name:'Ancienne demande',email:'parent@example.test',consent:true},'');
+   const acc=(await f.c.allAccounts())[0];delete acc.settings.accessRequestMail;await f.c.accountPut(acc);
+   await f.post('/api/admin/notifications',{email:'owner@example.test',key:'re_test_key_123456'});await f.c.notifyAccessRequests();
+   assert.equal(f.messages.length,1);assert.equal((await f.c.allAccounts())[0].settings.accessRequestMail.status,'sent');
+ }finally{await f.close();}
+});
 test('code famille : un seul compte, consentement, plafond appareils et isolation de la maison',async()=>{
   const f=await fixture();try {
     assert.equal((await f.post('/api/admin/create-access',{label:'X'},'')).status,401);

@@ -370,7 +370,8 @@ function accessMailConfigured() {
 async function updateAccessMail(id, update) {
   const task = writeQueue.then(async () => {
     const acc = await accountById(id);
-    if (!acc?.settings?.pending || !acc.settings.accessRequestMail) return null;
+    if (!acc?.settings?.pending) return null;
+    acc.settings.accessRequestMail ||= { status: 'pending', queuedAt: new Date().toISOString() };
     if (update(acc.settings.accessRequestMail) === false) return null;
     await accountPut(acc);
     return acc;
@@ -383,7 +384,7 @@ function notifyAccessRequests() {
   if (!accessMailConfigured()) return Promise.resolve();
   if (accessMailTask) return accessMailTask;
   accessMailTask = (async () => {
-    const candidates = (await allAccounts()).filter(a => a.settings?.pending && a.settings.accessRequestMail && !['sent', 'review'].includes(a.settings.accessRequestMail.status) && !(Number(a.settings.accessRequestMail.nextAttemptAt) > Date.now()));
+    const candidates = (await allAccounts()).filter(a => a.settings?.pending && !['sent', 'review'].includes(a.settings.accessRequestMail?.status) && !(Number(a.settings.accessRequestMail?.nextAttemptAt) > Date.now()));
     for (const candidate of candidates.slice(0, 25)) {
       const now = Date.now();
       const acc = await updateAccessMail(candidate.id, mail => {
