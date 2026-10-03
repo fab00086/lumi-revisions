@@ -924,12 +924,19 @@ async function childSave(accountId, childId, child) {
     sql.prepare('INSERT INTO children (account_id,id,name,age,data) VALUES (?,?,?,?,?) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name, age=excluded.age, data=excluded.data')
       .run(accountId, childId, child.name || '', child.age ?? null,
         JSON.stringify({ sessions: Array.isArray(child.sessions) ? child.sessions : [] }));
+    // Conserver le `created` des messages déjà stockés : le front renvoie
+    // l'historique complet de la leçon à chaque sauvegarde. On réécrit les
+    // lignes en gardant leur date d'origine (sinon la purge RGPD 12 mois ne
+    // se déclenche jamais pour une leçon active).
+    const existing = sql.prepare('SELECT created FROM messages WHERE account_id = ? AND child_id = ? ORDER BY seq').all(accountId, childId)
+      .map(r => r.created);
     sql.prepare('DELETE FROM messages WHERE account_id = ? AND child_id = ?').run(accountId, childId);
     const put = sql.prepare('INSERT INTO messages (account_id,child_id,role,content,created) VALUES (?,?,?,?,?)');
     const now = new Date().toISOString();
-    for (const m of (Array.isArray(child.history) ? child.history : [])) {
-      if (m && (m.role === 'user' || m.role === 'assistant')) put.run(accountId, childId, m.role, String(m.content || ''), now);
-    }
+    const history = (Array.isArray(child.history) ? child.history : []).filter(m => m && (m.role === 'user' || m.role === 'assistant'));
+    history.forEach((m, i) => {
+      put.run(accountId, childId, m.role, String(m.content || ''), existing[i] || now);
+    });
     return;
   }
   const data = blobSpace(accountId);
@@ -1703,6 +1710,12 @@ let tunnelUrl = '';
 let tunnelPending = false;
 function startTunnel() {
   if (process.env.NO_HTTPS || !fs.existsSync(TUNNEL_EXE)) return;
+  // Ne jamais ouvrir une porte publique sans code d'accès : sinon n'importe
+  // qui ayant l'URL accède aux profils, photos et conversations des enfants.
+  if (!ACCESS_CODE) {
+    console.log('  🔒 Tunnel désactivé : définis LUMI_ACCESS_CODE dans le .env pour autoriser un accès distant.');
+    return;
+  }
   tunnelPending = true;
   try {
     const p = spawn(TUNNEL_EXE, ['tunnel', '--url', `http://localhost:${PORT}`], { stdio: ['ignore', 'pipe', 'pipe'] });

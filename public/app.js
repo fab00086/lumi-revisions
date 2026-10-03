@@ -427,6 +427,9 @@ function setStatus(txt) {
 let voicePref = localStorage.getItem('lumivoice') || null;
 let voiceMode = localStorage.getItem('lumivoiceengine') || 'server';
 let voiceRate = parseFloat(localStorage.getItem('lumirate') || '1.0');
+// La voix « Lumi » (piper) fonctionne sur le PC et sur Render (postinstall).
+// null = pas encore vérifié, false = absente sur CE serveur (install ratée…).
+let serverVoiceOk = null;
 
 function frenchVoices() {
   if (!('speechSynthesis' in window)) return [];
@@ -462,7 +465,11 @@ function populateVoiceSelect() {
   const sel = $('voice-select');
   const fr = frenchVoices();
   const best = pickBestVoice();
-  sel.innerHTML = '<option value="__server__">Lumi — voix française</option><option value="__auto__">Voix du téléphone (automatique)</option>';
+  // Voix du serveur absente sur CE serveur : l'option reste visible mais grisee.
+  const serverOpt = serverVoiceOk === false
+    ? '<option value="__server__" disabled>Lumi — voix française (indisponible ici)</option>'
+    : '<option value="__server__">Lumi — voix française</option>';
+  sel.innerHTML = serverOpt + '<option value="__auto__">Voix du téléphone (automatique)</option>';
   sel.value = voiceMode === 'server' ? '__server__' : (voicePref || '__auto__');
   if (!fr.length) {
     return;
@@ -474,6 +481,31 @@ function populateVoiceSelect() {
     if (voiceMode !== 'server' && voicePref !== '__auto__' && (voicePref ? v.name === voicePref : v === best)) o.selected = true;
     sel.appendChild(o);
   });
+}
+
+// Bascule sur la voix du telephone (filet de secours si la voix serveur est
+// absente sur ce serveur — elle existe normalement sur PC comme sur Render).
+function useNativeVoice() {
+  voiceMode = 'native';
+  voicePref = '__auto__';
+  localStorage.setItem('lumivoiceengine', 'native');
+  localStorage.setItem('lumivoice', '__auto__');
+  populateVoiceSelect();
+}
+// Filet de secours seulement : si la voix du serveur n'est pas installee
+// (build Render sans postinstall, etc.), on bascule sur la voix du telephone.
+// Note : basculer ne rend pas le son si les voix natives sont muettes sur
+// l'iPhone (mode silencieux, volume de la sonnerie — voir le minuteur 5 s).
+async function checkServerVoice() {
+  let j = null;
+  try {
+    const r = await fetch('/api/speech/status');
+    if (!r.ok) return; // code d'acces pas encore entre : le 503 au premier message decidera
+    j = await r.json();
+  } catch { return; }
+  serverVoiceOk = !!j.available;
+  if (serverVoiceOk === false && voiceMode === 'server') useNativeVoice();
+  else populateVoiceSelect();
 }
 
 $('voice-select').addEventListener('change', (e) => {
@@ -491,6 +523,7 @@ $('rate-slider').addEventListener('input', (e) => {
 });
 
 populateVoiceSelect();
+checkServerVoice();
 if ('speechSynthesis' in window) {
   speechSynthesis.onvoiceschanged = () => populateVoiceSelect();
   populateVoiceSelect();
@@ -571,6 +604,14 @@ async function speakAudio(text) {
     $('avatar').classList.remove('talking');
     if (error.name !== 'NotAllowedError') voiceAudioCreated = 0;
     $('btn-stop').classList.add('hidden');
+    // La voix du serveur n'est pas installee sur ce serveur : on bascule une
+    // fois pour toutes sur la voix du telephone et on relit le message avec.
+    if (/installation/i.test(error.message || '')) {
+      serverVoiceOk = false;
+      useNativeVoice();
+      speak(text);
+      return;
+    }
     const player = $('voice-player');
     if (player && voiceAudioUrl) { player.classList.remove('hidden'); player.open = true; }
     setStatus(error.name === 'NotAllowedError' ? 'La voix est prête. Appuie sur 🔊 Écouter Lumi ou sur le lecteur audio.' : error.name === 'AbortError' ? 'Voix trop longue à préparer. Appuie sur Écouter Lumi pour réessayer.' : error.message);
@@ -1876,6 +1917,7 @@ async function initApp() {
   }
   try { const me = await (await fetch('/api/auth/me')).json(); configureAdminTest(me.adminTest === true); }
   catch { configureAdminTest(false); }
+  checkServerVoice(); // le gate est ouvert : la voix du serveur est maintenant verifiable
   $('screen-profile').classList.remove('hidden');
   fetchProfiles().then(() => renderProfiles());
 }
@@ -1897,6 +1939,7 @@ function enterGate() {
       const result = await r.json();
       if (result.admin === true) { $('gate-code').value = ''; location.href = '/admin.html'; return; }
       configureAdminTest(result.admin === true);
+      checkServerVoice(); // code accepte : bascule voix du telephone si voix serveur absente
       $('screen-gate').classList.add('hidden');
       $('screen-profile').classList.remove('hidden');
       fetchProfiles().then(() => renderProfiles());
