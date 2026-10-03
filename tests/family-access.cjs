@@ -87,6 +87,25 @@ test('notifications : signale aussi une demande déposée avant l’installation
    assert.equal(f.messages.length,1);assert.equal((await f.c.allAccounts())[0].settings.accessRequestMail.status,'sent');
  }finally{await f.close();}
 });
+
+test('essais Admin : espace séparé, invisible aux familles et fermé avec la session administrateur', async () => {
+ const f=await fixture();try {
+   assert.equal((await f.post('/api/admin/demo',{},'')).status,401);
+   const response=await f.post('/api/admin/demo',{});assert.equal(response.status,200);
+   const demo=f.admin+'; '+response.headers.getSetCookie()[0].split(';')[0];
+   const resolved=await f.c.resolveAccount({headers:{cookie:demo}});assert.equal(resolved.adminTest,true);assert.equal(resolved.local,false);assert.equal(resolved.account.id,'__lumi_admin_test');
+   await f.c.childSaveList(resolved.account.id,[{id:'test-admin',name:'Admin',age:47}]);
+   await f.c.childSaveList('local',[{id:'maison',name:'Enfant maison',age:9}]);
+   assert.equal((await f.c.childList(resolved.account.id))[0].age,47);
+   assert.equal((await f.c.childList('local'))[0].name,'Enfant maison');
+   assert.equal((await f.c.allAccounts()).length,0,'aucun compte client ni enfant maison ajouté');
+   assert.equal((await(await fetch(f.base+'/api/gate',{headers:{Cookie:demo}})).json()).open,true);
+   assert.equal((await fetch(f.base+'/api/test-space',{headers:{Cookie:'lumi_demo=1'}})).status,401);
+   assert.equal(await f.c.resolveAccount({headers:{cookie:'lumi_demo=1'}}),null);
+   const a=await f.create('Famille');const connected=await f.unlock(a.code);
+   assert.notEqual((await f.c.resolveAccount({headers:{cookie:connected.cookie}})).account.id,resolved.account.id);
+ }finally{await f.close();}
+});
 test('code famille : un seul compte, consentement, plafond appareils et isolation de la maison',async()=>{
   const f=await fixture();try {
     assert.equal((await f.post('/api/admin/create-access',{label:'X'},'')).status,401);

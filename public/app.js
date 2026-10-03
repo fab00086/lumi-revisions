@@ -3,6 +3,7 @@
 // ---------- Raccourcis ----------
 const $ = (id) => document.getElementById(id);
 let currentProfile = null;
+let adminTestMode = false;
 let chatGeneration = 0;
 let activeChat = null;
 let chatLoading = false;
@@ -1609,6 +1610,17 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 refreshAdminNavigation();
 
 // ---------- Démarrage ----------
+function configureAdminTest(enabled) {
+  if (adminTestMode && !enabled) { $('pf-name').value = ''; $('pf-age').value = ''; }
+  adminTestMode = enabled;
+  $('admin-test-note').classList.toggle('hidden', !enabled);
+  $('pf-age').max = enabled ? '110' : '18';
+  $('pf-name').placeholder = enabled ? 'Ton nom (ex. Admin)' : "Prénom de l'enfant";
+  if (enabled && !$('pf-name').value) $('pf-name').value = 'Admin';
+  $('profile-hint').textContent = enabled ? 'Tes essais sont séparés des enfants et des familles. Saisis ton âge réel.' : "Un profil par enfant — Lumi s'adapte à chaque âge.";
+  $('btn-parent').classList.toggle('hidden', enabled);
+  if (enabled) $('pf-age').focus();
+}
 // Si l'app est protégée par un code d'accès (mode hébergé), on l'affiche
 // d'abord ; sinon on ouvre directement l'écran des profils.
 async function initApp() {
@@ -1623,6 +1635,8 @@ async function initApp() {
     $('screen-gate').classList.remove('hidden');
     $('gate-error').textContent = 'Lumi ne peut pas vérifier ton accès. Vérifie la connexion puis réessaie.'; return;
   }
+  try { const me = await (await fetch('/api/auth/me')).json(); configureAdminTest(me.adminTest === true); }
+  catch { configureAdminTest(false); }
   $('screen-profile').classList.remove('hidden');
   fetchProfiles().then(() => renderProfiles());
 }
@@ -1635,6 +1649,7 @@ function enterGate() {
   }).then(async r => {
     if (r.ok) {
       profilesCache = []; profileFetchGeneration++;
+      configureAdminTest(false);
       refreshAdminNavigation();
       $('screen-gate').classList.add('hidden');
       $('screen-profile').classList.remove('hidden');
@@ -1736,6 +1751,7 @@ $('btn-switch-access').addEventListener('click', async () => {
     if (!r.ok && r.status !== 401) throw new Error();
     refreshAdminNavigation();
     cancelChat(); currentProfile = null; history = []; profilesCache = []; profileFetchGeneration++;
+    configureAdminTest(false);
     lastSpeechText = ''; voiceAudioText = '';
     if (voiceAudioUrl) { URL.revokeObjectURL(voiceAudioUrl); voiceAudioUrl = null; }
     if (voiceAudio) voiceAudio.src = '/audio-ready.wav';

@@ -85,6 +85,10 @@ $('share-code').onclick = async () => {
 };
 $('close-code').onclick = () => {$('issued-code').value='';$('code-result').classList.add('hidden');};
 $('btn-refresh').onclick=refresh;
+$('admin-test').onclick = async () => {
+  try { await post('/api/admin/demo', {}); location.href = '/'; }
+  catch (error) { toast(error.message); }
+};
 $('mail-form').onsubmit = async e => {
   e.preventDefault();
   if ($('mail-save').disabled) return;
