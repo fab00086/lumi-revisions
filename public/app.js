@@ -1601,7 +1601,7 @@ async function refreshAdminNavigation() {
     if (!response.ok) return;
     const session = await response.json();
     if (generation !== adminNavigationGeneration) return;
-    links.forEach(link => link.classList.toggle('hidden', session.open !== true && session.owner !== true));
+    links.forEach(link => link.classList.toggle('hidden', session.open !== true));
   } catch { /* En cas de doute, le bouton reste masqué. */ }
 }
 window.addEventListener('focus', refreshAdminNavigation);
@@ -1647,10 +1647,11 @@ function enterGate() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code, consent: $('gate-consent').checked })
   }).then(async r => {
+    refreshAdminNavigation();
     if (r.ok) {
       profilesCache = []; profileFetchGeneration++;
-      configureAdminTest(false);
-      refreshAdminNavigation();
+      const result = await r.json();
+      configureAdminTest(result.admin === true);
       $('screen-gate').classList.add('hidden');
       $('screen-profile').classList.remove('hidden');
       fetchProfiles().then(() => renderProfiles());

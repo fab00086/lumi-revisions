@@ -321,9 +321,11 @@ app.use(express.json({ limit: '25mb' })); // pour les photos en base64
 // KaTeX (rendu des maths) servi depuis node_modules
 app.use('/katex', express.static(path.join(__dirname, 'node_modules', 'katex', 'dist')));
 app.get(['/admin', '/admin.html'], (req, res) => {
-  const cookies = [`lumi_admin=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`];
-  const wasOwner = hasAdmin(req) || hasOwner(req) || (!!ADMIN_CODE && parseCookies(req).lumi_admin === createHash('sha256').update('lumi-admin:' + ADMIN_CODE).digest('hex'));
-  if (wasOwner) cookies.push(ownerCookie(req));
+  const incoming = parseCookies(req);
+  const ending = '; Path=/; HttpOnly; Max-Age=0; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
+  const cookies = ['lumi_admin_once=' + ending, 'lumi_owner=' + ending];
+  // The password just entered in Lumi opens management once without asking twice.
+  if (!hasAdmin(req) || incoming.lumi_admin_once !== adminEntryValue(incoming.lumi_admin)) cookies.push('lumi_admin=' + ending);
   res.setHeader('Set-Cookie', cookies);
   res.setHeader('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
@@ -339,7 +341,7 @@ const ACCESS_CODE = String(process.env.LUMI_ACCESS_CODE || '').trim();
 // ---------- Notifications privées des demandes d'accès ----------
 let ADMIN_EMAIL = String(process.env.LUMI_ADMIN_EMAIL || '').trim();
 let MAIL_API_KEY = String(process.env.RESEND_API_KEY || '').trim();
-const MAIL_FROM = String(process.env.LUMI_EMAIL_FROM || 'Lumi <onboarding@resend.dev>').trim();
+let MAIL_FROM = String(process.env.LUMI_EMAIL_FROM || 'Lumi <onboarding@resend.dev>').trim();
 const MAIL_PUBLIC_URL = String(process.env.LUMI_PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || '').trim();
 async function mailEncryptionKey() {
   return crypto.subtle.importKey('raw', new Uint8Array(createHash('sha256').update(ADMIN_CODE).digest()), 'AES-GCM', false, ['encrypt', 'decrypt']);
@@ -358,29 +360,31 @@ async function loadMailSettings() {
   } else settings = getData()._notifications;
   if (!settings) return;
   ADMIN_EMAIL = String(settings.email || '').trim();
+  MAIL_FROM = String(settings.from || MAIL_FROM).trim();
   try {
     const bytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(settings.key.iv) }, await mailEncryptionKey(), new Uint8Array(settings.key.bytes));
     MAIL_API_KEY = new TextDecoder().decode(bytes);
   } catch { MAIL_API_KEY = ''; }
 }
-async function saveMailSettings(email, key) {
-  const settings = { email, key: await sealMailKey(key) };
+async function saveMailSettings(email, key, from = MAIL_FROM) {
+  const settings = { email, key: await sealMailKey(key), from };
   if (sql) {
     sql.exec('CREATE TABLE IF NOT EXISTS app_settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
     sql.prepare('INSERT OR REPLACE INTO app_settings(name,value) VALUES (?,?)').run('notifications', JSON.stringify(settings));
   } else { const data = getData(); data._notifications = settings; await setData(data); }
   ADMIN_EMAIL = email;
   MAIL_API_KEY = key;
+  MAIL_FROM = from;
 }
 function accessMailConfigured() {
   return !!MAIL_API_KEY && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ADMIN_EMAIL) && /^https:\/\//.test(MAIL_PUBLIC_URL);
 }
-async function updateAccessMail(id, update) {
+async function updateAccessMail(id, update, kind = 'accessRequestMail') {
   const task = writeQueue.then(async () => {
     const acc = await accountById(id);
-    if (!acc?.settings?.pending) return null;
-    acc.settings.accessRequestMail ||= { status: 'pending', queuedAt: new Date().toISOString() };
-    if (update(acc.settings.accessRequestMail) === false) return null;
+    if (!acc || (kind === 'accessRequestMail' ? !acc.settings?.pending : acc.settings?.pending || acc.settings?.blocked || !acc.settings?.approvalMail)) return null;
+    acc.settings[kind] ||= { status: 'pending', queuedAt: new Date().toISOString() };
+    if (update(acc.settings[kind]) === false) return null;
     await accountPut(acc);
     return acc;
   });
@@ -424,8 +428,41 @@ function notifyAccessRequests() {
         console.warn('Notification de demande : envoi différé, demande conservée.');
       }
     }
+    await notifyApprovedAccess();
   })().finally(() => { accessMailTask = null; });
   return accessMailTask;
+}
+async function notifyApprovedAccess() {
+  for (const candidate of (await allAccounts()).filter(a => a.settings?.approvalMail && !a.settings.pending && !a.settings.blocked && !['sent', 'review'].includes(a.settings.approvalMail.status) && !(Number(a.settings.approvalMail.nextAttemptAt) > Date.now())).slice(0, 25)) {
+    const acc = await updateAccessMail(candidate.id, mail => {
+      if (['sent', 'review'].includes(mail.status) || Number(mail.nextAttemptAt) > Date.now()) return false;
+      if (mail.firstAttemptAt && Date.now() - mail.firstAttemptAt > 20 * 3600000) { mail.status = 'review'; delete mail.code; return; }
+      mail.firstAttemptAt ||= Date.now(); mail.status = 'sending';
+      mail.attempts = (mail.attempts || 0) + 1;
+      mail.nextAttemptAt = Date.now() + Math.min(3600000, 60000 * 2 ** Math.min(mail.attempts, 6));
+    }, 'approvalMail');
+    if (!acc || acc.settings.approvalMail.status !== 'sending') continue;
+    const mail = acc.settings.approvalMail;
+    try {
+      const bytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(mail.code.iv) }, await mailEncryptionKey(), new Uint8Array(mail.code.bytes));
+      const code = new TextDecoder().decode(bytes);
+      if (familyCodeHash(code) !== acc.settings.accessCodeHash) throw new Error('Code remplacé');
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST', signal: AbortSignal.timeout(10000),
+        headers: { Authorization: 'Bearer ' + MAIL_API_KEY, 'Content-Type': 'application/json', 'Idempotency-Key': 'lumi-approved-' + acc.id + '-' + mail.version },
+        body: JSON.stringify({ from: MAIL_FROM, to: [acc.email], subject: 'Lumi — ton accès est autorisé',
+          text: 'Ta demande d’accès à Lumi a été approuvée.\n\n1. Ouvre ' + new URL('/', MAIL_PUBLIC_URL).href +
+            '\n2. Dans le champ du code, saisis : ' + code + '\n3. Confirme être le parent ou responsable légal et appuie sur Entrer.\n4. Crée le profil de ton enfant. Sur téléphone, tu peux ensuite installer Lumi depuis le navigateur.\n\nCe code est personnel à ta famille : ne le partage pas avec une autre famille. Appareils autorisés : ' + acc.settings.maxDevices +
+            '. Utilisation : ' + (Number.isFinite(planLimit(acc)) ? planLimit(acc) + ' échanges par jour' : 'illimitée') +
+            '.\n\nConfidentialité et droits sur tes données : ' + new URL('/confidentialite.html', MAIL_PUBLIC_URL).href +
+            '\nLes coordonnées servent à gérer ton accès ; les profils et échanges servent à accompagner les apprentissages. Tu peux demander l’accès, la rectification ou l’effacement de tes données depuis Lumi. Aucun mot de passe administrateur n’est transmis dans ce message.' })
+      });
+      if (!response.ok || !(await response.json()).id) throw new Error('Envoi non confirmé');
+      await updateAccessMail(acc.id, current => { if (current.version !== mail.version) return false; current.status = 'sent'; current.sentAt = new Date().toISOString(); delete current.code; }, 'approvalMail');
+    } catch {
+      await updateAccessMail(acc.id, current => { if (current.version !== mail.version) return false; current.status = 'retry'; }, 'approvalMail');
+    }
+  }
 }
 // ---------- Limitation des tentatives ----------
 const loginAttempts = new Map();
@@ -448,7 +485,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.3' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.4' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -461,6 +498,15 @@ app.get('/api/gate', async (req, res, next) => {
 app.post('/api/unlock', storedRoute(async (req, res) => {
   if (!allowLoginAttempt(req, res)) return;
   const code = String((req.body || {}).code || '').trim();
+  if (ADMIN_CODE && code === ADMIN_CODE) {
+    const token = adminCookieValue();
+    const ending = '; Path=/; HttpOnly; Max-Age=1800; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
+    res.setHeader('Set-Cookie', ['lumi_admin=' + token + ending, 'lumi_admin_once=' + adminEntryValue(token) + ending,
+      'lumi_demo=1' + ending]);
+    return res.json({ ok: true, admin: true });
+  }
+  const closed = '; Path=/; HttpOnly; Max-Age=0; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
+  res.setHeader('Set-Cookie', ['lumi_admin=' + closed, 'lumi_admin_once=' + closed, 'lumi_owner=' + closed]);
   if (code.toUpperCase().startsWith('LUMI-')) {
     const result = await connectFamilyCode(code, parseCookies(req)[SESSION_COOKIE], req.body.consent === true);
     if (result.error) return res.status(result.status).json({ error: result.error });
@@ -476,6 +522,7 @@ app.post('/api/unlock', storedRoute(async (req, res) => {
     // et le gate ne s'ouvrirait jamais.
     res.setHeader('Set-Cookie', [`lumi_access=${accessCookieValue()}; Path=/; HttpOnly; Max-Age=31536000; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
       sessionCookie('', req, 0), 'lumi_family=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax',
+      'lumi_admin=' + closed, 'lumi_admin_once=' + closed, 'lumi_owner=' + closed,
       `lumi_demo=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`]);
     res.json({ ok: true });
   } else {
@@ -612,7 +659,7 @@ function sessionCookie(token, req, maxAgeSec) {
 }
 function familyLoginCookies(token, req) {
   const ending = '; Path=/; HttpOnly; Max-Age=0; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
-  return [sessionCookie(token, req, SESSION_DAYS * 86400), 'lumi_admin=' + ending, 'lumi_owner=' + ending, 'lumi_demo=' + ending];
+  return [sessionCookie(token, req, SESSION_DAYS * 86400), 'lumi_admin=' + ending, 'lumi_admin_once=' + ending, 'lumi_owner=' + ending, 'lumi_demo=' + ending];
 }
 // Trouve le compte de la requete : session valide, sinon compte local (mode
 // local), sinon rien (mode vente : le front montre l'ecran de connexion).
@@ -765,13 +812,15 @@ async function issueFamilyCode(acc) {
   const code = 'LUMI-' + newToken().slice(0, 24).toUpperCase().match(/.{4}/g).join('-');
   acc.settings ||= {};
   acc.settings.accessCodeHash = familyCodeHash(code);
+  if (acc.email && acc.settings.pending) acc.settings.approvalMail = { status: 'pending', queuedAt: new Date().toISOString(), version: newToken().slice(0, 16), code: await sealMailKey(code) };
+  else delete acc.settings.approvalMail;
   acc.settings.pending = false;
   acc.settings.blocked = false;
   if (acc.plan === 'pending') acc.plan = 'free';
   // Ancien code invalidé et toutes ses sessions fermées.
   await disconnectFamily(acc.id);
   await accountPut(acc);
-  return code; // présenté une seule fois ; seul le condensat est enregistré
+  return code; // Le code d'envoi est chiffré puis effacé après confirmation du service e-mail.
 }
 async function connectFamilyCode(code, existingToken, consent) {
   const digest = familyCodeHash(code);
@@ -983,7 +1032,7 @@ app.post('/api/auth/logout', storedRoute(async (req, res) => {
   if (token) await sessionDel(token);
   const ending = '; Path=/; HttpOnly; Max-Age=0; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
   res.setHeader('Set-Cookie', [sessionCookie('', req, 0), 'lumi_admin=' + ending,
-    'lumi_owner=' + ending,
+    'lumi_admin_once=' + ending, 'lumi_owner=' + ending,
     'lumi_demo=' + ending,
     'lumi_access=' + ending, 'lumi_family=1; Path=/; HttpOnly; Max-Age=2592000; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '')]);
   res.json({ ok: true });
@@ -1014,15 +1063,13 @@ function hasAdmin(req) {
   if (!match || Number(match[2]) <= Date.now()) return false;
   return match[3] === createHmac('sha256', ADMIN_CODE).update('lumi-admin-v2:' + match[1] + '.' + match[2]).digest('hex');
 }
-function ownerCookieValue() { return createHmac('sha256', ADMIN_CODE).update('lumi-owner').digest('hex'); }
-function hasOwner(req) { return !!ADMIN_CODE && parseCookies(req).lumi_owner === ownerCookieValue(); }
-function ownerCookie(req) { return `lumi_owner=${ownerCookieValue()}; Path=/; HttpOnly; Max-Age=2592000; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`; }
+function adminEntryValue(token) { return createHmac('sha256', ADMIN_CODE).update('lumi-admin-entry:' + token).digest('hex'); }
 function requireAdmin(req, res) {
   if (!ADMIN_CODE) { res.status(404).json({ error: 'Gestion des clients désactivée : définis LUMI_ADMIN_CODE.' }); return false; }
   if (!hasAdmin(req)) { res.status(401).json({ error: 'Code admin requis.' }); return false; }
   return true;
 }
-app.get('/api/admin/session', (req, res) => res.json({ enabled: !!ADMIN_CODE, open: hasAdmin(req), owner: hasOwner(req), localMode: LOCAL_MODE }));
+app.get('/api/admin/session', (req, res) => res.json({ enabled: !!ADMIN_CODE, open: hasAdmin(req), localMode: LOCAL_MODE }));
 app.post('/api/admin/demo', (req, res) => {
   if (!requireAdmin(req, res)) return;
   res.setHeader('Set-Cookie', `lumi_demo=1; Path=/; HttpOnly; Max-Age=43200; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
@@ -1030,14 +1077,16 @@ app.post('/api/admin/demo', (req, res) => {
 });
 app.get('/api/admin/notifications', (req, res) => {
   if (!hasAdmin(req)) return res.status(401).json({ error: 'Connexion administrateur requise.' });
-  res.json({ email: ADMIN_EMAIL, hasKey: !!MAIL_API_KEY, configured: accessMailConfigured() });
+  res.json({ email: ADMIN_EMAIL, hasKey: !!MAIL_API_KEY, from: MAIL_FROM, configured: accessMailConfigured() });
 });
 app.post('/api/admin/notifications', storedRoute(async (req, res) => {
   if (!hasAdmin(req)) return res.status(401).json({ error: 'Connexion administrateur requise.' });
   const email = String(req.body?.email || '').trim();
   const key = String(req.body?.key || '').trim() || MAIL_API_KEY;
+  const from = String(req.body?.from || MAIL_FROM).trim();
+  if (!/^(?:[^<>\r\n]{1,80}\s<)?[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>?$/.test(from) || from.length > 254) return res.status(400).json({ error: 'Indique une adresse d’envoi valide.' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || (key && !/^re_[A-Za-z0-9_-]{10,200}$/.test(key))) return res.status(400).json({ error: 'Indique ton adresse e-mail et une clé Resend valide.' });
-  await saveMailSettings(email, key);
+  await saveMailSettings(email, key, from);
   res.json({ ok: true, configured: accessMailConfigured() });
   notifyAccessRequests().catch(() => console.warn('Notification : reprise différée.'));
 }));
@@ -1045,12 +1094,16 @@ app.post('/api/admin/login', (req, res) => {
   if (!allowLoginAttempt(req, res, 'admin', 10)) return;
   if (!ADMIN_CODE) return res.status(404).json({ error: 'Gestion des clients désactivée : définis LUMI_ADMIN_CODE.' });
   if (String((req.body || {}).code || '').trim() === ADMIN_CODE) {
-    res.setHeader('Set-Cookie', [`lumi_admin=${adminCookieValue()}; Path=/; HttpOnly; Max-Age=1800; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`, ownerCookie(req)]);
+    res.setHeader('Set-Cookie', `lumi_admin=${adminCookieValue()}; Path=/; HttpOnly; Max-Age=1800; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
     res.json({ ok: true });
-  } else res.status(401).json({ error: 'Code admin incorrect.' });
+  } else {
+    res.setHeader('Set-Cookie', `lumi_admin=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
+    res.status(401).json({ error: 'Code admin incorrect.' });
+  }
 });
 app.post('/api/admin/logout', (req, res) => {
   res.setHeader('Set-Cookie', [`lumi_admin=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
+    `lumi_admin_once=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
     `lumi_owner=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
     `lumi_demo=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`]);
   res.json({ ok: true });
@@ -1067,6 +1120,7 @@ app.get('/api/admin/accounts', async (req, res, next) => {
       label: a.settings?.label || a.email || 'Famille', blocked: !!a.settings?.blocked,
       pending: !!a.settings?.pending, codeAccess: !!a.settings?.accessCodeHash,
       notificationStatus: a.settings?.accessRequestMail?.status || null,
+      approvalMailStatus: a.settings?.approvalMail?.status || null,
       maxDevices: a.settings?.maxDevices || 1, connectedDevices: (await activeSessions(a.id)).length,
       trialEnds: a.trial_ends || a.trialEnds || null, created: a.created || null,
       dailyLimit: (a.settings && Number.isFinite(Number(a.settings.dailyLimit)) && a.settings.dailyLimit !== null) ? Number(a.settings.dailyLimit) : null,
@@ -1095,7 +1149,9 @@ app.post('/api/admin/account', storedRoute(async (req, res) => {
   if (acc.plan === 'local') return res.status(400).json({ error: 'Le compte maison reste illimité et n’est pas modifiable ici.' });
   if (action === 'issue-code') {
     const code = await issueFamilyCode(acc);
-    return res.json({ ok: true, code, label: acc.settings.label });
+    res.json({ ok: true, code, label: acc.settings.label, approvalMailStatus: acc.settings.approvalMail ? 'pending' : null, emailConfigured: accessMailConfigured() });
+    notifyAccessRequests().catch(() => console.warn('Invitation : reprise différée.'));
+    return;
   } else if (action === 'blocked') {
     acc.settings ||= {};
     acc.settings.blocked = value === true;
@@ -1146,7 +1202,9 @@ app.post('/api/account/delete', storedRoute(async (req, res) => {
   if (!r) return;
   if (r.local) return res.status(400).json({ error: 'Le mode sans compte n’a pas de données à supprimer.' });
   const { password } = req.body || {};
-  if (!(await verifyPassword(String(password || ''), r.account.passHash))) {
+  const credential = String(password || '').trim();
+  const valid = r.account.settings?.accessCodeHash ? familyCodeHash(credential) === r.account.settings.accessCodeHash : await verifyPassword(String(password || ''), r.account.passHash);
+  if (!valid || r.adminTest) {
     return res.status(401).json({ error: 'Mot de passe incorrect : suppression refusée.' });
   }
   await accountErase(r.account.id);

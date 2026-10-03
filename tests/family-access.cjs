@@ -62,6 +62,33 @@ test('notifications : panne du service conserve la demande et la clé de dédupl
  }finally{await f.close();}
 });
 
+test('invitation : approbation seule, code chiffré, instructions et confidentialité, effacement après envoi', async () => {
+ const f=await fixture('test-admin',true);try {
+   await f.post('/api/access-request',{name:'Famille',email:'parent@example.test',consent:true},'');await f.c.notifyAccessRequests();
+   const acc=(await f.c.allAccounts())[0];assert.equal(f.messages.filter(m=>m.body.to[0]==='parent@example.test').length,0);
+   const response=await f.post('/api/admin/account',{id:acc.id,action:'issue-code'});const result=await response.json();
+   await f.c.notifyAccessRequests();
+   const invitation=f.messages.find(m=>m.body.to[0]==='parent@example.test');assert.ok(invitation);
+   assert.ok(invitation.body.text.includes(result.code));assert.ok(invitation.body.text.includes('/confidentialite.html'));assert.ok(invitation.body.text.includes('responsable légal'));
+   assert.ok(!f.remote().includes(result.code));assert.ok(!invitation.body.text.includes('test-admin'));
+   const saved=await f.c.accountById(acc.id);assert.equal(saved.settings.approvalMail.status,'sent');assert.equal(saved.settings.approvalMail.code,undefined);
+   await f.c.notifyAccessRequests();assert.equal(f.messages.filter(m=>m.body.to[0]==='parent@example.test').length,1);
+ }finally{await f.close();}
+});
+
+test('invitation : sans service configuré, approbation conservée et envoyée lors de l’activation',async()=>{
+ const f=await fixture();try {
+   await f.post('/api/access-request',{name:'Famille',email:'parent@example.test',consent:true},'');
+   const acc=(await f.c.allAccounts())[0];const result=await(await f.post('/api/admin/account',{id:acc.id,action:'issue-code'})).json();
+   assert.equal(result.emailConfigured,false);assert.equal(f.messages.length,0);assert.ok(!f.remote().includes(result.code));
+   await f.post('/api/admin/notifications',{email:'owner@example.test',key:'re_test_key_123456'});await f.c.notifyAccessRequests();
+   assert.equal(f.messages.length,1);assert.equal(f.messages[0].body.to[0],'parent@example.test');
+   const login=await f.unlock(result.code);assert.equal((await f.post('/api/account/delete',{password:'wrong'},login.cookie)).status,401);
+   assert.equal((await f.post('/api/account/delete',{password:result.code},login.cookie)).status,200);
+   assert.equal(await f.c.accountById(acc.id),null);
+ }finally{await f.close();}
+});
+
 test('session admin : changement de famille et déconnexion retirent aussi le droit admin du navigateur', async () => {
  const f=await fixture();try {
    const a=await f.create();const login=await f.unlock(a.code,f.admin);
@@ -115,11 +142,26 @@ test('ouverture Admin : efface la connexion précédente, reconnaître le propri
    const cookies=page.headers.getSetCookie();assert.ok(cookies.some(v=>v.startsWith('lumi_admin=;')&&v.includes('Max-Age=0')));
    const owner=cookies.find(v=>v.startsWith('lumi_owner=')).split(';')[0];
    assert.equal((await fetch(f.base+'/api/admin/accounts',{headers:{Cookie:owner}})).status,401);
-   const status=await(await fetch(f.base+'/api/admin/session',{headers:{Cookie:owner}})).json();assert.equal(status.open,false);assert.equal(status.owner,true);
+   const status=await(await fetch(f.base+'/api/admin/session',{headers:{Cookie:owner}})).json();assert.equal(status.open,false);assert.equal(status.owner,undefined);
    assert.equal((await f.post('/api/admin/login',{code:'incorrect'},owner)).status,401);
    assert.equal((await f.post('/api/admin/login',{code:'test-admin'},owner)).status,200);
    const old=createHash('sha256').update('lumi-admin:test-admin').digest('hex');
    assert.equal(f.c.hasAdmin({headers:{cookie:'lumi_admin='+old}}),false,'ancienne connexion permanente refusée');
+ }finally{await f.close();}
+});
+
+test('mot de passe dans Lumi : gestion seulement après validation, entrée unique signée et essais isolés',async()=>{
+ const f=await fixture();try {
+   assert.equal((await f.unlock('incorrect')).r.status,401);
+   const login=await f.unlock('test-admin');assert.equal(login.r.status,200);assert.equal((await login.r.json()).admin,true);
+   assert.equal((await(await fetch(f.base+'/api/admin/session',{headers:{Cookie:login.cookie}})).json()).open,true);
+   assert.equal((await f.c.resolveAccount({headers:{cookie:login.cookie}})).adminTest,true);
+   const first=await fetch(f.base+'/admin.html',{headers:{Cookie:login.cookie}});
+   assert.ok(!first.headers.getSetCookie().some(v=>v.startsWith('lumi_admin=;')));
+   const next=login.cookie.split('; ').filter(v=>!v.startsWith('lumi_admin_once=')).join('; ');
+   const second=await fetch(f.base+'/admin.html',{headers:{Cookie:next}});
+   assert.ok(second.headers.getSetCookie().some(v=>v.startsWith('lumi_admin=;')));
+   assert.equal((await fetch(f.base+'/api/admin/accounts',{headers:{Cookie:'lumi_owner=1'}})).status,401);
  }finally{await f.close();}
 });
 

@@ -12,7 +12,7 @@ async function post(path, body) {
   if (!r.ok) throw new Error(j.error || 'Action refusée.');
   return j;
 }
-function showCode(j) { $('code-label').textContent = 'Accès : ' + j.label; $('issued-code').value = j.code; $('code-result').classList.remove('hidden'); $('code-result').scrollIntoView({behavior:'smooth',block:'center'}); }
+function showCode(j) { $('code-label').textContent = 'Accès : ' + j.label + (j.approvalMailStatus ? (j.emailConfigured ? ' — invitation e-mail en attente d’envoi' : ' — e-mail conservé en attente : configure le service d’envoi') : ''); $('issued-code').value = j.code; $('code-result').classList.remove('hidden'); $('code-result').scrollIntoView({behavior:'smooth',block:'center'}); }
 const today = () => { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 let previousPending = null;
 function count(u) { const d=today(); return (Number(u?.chat?.[d]) || 0) + (Number(u?.quiz?.[d]) || 0); }
@@ -26,6 +26,7 @@ async function refresh() {
     if (!$('mail-email').value) {
       const settings = await (await fetch('/api/admin/notifications', { cache: 'no-store' })).json();
       $('mail-email').value = settings.email || '';
+      $('mail-from').value = settings.from || '';
       $('mail-key').placeholder = settings.hasKey ? 'Clé enregistrée — laisser vide pour conserver' : 're_…';
     }
     $('admin-view').classList.remove('hidden'); $('login-box').classList.add('hidden');
@@ -59,6 +60,7 @@ function renderFamily(a, freeDaily) {
     <label>Échanges par jour<input class="limit-input daily" type="number" min="1" max="10000" value="${limit ?? freeDaily}"></label><button class="btn-sm save-limit">Enregistrer l’utilisation</button>
     <label>Appareils autorisés<input class="limit-input devices" type="number" min="1" max="20" value="${a.maxDevices}"></label><button class="btn-sm save-devices">Enregistrer les appareils</button></div>
     <div class="client-ctl"><button class="btn-sm issue">${a.pending?'Approuver et créer le code':a.codeAccess?'Remplacer le code':'Créer le code'}</button><button class="btn-sm block">${a.blocked?'Autoriser l’accès':'Bloquer l’accès'}</button><button class="btn-sm disconnect">Libérer tous les appareils</button><button class="btn-sm warn delete">Supprimer la famille</button></div>`;
+  if (a.approvalMailStatus) { const note=document.createElement('p'); note.textContent=a.approvalMailStatus==='sent'?'Invitation acceptée par le service e-mail.':a.approvalMailStatus==='review'?'Invitation à vérifier : copie le code ou contacte la famille.':'Invitation e-mail en attente. Vérifie la configuration d’envoi.';card.querySelector('.client-id').appendChild(note); }
   const act = async (action,value) => {try { const j=await post('/api/admin/account',{id:a.id,action,value}); if(j.code) showCode(j); else toast('Enregistré ✓'); await refresh(); return true; } catch(e) {toast(e.message);return false;} };
   card.querySelector('.save-limit').onclick = async () => {
     const plan=card.querySelector('.plan').value, input=card.querySelector('.daily');
@@ -97,7 +99,7 @@ $('mail-form').onsubmit = async e => {
   if ($('mail-save').disabled) return;
   $('mail-save').disabled = true;
   try {
-    const saved = await post('/api/admin/notifications', { email: $('mail-email').value, key: $('mail-key').value });
+    const saved = await post('/api/admin/notifications', { email: $('mail-email').value, key: $('mail-key').value, from: $('mail-from').value });
     $('mail-key').value = '';
     $('mail-result').textContent = saved.configured ? 'Enregistré. Les demandes en attente seront également signalées.' : 'Adresse enregistrée. Ajoute la clé Resend pour activer les envois.';
     await refresh();

@@ -22,9 +22,9 @@
     <div class="card">
       <div class="logo">🔒</div>
       <h1>Lumi</h1>
-      <p class="subtitle">Entre le code de ta famille pour ouvrir son espace.</p>
+      <p class="subtitle">Entre ton code famille ou ton mot de passe personnel.</p>
       <div class="video-search">
-        <input id="gate-code" type="text" placeholder="Code d'accès" autocomplete="off">
+        <input id="gate-code" type="password" placeholder="Code famille ou mot de passe personnel" autocomplete="current-password">
         <button id="btn-gate-enter" class="btn btn-primary">Entrer</button>
       </div>
       <p id="gate-error" class="hint"></p>
@@ -203,7 +203,8 @@
   <div id="request-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="request-title">
     <div class="modal-box">
       <div class="modal-head"><strong id="request-title">Demander un accès à Lumi</strong><button id="btn-request-close" class="icon-btn" title="Fermer">✕</button></div>
-      <p class="hint">Le responsable de Lumi choisira les limites de ton accès et te transmettra un code.</p>
+      <p class="hint">Le responsable de Lumi choisira les limites de ton accès. Après approbation, ton code et les instructions seront envoyés par e-mail lorsque le service d’envoi est activé.</p>
+      <p class="hint"><a href="/confidentialite.html" target="_blank" rel="noopener">Confidentialité et droits sur tes données (RGPD)</a></p>
       <form id="request-form">
         <label class="field">Nom de la famille<input id="request-name" type="text" maxlength="80" required></label>
         <label class="field">E-mail du parent<input id="request-email" type="email" maxlength="254" required></label>
@@ -232,6 +233,7 @@
       <p class="hint">Choisis « Lumi — voix française » sur iPhone et Android. La première lecture peut prendre quelques secondes.</p>
       <button id="btn-test-voice" class="btn" type="button">🔊 Tester la voix</button>
       <button class="btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
+      <a class="btn" href="/confidentialite.html" target="_blank" rel="noopener">Confidentialité et mes données</a>
       <button id="btn-test-sound" class="btn" type="button">🎵 Tester le son du téléphone</button>
       <p id="voice-feedback" class="audio-feedback" role="status" aria-live="polite">Teste d’abord le son, puis la voix.</p>
       <p class="hint">Si Lumi indique que la voix est prête, retouche « Écouter Lumi ». La voix française de Lumi nécessite Internet ; les autres choix utilisent les voix installées sur ton appareil.</p>

@@ -1,5 +1,5 @@
 // Explicit updates preserve account cookies and all saved family data.
-const lumiInterfaceVersion = '2026-10-03.3';
+const lumiInterfaceVersion = '2026-10-03.4';
 let lumiUpdateBusy = false;
 let lumiUpdateNotice = false;
 async function checkLumiUpdate() {
