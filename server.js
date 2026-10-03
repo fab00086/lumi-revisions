@@ -485,7 +485,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.12' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.13' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -568,6 +568,30 @@ app.use('/api', (req, res, next) => {
 // Certificat telechargeable : l'iPhone doit l'installer dans ses reglages
 // The family gate above also protects speech, including when accessed directly.
 const speechRequests = new Map();
+const speechAudio = new Map();
+function retainSpeechAudio(ownerId, audio) {
+  const now = Date.now();
+  for (const [id, item] of speechAudio) if (item.expires <= now) speechAudio.delete(id);
+  let bytes = [...speechAudio.values()].reduce((sum,item)=>sum+item.audio.length,0);
+  while (speechAudio.size && (speechAudio.size >= 12 || bytes + audio.length > 16 * 1024 * 1024)) {
+    const oldest = speechAudio.keys().next().value; bytes -= speechAudio.get(oldest).audio.length; speechAudio.delete(oldest);
+  }
+  const id = newToken(); speechAudio.set(id, { ownerId, audio, expires: now + 300000 });
+  return '/api/speech/audio/' + id;
+}
+app.get('/api/speech/audio/:id', async (req, res) => {
+  const owner = await resolveAccount(req);
+  const item = speechAudio.get(req.params.id);
+  if (!owner || !item || item.ownerId !== owner.account.id || item.expires <= Date.now()) return res.status(404).json({ error: 'Lecture expirée. Appuie à nouveau sur Écouter Lumi.' });
+  const audio = item.audio;
+  res.type('audio/wav').set('Cache-Control','no-store').set('Accept-Ranges','bytes');
+  if (!req.headers.range) return res.send(audio);
+  const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range);
+  if (!range) return res.status(416).set('Content-Range', 'bytes */'+audio.length).end();
+  const start=Number(range[1]), end=range[2] ? Math.min(Number(range[2]),audio.length-1) : audio.length-1;
+  if (start>end || start>=audio.length) return res.status(416).set('Content-Range', 'bytes */'+audio.length).end();
+  res.status(206).set('Content-Range',`bytes ${start}-${end}/${audio.length}`).send(audio.subarray(start,end+1));
+});
 // Phrase de diagnostic publique et fixe : aucun texte utilisateur ni donnée de compte.
 app.get('/voice-check.wav', async (_req, res) => {
   try { res.type('audio/wav').set('Cache-Control','no-store').send(await generateSpeechSample()); }
@@ -584,7 +608,11 @@ app.post('/api/speech', async (req, res) => {
   const limit = speechRequests.get(id) || { start: now, count: 0 };
   if (++limit.count > 20) return res.status(429).json({ error: 'Trop de lectures. Réessaie dans une minute.' });
   speechRequests.set(id, limit);
-  try { res.type('audio/wav').send(await generateSpeech(text)); }
+  try {
+    const audio = await generateSpeech(text);
+    if (req.body.format === 'url') return res.json({ url: retainSpeechAudio(id,audio) });
+    res.type('audio/wav').send(audio);
+  }
   catch (error) { res.status(error.status || 503).json({ error: error.message }); }
 });
 
@@ -1825,6 +1853,8 @@ app.post('/api/child', storedRoute(async (req, res) => {
 
   // HTTP : pour l'ordinateur (localhost = contexte sécurisé, pas d'avertissement)
   http.createServer(app).listen(PORT, '0.0.0.0', () => {
+    // Charger la voix en avance ; les réponses réutilisent ensuite le même moteur.
+    if (speechAvailable()) generateSpeechSample().catch(() => console.warn('Voix : préparation initiale différée.'));
     console.log(`\n  ✅ Lumi demarree !`);
     console.log(`  💻 Sur cet ordinateur :  http://localhost:${PORT}`);
     if (!process.env.NO_OPEN_BROWSER) {

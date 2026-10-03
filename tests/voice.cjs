@@ -21,6 +21,7 @@ function setup(serverVoice = false, blockedSilent = false) {
     constructor() { sessions.push(this); }
     start() { this.startedInGesture = gesture; }
     abort() { this.aborted = true; if (this.onend) this.onend(); }
+    stop() { this.stopped = true; }
   }
   const synth = { paused: false, resumedInGesture: false, cancel() {},
     resume() { this.paused = false; this.resumedInGesture = gesture; },
@@ -30,7 +31,7 @@ function setup(serverVoice = false, blockedSilent = false) {
   const c = vm.createContext({ $, navigator: { userAgent: 'iPhone' },
     voiceMode: serverVoice ? 'server' : 'native', AbortController,
     Audio: class { constructor() { return audio; } },
-    URL: { createObjectURL: () => 'blob:voice', revokeObjectURL() {} },
+    URL: { createObjectURL: () => '/api/speech/audio/'+'a'.repeat(48), revokeObjectURL() {} },
     fetch: () => new Promise(resolve => { pendingVoice = resolve; }),
     document: { hidden: false, addEventListener(type, fn) { documentHandlers[type] = fn; } },
     window: { webkitSpeechRecognition: Recognition, isSecureContext: true, speechSynthesis: synth },
@@ -46,7 +47,7 @@ function setup(serverVoice = false, blockedSilent = false) {
   vm.runInContext(section('// ---------- Micro (voix)', '// ---------- Envoi'), c);
   const click = id => { gesture = true; try { $(id).handlers.click(); documentHandlers.click?.(); } finally { gesture = false; } };
   return { c, $, click, timers, bubbles, spoken, sessions, documentHandlers, synth, audioPlays, audio,
-    finishVoice: async () => { pendingVoice({ ok: true, blob: async () => ({}) }); await new Promise(resolve => setImmediate(resolve)); } };
+    finishVoice: async () => { pendingVoice({ ok: true, json: async () => ({url:'/api/speech/audio/'+'a'.repeat(48)}) }); await new Promise(resolve => setImmediate(resolve)); } };
 }
 
 test('voix fichier : active la sortie dans le toucher, lit la réponse et reprend le micro après la fin', async () => {
@@ -58,14 +59,14 @@ test('voix fichier : active la sortie dans le toucher, lit la réponse et repren
   t.c.micLiveResume();
   assert.equal(t.timers.size, 1, 'seul le délai réseau reste actif pendant la préparation');
   await t.finishVoice();
-  assert.equal(t.audio.src, 'blob:voice'); assert.match(t.c.status, /Je parle/);
+  assert.equal(t.audio.src, '/api/speech/audio/'+'a'.repeat(48)); assert.match(t.c.status, /Je parle/);
   t.c.micLiveResume(); assert.equal(t.timers.size, 0, 'aucun micro pendant la lecture');
   t.audio.onended(); assert.equal(t.timers.size, 1, 'reprise après la voix');
 });
 
 test('voix mobile : un déverrouillage sonore bloqué ne bloque pas la génération ni le lecteur visible',async()=>{
  const t=setup(true,true);t.click('btn-test-voice');await t.finishVoice();
- assert.equal(t.audio.src,'blob:voice');assert.equal(t.audio.controls,true);assert.equal(t.audio.hidden,false);assert.equal(t.audio.muted,false);assert.match(t.c.status,/Je parle/);
+ assert.equal(t.audio.src,'/api/speech/audio/'+'a'.repeat(48));assert.equal(t.audio.controls,true);assert.equal(t.audio.hidden,false);assert.equal(t.audio.muted,false);assert.match(t.c.status,/Je parle/);
 });
 
 test('voix fichier : Stop ignore une réponse tardive, et une deuxième lecture utilise le fichier dans le toucher', async () => {
@@ -73,8 +74,13 @@ test('voix fichier : Stop ignore une réponse tardive, et une deuxième lecture 
   t.click('btn-stop'); await t.finishVoice(); assert.ok(!t.$('avatar').classList.contains('talking'));
   t.click('btn-test-voice'); await new Promise(resolve => setImmediate(resolve)); await t.finishVoice();
   t.click('btn-stop'); t.click('btn-listen');
-  assert.equal(t.audioPlays.at(-1).src, 'blob:voice'); assert.equal(t.audioPlays.at(-1).gesture, true);
+  assert.equal(t.audioPlays.at(-1).src, '/api/speech/audio/'+'a'.repeat(48)); assert.equal(t.audioPlays.at(-1).gesture, true);
   await new Promise(resolve => setImmediate(resolve));
+});
+
+test('micro : la fin de parole demande le résultat final sans abandonner la phrase',()=>{
+ const t=setup();t.click('btn-mic');const session=t.sessions[0];session.onspeechend();assert.equal(session.stopped,true);assert.equal(session.aborted,undefined);
+ session.onresult({results:[[{transcript:'Ma question'}]]});assert.equal(t.c.sent,'Ma question');
 });
 
 test('voix iPhone : le bouton reprend une synthèse en pause dans le toucher', () => {
@@ -237,7 +243,7 @@ test('une dictée : ignore les résultats intermédiaires et un doublon final', 
   const t = setup(); let sends=0;t.c.send=()=>sends++;
   t.click('btn-mic'); const session=t.sessions[0];
   const interim=[{transcript:'question incomplète'}];interim.isFinal=false;
-  session.onresult({results:[interim]});assert.equal(sends,0);
+  session.onresult({results:[interim]});assert.equal(sends,0);assert.equal(t.$('input').value,'question incomplète');
   const final=[{transcript:'question complète'}];final.isFinal=true;
   session.onresult({results:[final]});session.onresult({results:[final]});
   assert.equal(sends,1);

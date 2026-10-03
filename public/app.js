@@ -383,12 +383,13 @@ async function send(text, imageBase64) {
     }
     if (!userSaved) messages.push({ role: 'user', content: userContent });
     messages.push({ role: 'assistant', content: full });
+    // Préparer la voix sans attendre l'aller-retour de sauvegarde au cloud.
+    if (generation === chatGeneration) speak(full);
     try {
       await saveChild(profile, messages);
     } catch (err) {
       if (generation === chatGeneration) addBubble('assistant', '⚠️ ' + escapeHtml(err.message));
     }
-    if (generation === chatGeneration) speak(full);
   } catch (err) {
     if (generation !== chatGeneration) return;
     removeTyping();
@@ -489,6 +490,7 @@ let speechUtterances = [];
 let voiceAudio = null;
 let voiceAudioUrl = null;
 let voiceAudioText = '';
+let voiceAudioCreated = 0;
 let voiceAudioBusy = false;
 let voiceRequest = null;
 function setAudioSession(type) {
@@ -498,6 +500,13 @@ function unlockVoiceAudio() {
   if (!voiceAudio) {
     voiceAudio = new Audio('/audio-ready.wav');
     voiceAudio.id = 'lumi-audio'; voiceAudio.hidden = true;
+    voiceAudio.onplay = () => {
+      stopListening(); setAudioSession('playback'); voiceAudioBusy = true;
+      voiceAudio.onended = () => {
+        voiceAudioBusy = false; $('avatar').classList.remove('talking'); $('btn-stop').classList.add('hidden');
+        setStatus("Je t'écoute 👂"); if (typeof micLiveResume === 'function') micLiveResume();
+      };
+    };
     $('voice-playback')?.appendChild?.(voiceAudio);
   }
   // Native media uses the same output as the melody confirmed on the iPhone.
@@ -517,19 +526,21 @@ async function speakAudio(text) {
   setStatus('Lumi prépare sa voix…');
   const timeout = setTimeout(() => controller.abort(), 90000);
   try {
-    const cached = voiceAudioUrl && voiceAudioText === text;
+    const cached = voiceAudioUrl && voiceAudioText === text && Date.now() - voiceAudioCreated < 240000;
     // Le pré-déverrouillage peut rester bloqué sur mobile : il ne doit pas bloquer la requête vocale.
     if (!cached) unlockVoiceAudio().catch(() => {});
     if (!cached) {
     const response = await fetch('/api/speech', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text.slice(0, 3000) }), signal: controller.signal,
+      body: JSON.stringify({ text: text.slice(0, 3000), format: 'url' }), signal: controller.signal,
     });
     if (!response.ok) throw Error((await response.json()).error || 'Voix indisponible.');
-    const blob = await response.blob();
+    const result = await response.json();
+    if (!/^\/api\/speech\/audio\/[a-f0-9]{48}$/.test(result.url)) throw Error('Fichier vocal indisponible.');
     if (gen !== speakGen) return;
     if (voiceAudioUrl) URL.revokeObjectURL(voiceAudioUrl);
-    voiceAudioUrl = URL.createObjectURL(blob);
+    voiceAudioUrl = result.url;
+    voiceAudioCreated = Date.now();
     voiceAudioText = text;
     }
     // Réaffecter aussi la source lors d'une relance après retour au premier plan (Safari/PWA).
@@ -897,9 +908,9 @@ function micLiveResume() {
   if (liveMic && !speechUtterances.length) micLiveRestart(350);
 }
 function startListening() {
-  setAudioSession('play-and-record');
   if (typeof voiceAudioBusy !== 'undefined' && voiceAudioBusy) return;
   if (recog || chatLoading || activeChat || archiving || document.hidden || speechUtterances.length) return;
+  setAudioSession('play-and-record');
   if (!window.isSecureContext) {
     setLiveMic(false);
     addBubble('assistant', '🎤 Ouvre le panneau « Connecter un téléphone » sur le PC et scanne le QR code HTTPS, puis ouvre-le dans Safari.');
@@ -916,16 +927,20 @@ function startListening() {
     const generation = chatGeneration;
     session.lang = 'fr-FR';
     session.continuous = false;
-    session.interimResults = false;
+    session.interimResults = true;
     session.onstart = () => {
       if (recog === session) setStatus(liveMic ? 'Mode discussion 🎙️ — parle, je t’écoute !' : "Je t'écoute… 🎤");
     };
     session.onresult = (e) => {
       if (recog !== session || generation !== chatGeneration) return;
       const result = e.results?.[e.resultIndex || 0];
-      if (result?.isFinal === false) return;
       const text = String(result?.[0]?.transcript || '').trim();
       if (!text) return;
+      if (result?.isFinal === false) {
+        $('input').value = text;
+        setStatus('Je t’entends 🎤 — tu peux toucher Envoyer dès que ta phrase est prête.');
+        return;
+      }
       emptyMicSessions = 0;
       stopListening();
       $('input').value = text;
@@ -936,6 +951,7 @@ function startListening() {
       stopListening();
       if (e.error !== 'aborted') micError(e.error);
     };
+    session.onspeechend = () => { if (recog === session) { try { session.stop?.(); } catch {} } };
     session.onend = () => {
       if (recog !== session) return;
       stopListening();

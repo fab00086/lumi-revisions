@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '.lumi-voice');
@@ -10,6 +11,37 @@ const binary = path.join(root, 'piper', process.platform === 'win32' ? 'piper.ex
 const model = path.join(root, 'fr_FR-siwis-medium.onnx');
 export const speechAvailable = () => existsSync(binary) && existsSync(model) && existsSync(model + '.json');
 let tail = Promise.resolve(), waiting = 0;
+let worker = null, pending = null;
+export function closeSpeechWorker() {
+  const child = worker; worker = null;
+  if (pending?.child === child) { const job=pending; pending=null; clearTimeout(job.timer); job.reject(Error('Voix interrompue.')); }
+  child?.kill();
+}
+function speechWorker() {
+  if (worker) return worker;
+  const child = spawn(binary, ['--model', model, '--json-input'], {
+    cwd: path.dirname(binary), windowsHide: true,
+    env: { ...process.env, OMP_NUM_THREADS: '1' }, stdio: ['pipe', 'pipe', 'ignore'],
+  });
+  worker = child;
+  const lines = createInterface({ input: child.stdout });
+  lines.on('line', line => {
+    const job = pending;
+    if (job?.child !== child || line.trim() !== job.wav) return;
+    pending = null; clearTimeout(job.timer); job.resolve();
+  });
+  const failed = () => {
+    child.kill();
+    if (worker === child) worker = null;
+    const job = pending;
+    if (job?.child === child) { pending=null; clearTimeout(job.timer); job.reject(Error('La préparation de la voix a échoué.')); }
+    lines.close();
+  };
+  child.once('error', failed); child.once('close', failed);
+  child.stdin.on('error', failed);
+  return child;
+}
+process.once('exit', () => worker?.kill());
 let samplePromise = null, sampleRetryAt = 0;
 export function generateSpeechSample() {
   if (samplePromise) return samplePromise;
@@ -28,20 +60,10 @@ export function generateSpeech(text) {
     const wav = path.join(folder, 'voice.wav');
     try {
       await new Promise((resolve, reject) => {
-        const child = spawn(binary, ['--model', model, '--output_file', wav], {
-          cwd: path.dirname(binary), windowsHide: true,
-          env: { ...process.env, OMP_NUM_THREADS: '1' }, stdio: ['pipe', 'ignore', 'ignore'],
-        });
-        let expired = false;
-        const timer = setTimeout(() => { expired = true; child.kill(); }, 60000);
-        child.once('error', () => { clearTimeout(timer); reject(Error('Voix indisponible.')); });
-        child.once('close', code => {
-          clearTimeout(timer);
-          if (code !== 0 || expired) reject(Error('La préparation de la voix a échoué.'));
-          else resolve();
-        });
-        child.stdin.on('error', () => {});
-        child.stdin.end(String(text).replace(/\r?\n/g, ' ') + '\n');
+        const child = speechWorker();
+        const timer = setTimeout(() => closeSpeechWorker(), 60000);
+        pending = { child, wav, resolve, reject, timer };
+        child.stdin.write(JSON.stringify({ text: String(text).replace(/\r?\n/g, ' '), output_file: wav }) + '\n');
       });
       const audio = await fs.readFile(wav);
       if (audio.length < 44 || audio.toString('ascii', 0, 4) !== 'RIFF') throw Error('Audio invalide.');

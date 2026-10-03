@@ -10,13 +10,15 @@ function section(a,b){const start=source.indexOf(a),end=source.indexOf(b,start);
 async function fixture(adminCode = 'test-admin', mail = false, hosting = {}) {
   const app=express();app.use(express.json());let remote='{}', fail=false;
   const messages=[]; let mailFail = false;
-  const c=vm.createContext({console,app,URL,path,__dirname:path.join(__dirname,'..'),structuredClone,createHash,createHmac,crypto:webcrypto,TextEncoder,TextDecoder,AbortController,AbortSignal,setTimeout,clearTimeout,
+  const c=vm.createContext({console,app,URL,path,Buffer,__dirname:path.join(__dirname,'..'),structuredClone,createHash,createHmac,crypto:webcrypto,TextEncoder,TextDecoder,AbortController,AbortSignal,setTimeout,clearTimeout,
+    speechAvailable:()=>true,generateSpeech:async()=>Buffer.from('RIFFtest-audio'),generateSpeechSample:async()=>Buffer.from('RIFFtest-audio'),
     process:{env:{LUMI_ADMIN_CODE:adminCode,LUMI_ACCESS_CODE:'test-house',LUMI_PUBLIC_URL:'https://lumi.test',...(mail?{LUMI_ADMIN_EMAIL:'owner@example.test',RESEND_API_KEY:'re_test_key_123456'}:{}),...hosting}},ENV:{},DATA_FILE:'unused',DATA_DIR:'.',KV_URL:'https://storage.test',KV_TOKEN:'test',isDeno:false,denoKv:null,
     fetch:async(url,opt)=>{if(url==='https://api.resend.com/emails'){messages.push({body:JSON.parse(opt.body),headers:opt.headers});return {ok:!mailFail,json:async()=>({id:'fake-provider-id'})};}if(fail)throw Error('offline');if(opt?.method==='POST')remote=opt.body;return {ok:true,json:async()=>({result:remote})};}});
   vm.runInContext(section('function loadData()','function topicLabel'),c);await c.initStore();
   // Même ordre de protection que dans le serveur complet.
   vm.runInContext(section('const ACCESS_CODE =','// Certificat telechargeable'),c);
   vm.runInContext(section('// ---------- Comptes famille (V2) ----------','function buildSystemPrompt(profile = {})'),c);
+  vm.runInContext(section('const speechRequests =','// pour que Safari autorise'),c);
   vm.runInContext(section("app.get(['/admin', '/admin.html']",'app.use(express.static'),c);
   app.get('/api/test-space',async(req,res)=>{const a=await c.resolveAccount(req);res.json({id:a.account.id});});
   const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
@@ -53,6 +55,19 @@ test('demande SMS : téléphone privé, aucune ouverture avant approbation et au
   const code=await(await f.post('/api/admin/account',{id:account.id,action:'issue-code'})).json();
   await f.c.notifyAccessRequests();assert.equal(code.approvalMailStatus,null);assert.ok(f.messages.every(m=>m.body.to[0]==='owner@example.test'));
   assert.equal((await f.unlock(code.code)).r.status,200);
+ }finally{await f.close();}
+});
+
+test('fichier vocal : accès réservé à sa famille, lecture partielle Safari et expiration',async()=>{
+ const f=await fixture();try{
+  const a=await f.create('A'),b=await f.create('B');const ca=(await f.unlock(a.code)).cookie,cb=(await f.unlock(b.code)).cookie;
+  const r=await f.post('/api/speech',{text:'Bonjour',format:'url'},ca);assert.equal(r.status,200);const {url}=await r.json();
+  assert.match(url,/^\/api\/speech\/audio\/[a-f0-9]{48}$/);
+  assert.equal((await fetch(f.base+url)).status,401);assert.equal((await fetch(f.base+url,{headers:{Cookie:cb}})).status,404);
+  const full=await fetch(f.base+url,{headers:{Cookie:ca}});assert.equal(full.status,200);assert.equal(await full.text(),'RIFFtest-audio');assert.equal(full.headers.get('cache-control'),'no-store');
+  const partial=await fetch(f.base+url,{headers:{Cookie:ca,Range:'bytes=0-1'}});assert.equal(partial.status,206);assert.equal(await partial.text(),'RI');assert.equal(partial.headers.get('content-range'),'bytes 0-1/14');
+  assert.equal((await fetch(f.base+url,{headers:{Cookie:ca,Range:'bytes=999-'}})).status,416);
+  vm.runInContext('for(const item of speechAudio.values())item.expires=0',f.c);assert.equal((await fetch(f.base+url,{headers:{Cookie:ca}})).status,404);
  }finally{await f.close();}
 });
 
