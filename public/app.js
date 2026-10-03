@@ -1593,7 +1593,7 @@ async function renderParentArea() {
 let adminNavigationGeneration = 0;
 async function refreshAdminNavigation() {
   const generation = ++adminNavigationGeneration;
-  const links = document.querySelectorAll('a[href="/admin.html"]');
+  const links = document.querySelectorAll('[data-admin-link]');
   // Masquer immédiatement : aucun droit déduit d'un profil ou du stockage local.
   links.forEach(link => link.classList.add('hidden'));
   try {
@@ -1651,6 +1651,7 @@ function enterGate() {
     if (r.ok) {
       profilesCache = []; profileFetchGeneration++;
       const result = await r.json();
+      if (result.admin === true) { $('gate-code').value = ''; location.href = '/admin.html'; return; }
       configureAdminTest(result.admin === true);
       $('screen-gate').classList.add('hidden');
       $('screen-profile').classList.remove('hidden');
