@@ -85,7 +85,8 @@ $('create-form').onsubmit = async e => {
 function familyInvitationText() {
   const code = $('issued-code').value;
   if (!code) return '';
-  return 'Ton code d’accès à Lumi : '+code+'\nLien : '+new URL('/',location.href).href+'\nOuvre le lien, saisis ce code et confirme être le parent.\nConfidentialité : '+new URL('/confidentialite.html',location.href).href;
+  const link = new URL('/',location.href); link.hash = 'access='+encodeURIComponent(code);
+  return 'Ton code d’accès à Lumi : '+code+'\nOuvrir Lumi : '+link.href+'\nAppuie sur le lien : le code sera déjà rempli. Confirme être le parent, puis touche « Entrer ».\nConfidentialité : '+new URL('/confidentialite.html',location.href).href;
 }
 $('copy-code').onclick = async () => {const text=familyInvitationText();if(!text)return;try {await navigator.clipboard.writeText(text);toast('Invitation copiée avec le code et le lien. Colle-la dans ton SMS.');}catch{$('issued-code').select();toast('Sélectionne et copie le code.');}};
 async function shareFamilyInvitation() {
@@ -96,6 +97,8 @@ async function shareFamilyInvitation() {
   catch(e){if(e.name!=='AbortError')toast('Utilise Copier l’invitation pour transmettre le code et le lien.');}
 }
 $('sms-code').onclick = shareFamilyInvitation;
+$('copy-only-code').onclick = async () => {const input=$('issued-code');if(!input.value)return;try{await navigator.clipboard.writeText(input.value);toast('Code copié. Dans Lumi, touche le champ du code puis « Coller ».');}catch{input.focus();input.select();input.setSelectionRange(0,input.value.length);toast('Code sélectionné. Choisis « Copier », puis colle-le dans Lumi.');}};
+$('issued-code').onclick = () => {const input=$('issued-code');input.select();input.setSelectionRange(0,input.value.length);};
 $('share-code').onclick = shareFamilyInvitation;
 $('close-code').onclick = () => {$('issued-code').value='';$('code-result').classList.add('hidden');};
 $('btn-refresh').onclick=refresh;

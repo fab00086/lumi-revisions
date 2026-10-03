@@ -1623,7 +1623,24 @@ function configureAdminTest(enabled) {
 }
 // Si l'app est protégée par un code d'accès (mode hébergé), on l'affiche
 // d'abord ; sinon on ouvre directement l'écran des profils.
+function readFamilyInvitation() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  if (!params.has('access')) return '';
+  const code = (params.get('access') || '').trim().toUpperCase();
+  // Retirer immédiatement le code de l'adresse. Aucun code Admin accepté dans un lien.
+  window.history.replaceState(null, '', location.pathname + location.search);
+  return /^LUMI-(?:[0-9A-F]{4}-){5}[0-9A-F]{4}$/.test(code) ? code : '';
+}
 async function initApp() {
+  const invitation = readFamilyInvitation();
+  if (invitation) {
+    setLiveMic(false); stopSpeech();
+    $('screen-profile').classList.add('hidden'); $('screen-chat').classList.add('hidden');
+    $('screen-gate').classList.remove('hidden'); $('gate-code').value = invitation;
+    $('gate-consent').checked = false;
+    $('gate-error').textContent = 'Code rempli depuis ton invitation. Confirme être le parent, puis touche « Entrer ».';
+    $('gate-consent').focus(); return;
+  }
   try {
     const g = await (await fetch('/api/gate')).json();
     if (g.locked && !g.open) {
@@ -1665,6 +1682,7 @@ function enterGate() {
 $('btn-gate-enter').addEventListener('click', enterGate);
 $('gate-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') enterGate(); });
 initApp();
+window.addEventListener('hashchange', () => { if (new URLSearchParams(location.hash.slice(1)).has('access')) initApp(); });
 if ('speechSynthesis' in window) speechSynthesis.getVoices();
 
 // ---------- Installation sur l'écran d'accueil ----------
@@ -1717,6 +1735,23 @@ $('btn-test-sound').addEventListener('click', () => {
 
 
 // ---------- Partager Lumi et demander un accès ----------
+document.querySelectorAll('[data-copy-lumi-link]').forEach(button => {
+  button.addEventListener('click', async () => {
+    const url = new URL('/', location.href).href;
+    try { await navigator.clipboard.writeText(url); toast('Lien copié. Colle-le dans ton message ou dans la barre d’adresse.'); }
+    catch {
+      let field = button.nextElementSibling;
+      if (!field || !field.matches('[data-lumi-link]')) {
+        field = document.createElement('input'); field.readOnly = true; field.dataset.lumiLink = '';
+        field.className = 'lumi-link-field'; field.setAttribute('aria-label', 'Lien de Lumi à copier');
+        field.addEventListener('click', () => { field.select(); field.setSelectionRange(0,field.value.length); });
+        button.after(field);
+      }
+      field.value = url; field.focus(); field.select(); field.setSelectionRange(0,url.length);
+      toast('Lien sélectionné. Choisis « Copier ».');
+    }
+  });
+});
 async function shareLumi() {
   const url = new URL('/', location.href).href;
   const text = 'Découvre Lumi pour les révisions. Ouvre le lien et choisis « Demander un accès » : le responsable pourra autoriser ta famille.';

@@ -62,10 +62,27 @@ test('invitation SMS : prépare le code, le lien et la confidentialité sans env
  const nodes={'issued-code':{value:'LUMI-TEST'},'copy-code':{}};
  let shared;const c=vm.createContext({URL,location:{href:'https://lumi.test/admin.html'},$:id=>nodes[id],navigator:{share:async v=>{shared=v;}},toast:()=>{}});
  vm.runInContext(script.slice(start,end),c);await c.shareFamilyInvitation();
- assert.equal(shared.url,undefined);assert.deepEqual(Object.keys(shared),['text']);assert.ok(shared.text.includes('https://lumi.test/'));assert.ok(shared.text.includes('LUMI-TEST'));assert.ok(shared.text.includes('/confidentialite.html'));assert.ok(shared.text.includes('parent'));
+ assert.equal(shared.url,undefined);assert.deepEqual(Object.keys(shared),['text']);assert.ok(shared.text.includes('https://lumi.test/#access=LUMI-TEST'));assert.ok(shared.text.includes('LUMI-TEST'));assert.ok(shared.text.includes('/confidentialite.html'));assert.ok(shared.text.includes('parent'));
  let copied;c.navigator={clipboard:{writeText:async text=>{copied=text;}}};await c.shareFamilyInvitation();assert.equal(copied,shared.text);
  await nodes['copy-code'].onclick();assert.equal(copied,shared.text);
  nodes['issued-code'].value='';shared=null;await c.shareFamilyInvitation();assert.equal(shared,null);
+});
+
+test('lien famille : remplit le code même avec une session existante, sans connexion ni consentement automatique',async()=>{
+ const script=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');
+ const start=script.indexOf('function readFamilyInvitation()'),end=script.indexOf('function enterGate()',start);
+ const code='LUMI-ABCD-1234-5678-90AB-CDEF-1234';let cleaned='',requests=0;
+ const nodes={};for(const id of ['screen-profile','screen-chat','screen-gate','gate-code','gate-consent','gate-error'])nodes[id]={classList:{add(){},remove(){}},value:'',checked:true,focus(){}};
+ const c=vm.createContext({URLSearchParams,location:{hash:'#access='+code,pathname:'/',search:''},window:{history:{replaceState:(_s,_t,url)=>{cleaned=url;}}},$:id=>nodes[id],setLiveMic(){},stopSpeech(){},fetch:()=>{requests++;throw Error('Connexion automatique interdite');}});
+ vm.runInContext(script.slice(start,end),c);await c.initApp();
+ assert.equal(nodes['gate-code'].value,code);assert.equal(nodes['gate-consent'].checked,false);assert.equal(requests,0);assert.equal(cleaned,'/');
+});
+test('lien famille : retire les secrets de l’adresse et refuse un code Admin ou mal formé',()=>{
+ const script=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');const start=script.indexOf('function readFamilyInvitation()'),end=script.indexOf('async function initApp()',start);
+ for(const hash of ['#access=mot-de-passe-admin','#access=LUMI-invalid','#access=%3Cscript%3E']){
+  let cleaned;const c=vm.createContext({URLSearchParams,location:{hash,pathname:'/',search:''},window:{history:{replaceState:(_s,_t,url)=>{cleaned=url;}}}});
+  vm.runInContext(script.slice(start,end),c);assert.equal(c.readFamilyInvitation(),'');assert.equal(cleaned,'/');
+ }
 });
 
 test('notifications : destinataire privé, aucune donnée enfant, une seule alerte par demande', async () => {
