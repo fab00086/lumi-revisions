@@ -6,3 +6,7 @@ npm-debug.log*
 data/*
 !data/curriculum.json
 *.exe
+AUDIT-*.md
+AUDIT-*.html
+PLAN-ACTION-*.md
+corrections-voix
