@@ -31,6 +31,7 @@
       <label class="consent-row"><input id="gate-consent" type="checkbox"> Au premier accès, je confirme être le parent ou responsable légal.</label>
       <button id="btn-request-access" class="btn install-btn" type="button">Demander un accès</button>
       <button id="btn-share-gate" class="btn install-btn" type="button">Partager Lumi</button>
+      <button class="btn install-btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
       <a href="/admin.html" class="management-link hidden" data-admin-link>🔐 Gestion des familles</a>
     </div>
   </div>
@@ -68,6 +69,7 @@
       <button id="btn-share-app" class="btn install-btn" type="button">🔗 Partager Lumi</button>
       <button id="btn-switch-access" class="btn install-btn" type="button">Changer de code famille</button>
       <button id="btn-install" class="btn install-btn" type="button">📲 Installer Lumi sur mon téléphone</button>
+      <button class="btn install-btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
 
       <div class="connect">
         <button id="btn-connect" class="connect-toggle" type="button">📱 Connecter un téléphone (même Wi-Fi)</button>
@@ -228,6 +230,7 @@
       </label>
       <p class="hint">Choisis « Lumi — voix française » sur iPhone et Android. La première lecture peut prendre quelques secondes.</p>
       <button id="btn-test-voice" class="btn" type="button">🔊 Tester la voix</button>
+      <button class="btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
       <button id="btn-test-sound" class="btn" type="button">🎵 Tester le son du téléphone</button>
       <p id="voice-feedback" class="audio-feedback" role="status" aria-live="polite">Teste d’abord le son, puis la voix.</p>
       <p class="hint">Si Lumi indique que la voix est prête, retouche « Écouter Lumi ». La voix française de Lumi nécessite Internet ; les autres choix utilisent les voix installées sur ton appareil.</p>
@@ -330,5 +333,6 @@
     }
   </script>
   <script src="app.js"></script>
+  <script src="update.js"></script>
 </body>
 </html>
