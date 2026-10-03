@@ -500,6 +500,40 @@ body {
 .prog-mat { font-size: 15px; line-height: 1.7; }
 .hist-who { font-size: 14px; }
 .hist-msg.user .hist-text, .hist-msg.assistant .hist-text { font-size: 16px; line-height: 1.6; }
+
+/* Conversation dégagée : outils à la demande et deux micros distincts. */
+#screen-chat { height: 100dvh; overflow: hidden; }
+#screen-chat .topbar { flex-wrap: nowrap; flex-shrink: 0; gap: 8px; padding: 6px 12px; padding-top: calc(6px + env(safe-area-inset-top, 0px)); }
+#screen-chat .topbar-title { min-width: 0; flex-wrap: wrap; gap: 4px 8px; }
+#screen-chat #btn-back { height: 48px; width: 48px; }
+.chat-tools { position: relative; flex-shrink: 0; }
+.chat-tools summary { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,.16); list-style: none; cursor: pointer; font-size: 14px; }
+.chat-tools summary::-webkit-details-marker { display: none; }
+.chat-tools summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+#screen-chat .chat-tools .topbar-actions { position: absolute; z-index: 20; right: 0; top: calc(100% + 8px); width: min(290px, calc(100vw - 24px)); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 12px; border-radius: 16px; background: var(--card); color: var(--violet-dark); box-shadow: 0 8px 28px rgba(30,20,60,.22); }
+#screen-chat .chat-tools:not([open]) .topbar-actions { display: none; }
+#screen-chat .chat-tools .labeled-btn { width: 100%; background: var(--violet-soft); }
+#screen-chat .teacher { flex-shrink: 0; gap: 8px; padding: 6px 12px; }
+#screen-chat .avatar { width: 36px; height: 36px; }
+#screen-chat .teacher-info { min-width: 0; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 8px; }
+#screen-chat .teacher-name-row { min-width: 0; }
+#screen-chat #child-name { overflow-wrap: anywhere; font-size: 14px; }
+#screen-chat #teacher-status { grid-column: 1 / -1; grid-row: 2; font-size: 13px; }
+#screen-chat #btn-listen, #screen-chat #btn-stop { grid-column: 2; grid-row: 1; min-height: 44px; padding: 8px; font-size: 13px; background: var(--violet-soft); color: var(--violet-dark); }
+#screen-chat .teacher-info:has(#btn-stop:not(.hidden)) #btn-listen { display: none; }
+#screen-chat .chat { min-height: 0; padding: 12px; }
+#screen-chat #voice-playback { flex-shrink: 0; padding: 4px 12px; }
+#screen-chat #voice-playback audio { height: 40px; }
+#screen-chat .inputbar { flex-shrink: 0; grid-template-columns: 44px minmax(0,1fr) minmax(0,1fr) 52px; gap: 6px; padding: 8px 10px; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+#screen-chat .inputbar input[type="text"] { grid-column: 2 / 4; grid-row: 1; padding: 10px; }
+#screen-chat #btn-camera { grid-column: 1; grid-row: 1; height: 48px; }
+#screen-chat #btn-send { grid-column: 4; grid-row: 1; height: 48px; }
+#screen-chat #btn-mic { grid-column: 1 / 3; grid-row: 2; }
+#screen-chat #btn-mic-live { grid-column: 3 / 5; grid-row: 2; }
+#screen-chat .inputbar #btn-mic, #screen-chat .inputbar #btn-mic-live { height: 58px; gap: 3px; }
+#screen-chat .inputbar .button-icon { font-size: 24px; }
+#screen-chat .inputbar .button-label { font-size: 12px; }
+#screen-chat .inputbar .recording, #screen-chat .inputbar .live-btn.live { animation: none; }
 @media (max-width: 600px) {
   .prog-item { flex-direction: column; align-items: flex-start; gap: 6px; }
   .modal-box { max-height: 90dvh; }

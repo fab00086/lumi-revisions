@@ -2,6 +2,20 @@
 
 // ---------- Raccourcis ----------
 const $ = (id) => document.getElementById(id);
+// Le menu se referme après le choix d'un outil, y compris sur téléphone.
+$('chat-tools')?.addEventListener('click', (event) => {
+  if (event.target.closest('button')) $('chat-tools').open = false;
+});
+document.addEventListener('click', (event) => {
+  const tools = $('chat-tools');
+  if (tools?.open && !tools.contains(event.target)) tools.open = false;
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && $('chat-tools')?.open) {
+    $('chat-tools').open = false;
+    $('chat-tools').querySelector('summary').focus();
+  }
+});
 let currentProfile = null;
 let adminTestMode = false;
 let chatGeneration = 0;
@@ -1688,6 +1702,11 @@ async function initApp() {
 function enterGate() {
   const code = $('gate-code').value.trim();
   if (!code) return;
+  if (code.toUpperCase().startsWith('LUMI-') && !$('gate-consent').checked) {
+    $('gate-error').textContent = 'Confirme être le parent ou responsable légal en cochant la case.';
+    $('gate-consent').focus();
+    return;
+  }
   fetch('/api/unlock', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code, consent: $('gate-consent').checked })

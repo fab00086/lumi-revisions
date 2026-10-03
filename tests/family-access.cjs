@@ -281,6 +281,12 @@ test('code famille : un seul compte, consentement, plafond appareils et isolatio
     const a=await f.create('A'),b=await f.create('B');assert.notEqual(a.code,b.code);assert.ok(!f.remote().includes(a.code));
     assert.equal((await f.post('/api/unlock',{code:a.code},'')).status,400);
     const first=await f.unlock(a.code);assert.equal(first.r.status,200);assert.match(first.r.headers.getSetCookie()[0],/HttpOnly/);
+    // Même après un consentement enregistré, chaque saisie de code le demande.
+    for (const consent of [false, undefined, 'true']) {
+      const refused = await f.post('/api/unlock', {code:a.code,consent}, first.cookie);
+      assert.equal(refused.status,400);
+      assert.ok(!refused.headers.getSetCookie().some(v=>/^lumi_session=[^;]/.test(v)));
+    }
     assert.equal((await f.unlock(a.code,first.cookie)).r.status,200);
     assert.equal((await f.unlock(a.code)).r.status,403);
     const second=await f.unlock(b.code);assert.equal(second.r.status,200);

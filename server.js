@@ -485,7 +485,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.14' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.15' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -518,6 +518,7 @@ app.post('/api/unlock', storedRoute(async (req, res) => {
     return res.json({ ok: true });
   }
   if ((!ACCESS_CODE && LOCAL_MODE) || (ACCESS_CODE && code === ACCESS_CODE && LOCAL_MODE)) {
+    if (req.body.consent !== true) return res.status(400).json({ error: 'Confirme être le parent ou responsable légal en cochant la case.' });
     // Secure seulement en HTTPS : en http://IP-LAN, un cookie Secure serait ignore
     // et le gate ne s'ouvrirait jamais.
     res.setHeader('Set-Cookie', [`lumi_access=${accessCookieValue()}; Path=/; HttpOnly; Max-Age=31536000; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`,
@@ -862,11 +863,11 @@ async function connectFamilyCode(code, existingToken, consent) {
   const digest = familyCodeHash(code);
   const acc = (await allAccounts()).find(a => a.settings?.accessCodeHash === digest);
   if (!acc || acc.settings.blocked || acc.settings.pending) return { status: 401, error: 'Code incorrect ou accès bloqué.' };
+  if (consent !== true) return { status: 400, error: 'Confirme être le parent ou responsable légal en cochant la case.' };
   const current = existingToken ? await sessionGet(existingToken) : null;
   const reuse = current?.accountId === acc.id && new Date(current.expires) > new Date();
   if (!reuse && (await activeSessions(acc.id)).length >= (acc.settings.maxDevices || 1))
     return { status: 403, error: 'Tous les appareils autorisés sont déjà connectés. Demande au responsable de Lumi de libérer un appareil.' };
-  if (!acc.consentDate && !consent) return { status: 400, error: 'Pour le premier accès, confirme que tu es le parent.' };
   if (!acc.consentDate) { acc.consentDate = new Date().toISOString(); await accountPut(acc); }
   const token = reuse ? existingToken : newToken();
   await sessionPut(token, { accountId: acc.id, expires: new Date(Date.now() + SESSION_DAYS * 86400000).toISOString() });

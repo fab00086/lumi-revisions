@@ -28,7 +28,7 @@
         <button id="btn-gate-enter" class="btn btn-primary">Entrer</button>
       </div>
       <p id="gate-error" class="hint"></p>
-      <label class="consent-row"><input id="gate-consent" type="checkbox"> Au premier accès, je confirme être le parent ou responsable légal.</label>
+      <label class="consent-row"><input id="gate-consent" type="checkbox"> Pour ouvrir un accès famille, je confirme être le parent ou responsable légal.</label>
       <button id="btn-request-access" class="btn install-btn" type="button">Demander un accès</button>
       <button id="btn-share-gate" class="btn install-btn" type="button">Partager Lumi</button>
       <button class="btn install-btn" type="button" data-copy-lumi-link>🔗 Copier le lien de Lumi</button>
@@ -95,14 +95,17 @@
         <strong>Lumi</strong>
         <span id="child-age" class="badge"></span>
       </div>
-      <div class="topbar-actions">
+      <details id="chat-tools" class="chat-tools">
+        <summary aria-label="Ouvrir les outils de Lumi">☰ Outils</summary>
+        <div class="topbar-actions">
         <button id="btn-quiz" class="icon-btn labeled-btn" title="Interro-moi"><span class="button-icon" aria-hidden="true">🎯</span><span class="button-label">Quiz</span></button>
         <button id="btn-video" class="icon-btn labeled-btn" title="Vidéo d'explication"><span class="button-icon" aria-hidden="true">🎬</span><span class="button-label">Vidéo</span></button>
         <button id="btn-new" class="icon-btn labeled-btn" title="Nouvelle leçon"><span class="button-icon" aria-hidden="true">🆕</span><span class="button-label">Leçon</span></button>
         <button id="btn-progress" class="icon-btn labeled-btn" title="Progression"><span class="button-icon" aria-hidden="true">📊</span><span class="button-label">Progrès</span></button>
         <button id="btn-print" class="icon-btn labeled-btn" title="Imprimer"><span class="button-icon" aria-hidden="true">🖨️</span><span class="button-label">Imprimer</span></button>
         <button id="btn-settings" class="icon-btn labeled-btn" title="Réglages"><span class="button-icon" aria-hidden="true">⚙️</span><span class="button-label">Réglages</span></button>
-      </div>
+        </div>
+      </details>
     </header>
 
     <!-- Maître / maîtresse avec les lèvres qui bougent -->
@@ -154,11 +157,10 @@
       <button id="btn-camera" class="icon-btn labeled-btn" title="Prendre une photo du cahier"><span class="button-icon" aria-hidden="true">📷</span><span class="button-label">Photo</span></button>
       <input id="mic" type="file" accept="image/*" capture="environment" class="hidden">
       <input id="input" type="text" placeholder="Écris ta question…" autocomplete="off">
-      <button id="btn-mic-live" class="icon-btn labeled-btn live-btn" aria-label="Activer ou arrêter le mode discussion" title="Mode discussion"><span class="button-icon" aria-hidden="true">🎙️</span><span class="button-label">Discussion</span></button>
-      <button id="btn-mic" class="icon-btn labeled-btn" aria-label="Dicter une question ou arrêter le micro" title="Dicter une question"><span class="button-icon" aria-hidden="true">🎤</span><span class="button-label">Parler</span></button>
+      <button id="btn-mic" class="icon-btn labeled-btn" aria-label="Dicter une question ou arrêter le micro" title="Dicter une question"><span class="button-icon" aria-hidden="true">🎤</span><span class="button-label">Dicter</span></button>
+      <button id="btn-mic-live" class="icon-btn labeled-btn live-btn" aria-label="Activer ou arrêter le mode discussion" title="Mode discussion"><span class="button-icon" aria-hidden="true">🎙️</span><span class="button-label">Conversation</span></button>
       <button id="btn-send" class="icon-btn labeled-btn send" title="Envoyer"><span class="button-icon" aria-hidden="true">➤</span><span class="button-label">Envoyer</span></button>
     </div>
-    <p class="mic-help">🎤 Une question · 🎙️ Discussion : écoute après chaque réponse</p>
   </div>
 
   <!-- ===== Interro (quiz) ===== -->
