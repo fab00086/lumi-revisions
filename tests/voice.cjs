@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
 function section(a, b) { return source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a))); }
 function setup(serverVoice = false, blockedSilent = false, blockedAuto = false) {
-  const elements = new Map(), timers = new Map(), bubbles = [], spoken = [], sessions = [], documentHandlers = {};
+  const elements = new Map(), timers = new Map(), bubbles = [], spoken = [], sessions = [], documentHandlers = {}, reminders = [];
   let timerId = 0, gesture = false;
   const $ = id => {
     if (!elements.has(id)) {
@@ -44,6 +44,7 @@ function setup(serverVoice = false, blockedSilent = false, blockedAuto = false) 
     cleanForSpeech: String, pickBestVoice: () => null, voiceRate: 1,
     chatGeneration: 0, chatLoading: false, activeChat: null, archiving: false,
     setStatus(text) { c.status = text; }, addBubble(role, text) { bubbles.push(text); },
+    toast(text) { reminders.push(text); },
     send(text) { c.sent = text; },
     setTimeout(fn) { timers.set(++timerId, fn); return timerId; },
     clearTimeout(id) { timers.delete(id); },
@@ -51,7 +52,7 @@ function setup(serverVoice = false, blockedSilent = false, blockedAuto = false) 
   vm.runInContext(section('// Un vrai bouton', '// ---------- Caméra'), c);
   vm.runInContext(section('// ---------- Micro (voix)', '// ---------- Envoi'), c);
   const click = id => { gesture = true; try { $(id).handlers.click(); documentHandlers.click?.(); } finally { gesture = false; } };
-  return { c, $, click, timers, bubbles, spoken, sessions, documentHandlers, synth, audioPlays, audio,
+  return { c, $, click, timers, bubbles, spoken, sessions, documentHandlers, synth, audioPlays, audio, reminders,
     voiceRequests,
     finishVoice: async (letter='a') => { pendingVoices.shift()({ ok: true, json: async () => ({url:'/api/speech/audio/'+letter.repeat(48)}) }); await new Promise(resolve => setImmediate(resolve)); } };
 }
@@ -235,22 +236,71 @@ test('premier toucher du micro : aucun son muet concurrent', () => {
   assert.ok(t.sessions[0].startedInGesture);
   assert.equal(t.documentHandlers.touchend, undefined);
 });
-test('mode discussion bloqué : le délai arrête le mode, sans relance infinie', () => {
+test('mode discussion : une session Safari bloquée se relance sans désactiver le bouton', () => {
   const t = setup(); t.click('btn-mic-live'); [...t.timers.values()][0]();
-  assert.equal(t.$('btn-mic-live').classList.contains('live'), false);
+  assert.equal(t.$('btn-mic-live').classList.contains('live'), true);
   assert.equal(t.sessions.length, 1);
-  assert.equal(t.timers.size, 0);
-  assert.match(t.bubbles[0], /Appuie à nouveau/);
+  assert.equal(t.timers.size, 1);
+  assert.match(t.c.status, /se relance/);
+  const [id, fn] = [...t.timers.entries()][0]; t.timers.delete(id); fn();
+  assert.equal(t.sessions.length, 2);
+  t.click('btn-mic-live'); assert.equal(t.timers.size, 0);
 });
-test('mode discussion : trois sessions vides demandent un nouveau toucher', () => {
+test('mode discussion : les silences successifs ne désactivent jamais le bouton', () => {
   const t = setup(); t.click('btn-mic-live');
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 12; i++) {
     t.sessions.at(-1).onend();
-    if (i < 2) { const [id, fn] = [...t.timers.entries()][0]; t.timers.delete(id); fn(); }
+    const [id, fn] = [...t.timers.entries()][0]; t.timers.delete(id); fn();
   }
-  assert.equal(t.sessions.length, 3);
-  assert.equal(t.$('btn-mic-live').classList.contains('live'), false);
-  assert.equal(t.timers.size, 0);
+  assert.equal(t.sessions.length, 13);
+  assert.equal(t.$('btn-mic-live').classList.contains('live'), true);
+  assert.equal(t.timers.size, 1);
+  t.sessions.at(-1).onresult({results:[[{transcript:'Je suis prête'}]]});
+  assert.equal(t.c.sent,'Je suis prête');
+});
+
+test('mode discussion : no-speech et arrêt Safari inattendu relancent, une permission refusée arrête',()=>{
+ const t=setup();t.click('btn-mic-live');
+ for(const error of ['no-speech','aborted']){
+  t.sessions.at(-1).onerror({error});assert.equal(t.$('btn-mic-live').classList.contains('live'),true);
+  const [id,fn]=[...t.timers.entries()][0];t.timers.delete(id);fn();
+ }
+ t.sessions.at(-1).onerror({error:'not-allowed'});
+ assert.equal(t.$('btn-mic-live').classList.contains('live'),false);assert.equal(t.timers.size,0);
+});
+
+test('mode discussion : une phrase intermédiaire ne compte pas comme un silence',()=>{
+ const t=setup();t.click('btn-mic-live');
+ const result=[{transcript:'Je réfléchis'}];result.isFinal=false;t.sessions[0].onresult({results:[result]});
+ t.sessions[0].onend();assert.equal(vm.runInContext('emptyMicSessions',t.c),0);assert.equal(t.c.sent,undefined);
+});
+
+test('verrou écran : demande tardive après arrêt libérée, aucune double demande',async()=>{
+ const t=setup();let resolve;let requests=0;let releases=0;
+ t.c.navigator.wakeLock={request:()=>{requests++;return new Promise(r=>{resolve=r;});}};
+ t.click('btn-mic-live');t.c.keepScreenAwake(true);assert.equal(requests,1);
+ t.click('btn-mic-live');resolve({released:false,release:async()=>{releases++;},addEventListener(){}});
+ await new Promise(r=>setImmediate(r));assert.equal(releases,1);assert.equal(vm.runInContext('wakeLock',t.c),null);
+});
+
+test('verrou écran : libération système permet une nouvelle acquisition, erreur micro libère le verrou',async()=>{
+ const t=setup();const locks=[];
+ t.c.navigator.wakeLock={request:async()=>{const lock={released:false,release:async function(){this.released=true;this.onrelease?.();},addEventListener(type,fn){this.onrelease=fn;}};locks.push(lock);return lock;}};
+ t.click('btn-mic-live');await new Promise(r=>setImmediate(r));
+ await locks[0].release();await t.c.keepScreenAwake(true);assert.equal(locks.length,2);
+ t.sessions[0].onerror({error:'not-allowed'});await new Promise(r=>setImmediate(r));assert.equal(locks[1].released,true);
+});
+
+test('verrou écran : refus du téléphone ne désactive pas la conversation',async()=>{
+ const t=setup();t.c.navigator.wakeLock={request:async()=>{throw Error('Refus système');}};
+ t.click('btn-mic-live');await new Promise(r=>setImmediate(r));
+ assert.equal(t.$('btn-mic-live').classList.contains('live'),true);assert.equal(t.sessions.length,1);
+});
+
+test('conversation iPhone : rappel mode silencieux une fois, sans bloquer le micro',()=>{
+ const t=setup();t.click('btn-mic-live');assert.equal(t.sessions.length,1);assert.equal(t.reminders.length,1);
+ assert.match(t.reminders[0],/désactive le mode silencieux/);t.click('btn-mic-live');t.click('btn-mic-live');
+ assert.equal(t.reminders.length,1);assert.equal(t.sessions.length,2);
 });
 test('mode discussion : un chargement ne peut pas activer un micro fantôme', () => {
   const t = setup(); t.c.chatLoading = true; t.click('btn-mic-live');

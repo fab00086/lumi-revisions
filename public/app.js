@@ -955,6 +955,12 @@ let liveMic = false;
 let emptyMicSessions = 0;
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let phoneSoundReminderShown = false;
+function remindPhoneSound() {
+  if (phoneSoundReminderShown || (!isIOS && !/Android/.test(navigator.userAgent))) return;
+  phoneSoundReminderShown = true;
+  if (typeof toast === 'function') toast('🔊 Pour entendre Lumi, désactive le mode silencieux et monte le volume du téléphone.', 8000);
+}
 function stopListening() {
   clearTimeout(micTimer);
   const previous = recog;
@@ -963,7 +969,7 @@ function stopListening() {
   if (previous) { try { previous.abort(); } catch {} }
 }
 function micError(error) {
-  if (liveMic) { liveMic = false; $('btn-mic-live').classList.remove('live'); }
+  setLiveMic(false);
   setStatus('Micro indisponible — tu peux utiliser la dictée du clavier.');
   const help = isIOS
     ? "Sur iPhone : ouvre Lumi directement dans Safari via le QR code (pas dans le navigateur d'une autre application, ni l'adresse https://192.168…). Autorise le micro dans les réglages du site et active Siri et la Dictée dans les Réglages de l'iPhone."
@@ -978,9 +984,45 @@ function micError(error) {
   };
   addBubble('assistant', '🎤 ' + (messages[error] || 'Le micro est indisponible. Tu peux écrire ta question ou utiliser la dictée du clavier.'));
 }
+// Mode discussion : garder l'ecran allume. Sans ca, l'iPhone se met en veille
+// pendant la conversation — ecran noir = page masquee = micro coupe par Safari.
+let wakeLock = null;
+let wakeLockRequest = null;
+let wakeLockGeneration = 0;
+let wakeLockRetryAt = 0;
+async function keepScreenAwake(on) {
+  if (!on) {
+    wakeLockGeneration++;
+    const lock = wakeLock; wakeLock = null;
+    if (lock) { try { await lock.release(); } catch {} }
+    return;
+  }
+  if (!liveMic || document.hidden || !navigator.wakeLock || Date.now() < wakeLockRetryAt) return;
+  if (wakeLock && !wakeLock.released) return;
+  if (wakeLockRequest) return;
+  const generation = wakeLockGeneration;
+  const request = (async () => {
+    try {
+      const lock = await navigator.wakeLock.request('screen');
+      if (generation !== wakeLockGeneration || !liveMic || document.hidden) {
+        await lock.release(); return;
+      }
+      wakeLock = lock;
+      lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; });
+    } catch { wakeLockRetryAt = Date.now() + 60000; }
+  })();
+  wakeLockRequest = request;
+  try { await request; }
+  finally {
+    if (wakeLockRequest === request) wakeLockRequest = null;
+    if (generation !== wakeLockGeneration && liveMic && !document.hidden) keepScreenAwake(true);
+  }
+}
 function setLiveMic(on) {
   liveMic = on;
   emptyMicSessions = 0;
+  if (on) wakeLockRetryAt = 0;
+  keepScreenAwake(on);
   if (on) $('btn-mic-live').classList.add('live');
   else { $('btn-mic-live').classList.remove('live'); stopListening(); }
 }
@@ -988,6 +1030,7 @@ function setLiveMic(on) {
 function micLiveRestart(delay = 300) {
   clearTimeout(micTimer);
   micTimer = setTimeout(() => {
+    if (liveMic && !document.hidden) keepScreenAwake(true);
     if (liveMic && !recog && !chatLoading && !activeChat && !archiving) startListening();
   }, delay);
 }
@@ -1016,6 +1059,7 @@ function startListening() {
     const session = new SR();
     recog = session;
     const generation = chatGeneration;
+    let heardSpeech = false;
     session.lang = 'fr-FR';
     session.continuous = false;
     session.interimResults = true;
@@ -1027,7 +1071,12 @@ function startListening() {
       const result = e.results?.[e.resultIndex || 0];
       const text = String(result?.[0]?.transcript || '').trim();
       if (!text) return;
+      heardSpeech = true;
       if (result?.isFinal === false) {
+        // Un son a ete entendu : ce n'est pas une session vide. En mode
+        // discussion, les pauses de reflexion de l'enfant ne doivent plus
+        // eteindre le micro — seul un vrai silence complet y arrive.
+        emptyMicSessions = 0;
         $('input').value = text;
         setStatus('Je t’entends 🎤 — tu peux toucher Envoyer dès que ta phrase est prête.');
         return;
@@ -1040,6 +1089,12 @@ function startListening() {
     session.onerror = (e) => {
       if (recog !== session) return;
       stopListening();
+      if ((e.error === 'no-speech' || e.error === 'aborted') && liveMic) {
+        emptyMicSessions = heardSpeech ? 0 : emptyMicSessions + 1;
+        setStatus('Mode conversation actif — prends ton temps, je t’écoute 🎙️');
+        micLiveRestart(Math.min(1500, 600 + emptyMicSessions * 150));
+        return;
+      }
       if (e.error !== 'aborted') micError(e.error);
     };
     session.onspeechend = () => { if (recog === session) { try { session.stop?.(); } catch {} } };
@@ -1047,18 +1102,24 @@ function startListening() {
       if (recog !== session) return;
       stopListening();
       if (liveMic) {
-        if (++emptyMicSessions >= 3) { micError('timeout'); return; }
-        micLiveRestart(); return;
+        emptyMicSessions = heardSpeech ? 0 : emptyMicSessions + 1;
+        // Une fin normale ou un silence n'est pas une panne du micro.
+        setStatus('Mode conversation actif — prends ton temps, je t’écoute 🎙️');
+        micLiveRestart(heardSpeech ? 300 : Math.min(1500, 600 + emptyMicSessions * 150)); return;
       }
       setStatus("Je t'écoute 👂");
     };
     $('btn-mic').classList.add('recording');
-    setStatus(liveMic ? 'Mode discussion 🎙️ — parle, je t’écoute !' : 'Autorise le micro si Safari le demande, puis parle.');
+    setStatus('Démarrage du micro… Autorise-le si Safari le demande.');
     micTimer = setTimeout(() => {
       if (recog !== session) return;
       stopListening();
-      // Une session sans aucun événement est un blocage Safari, pas un silence.
-      // Arrêter au lieu de boucler indéfiniment en affichant « je t'écoute ».
+      if (liveMic && !document.hidden) {
+        setStatus('Le micro se relance… Le mode Conversation reste activé 🎙️');
+        micLiveRestart(1500);
+        return;
+      }
+      // En dictée simple, une session bloquée demande un nouveau toucher.
       micError('timeout');
     }, 30000);
     // Safari gère lui-même ses permissions. Ne pas attendre getUserMedia
@@ -1077,6 +1138,7 @@ $('btn-mic-live').addEventListener('click', () => {
   }
   stopListening(); // le mode discussion remplace la session « une question »
   setLiveMic(true);
+  remindPhoneSound();
   stopSpeech();
   setStatus('Mode discussion 🎙️ — parle, je t’écoute tout le temps !');
   startListening();
@@ -1085,6 +1147,7 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) return;
   setLiveMic(false);
   stopSpeech();
+  setStatus('Conversation en pause. Reviens dans Lumi et touche 🎙️ Conversation pour reprendre.');
 });
 $('btn-mic').addEventListener('click', () => {
   if (recog) { setLiveMic(false); setStatus('Micro arrêté. Appuie sur 🎤 pour une question ou 🎙️ pour discuter.'); return; }
