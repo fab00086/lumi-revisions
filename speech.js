@@ -10,6 +10,15 @@ const binary = path.join(root, 'piper', process.platform === 'win32' ? 'piper.ex
 const model = path.join(root, 'fr_FR-siwis-medium.onnx');
 export const speechAvailable = () => existsSync(binary) && existsSync(model) && existsSync(model + '.json');
 let tail = Promise.resolve(), waiting = 0;
+let samplePromise = null, sampleRetryAt = 0;
+export function generateSpeechSample() {
+  if (samplePromise) return samplePromise;
+  if (Date.now() < sampleRetryAt) return Promise.reject(Error('Test vocal indisponible. Réessaie dans une minute.'));
+  samplePromise = generateSpeech('Bonjour. Je suis Lumi. Est-ce que tu entends ma voix ?').catch(error => {
+    samplePromise = null; sampleRetryAt = Date.now() + 60000; throw error;
+  });
+  return samplePromise;
+}
 export function generateSpeech(text) {
   if (!speechAvailable()) return Promise.reject(Object.assign(Error('Voix en cours d’installation.'), { status: 503 }));
   if (waiting >= 4) return Promise.reject(Object.assign(Error('Voix occupée, réessaie dans un instant.'), { status: 429 }));

@@ -10,7 +10,7 @@ import http from 'http';
 import https from 'https';
 import selfsigned from 'selfsigned';
 import { createHash, createHmac } from 'node:crypto';
-import { speechAvailable, generateSpeech } from './speech.js';
+import { speechAvailable, generateSpeech, generateSpeechSample } from './speech.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -485,7 +485,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.10' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.11' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -568,6 +568,11 @@ app.use('/api', (req, res, next) => {
 // Certificat telechargeable : l'iPhone doit l'installer dans ses reglages
 // The family gate above also protects speech, including when accessed directly.
 const speechRequests = new Map();
+// Phrase de diagnostic publique et fixe : aucun texte utilisateur ni donnée de compte.
+app.get('/voice-check.wav', async (_req, res) => {
+  try { res.type('audio/wav').set('Cache-Control','no-store').send(await generateSpeechSample()); }
+  catch (error) { res.status(503).json({ error: error.message }); }
+});
 app.get('/api/speech/status', (_req, res) => res.json({ available: speechAvailable() }));
 app.post('/api/speech', async (req, res) => {
   const owner = await resolveAccount(req);

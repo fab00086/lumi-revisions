@@ -1301,7 +1301,7 @@ $('btn-diag-run').addEventListener('click', async () => {
 
   const ua = navigator.userAgent;
   const iosVer = (ua.match(/OS (\d+_\d+(?:_\d+)?)/) || [])[1];
-  add(null, 'Appareil', (isIOS ? 'iPhone/iPad' : 'autre appareil') + (iosVer ? ' · iOS ' + iosVer.replace(/_/g, '.') : '') + ' · ' + (window.isSecureContext ? 'HTTPS sécurisé' : 'PAS en HTTPS') + ' · ' + location.hostname);
+  add(null, 'Appareil', (isIOS ? 'iPhone/iPad · version iOS à vérifier dans Réglages du téléphone' : 'autre appareil') + ' · ' + (window.isSecureContext ? 'HTTPS sécurisé' : 'PAS en HTTPS') + ' · ' + location.hostname);
 
   add(!!('speechSynthesis' in window), 'Voix de synthèse disponible', 'speechSynthesis' + ('speechSynthesis' in window ? '' : ' absent'));
   if ('speechSynthesis' in window) {
