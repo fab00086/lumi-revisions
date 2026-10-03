@@ -979,7 +979,6 @@ function startListening() {
   }
 }
 $('btn-mic-live').addEventListener('click', () => {
-  if (typeof voiceMode !== 'undefined' && voiceMode === 'server') unlockVoiceAudio().catch(() => {});
   if (liveMic) { setLiveMic(false); setStatus('Mode discussion éteint. Appuie sur 🎤 quand tu veux parler.'); return; }
   if (chatLoading || activeChat || archiving) {
     setStatus('Attends la fin du chargement ou de la réponse, puis appuie sur 🎙️.');
@@ -997,7 +996,6 @@ document.addEventListener('visibilitychange', () => {
   stopSpeech();
 });
 $('btn-mic').addEventListener('click', () => {
-  if (typeof voiceMode !== 'undefined' && voiceMode === 'server') unlockVoiceAudio().catch(() => {});
   if (recog) { setLiveMic(false); setStatus('Micro arrêté. Appuie sur 🎤 pour une question ou 🎙️ pour discuter.'); return; }
   setLiveMic(false); // annule aussi toute relance automatique encore en attente
   stopSpeech();

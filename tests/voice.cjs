@@ -78,6 +78,10 @@ test('voix fichier : Stop ignore une réponse tardive, et une deuxième lecture 
   await new Promise(resolve => setImmediate(resolve));
 });
 
+test('micro mobile : aucune lecture audio concurrente au démarrage du micro',()=>{
+ const t=setup(true);t.click('btn-mic');assert.equal(t.audioPlays.length,0);assert.equal(t.sessions.length,1);
+});
+
 test('micro : la fin de parole demande le résultat final sans abandonner la phrase',()=>{
  const t=setup();t.click('btn-mic');const session=t.sessions[0];session.onspeechend();assert.equal(session.stopped,true);assert.equal(session.aborted,undefined);
  session.onresult({results:[[{transcript:'Ma question'}]]});assert.equal(t.c.sent,'Ma question');
