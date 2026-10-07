@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 // ---------- Raccourcis ----------
 const $ = (id) => document.getElementById(id);
@@ -204,6 +204,13 @@ async function saveProfiles(list, opts = {}) {
 function renderProfiles() {
   const box = $('profiles');
   const list = loadProfiles();
+  if (list.length > 0) {
+    $('profile-form').classList.add('hidden');
+    if ($('btn-show-profile-form')) $('btn-show-profile-form').classList.remove('hidden');
+  } else {
+    $('profile-form').classList.remove('hidden');
+    if ($('btn-show-profile-form')) $('btn-show-profile-form').classList.add('hidden');
+  }
   box.innerHTML = '';
   list.forEach((p, i) => {
     const el = document.createElement('button');
@@ -2179,3 +2186,4 @@ $('btn-switch-access').addEventListener('click', async () => {
     $('gate-error').textContent = 'Appareil déconnecté. Tu peux entrer un autre code famille.';
   } catch { toast('Déconnexion impossible. Réessaie.'); }
 });
+

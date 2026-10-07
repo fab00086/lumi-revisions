@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
@@ -47,6 +47,7 @@
       <div id="profiles" class="profiles"></div>
       <p id="admin-test-note" class="note hidden">🧪 Espace d’essai Admin : aucun enfant réel ici. Utilise ton nom et ton âge pour tester Lumi.</p>
 
+      <button id="btn-show-profile-form" class="btn hidden" type="button" style="margin-bottom: 15px;">➕ Ajouter un enfant</button>
       <form id="profile-form" class="profile-form">
         <h2 id="profile-form-title">Ajouter un enfant</h2>
         <div class="pf-photo-wrap">
@@ -69,7 +70,9 @@
 
       <button id="btn-parent" class="btn" type="button">👨‍👩‍👧 Espace parent</button>
       <a href="/admin.html" class="management-link hidden" data-admin-link>🔐 Gestion des familles</a>
-      <button id="btn-share-app" class="btn install-btn" type="button">🔗 Partager Lumi</button>
+      <button id="btn-options-toggle" class="btn install-btn" type="button" style="margin-bottom: 15px;">⚙️ Paramètres &amp; Partage</button>
+      <div id="options-panel" class="hidden" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 5px;">
+        <button id="btn-share-app" class="btn install-btn" type="button">🔗 Partager Lumi</button>
       <button class="btn install-btn" type="button" data-copy-lumi-link>🔗 Copier le lien de Lumi</button>
       <button id="btn-switch-access" class="btn install-btn" type="button">Changer de code famille</button>
       <button id="btn-install" class="btn install-btn" type="button">📲 Installer Lumi sur mon téléphone</button>
@@ -83,6 +86,7 @@
           <p class="hint hidden"><a id="connect-tunnel" href="#" target="_blank" rel="noopener"></a></p>
           <button id="btn-iphone-help" class="btn" type="button">🍎 Aide iPhone : activer le micro et la voix</button>
         </div>
+      </div>
       </div>
     </div>
   </div>
@@ -355,3 +359,7 @@
   <script src="update.js"></script>
 </body>
 </html>
+
+
+
+
