@@ -615,7 +615,7 @@ function unlockVoiceAudio() {
     voiceAudio = new Audio('/audio-ready.wav');
     voiceAudio.id = 'lumi-audio'; voiceAudio.hidden = true;
     voiceAudio.onplay = () => {
-      if (!liveMic) stopListening();
+      if (!liveMic || isIOS) stopListening();
       setAudioSession('playback'); voiceAudioBusy = true;
       if (voiceAudioUrl && voiceAudio.src !== '/audio-ready.wav' && !voiceAudio.src.endsWith('/audio-ready.wav')) {
         $('avatar').classList.add('talking'); $('btn-stop').classList.remove('hidden');
@@ -630,7 +630,7 @@ function unlockVoiceAudio() {
   return Promise.resolve();
 }
 async function speakAudio(text) {
-  if (!liveMic) stopListening();
+  if (!liveMic || isIOS) stopListening();
   stopSpeech();
   setAudioSession('playback');
   const gen = ++speakGen;
@@ -757,7 +757,7 @@ $('btn-listen').addEventListener('click', () => {
   if (player?.open && !voiceAudioBusy && voiceAudio && voiceAudioText === lastSpeechText && Date.now() - voiceAudioCreated < 240000) {
     // Relancer le morceau prêt, sans requête ni changement de source dans le toucher.
     // Si Safari a bloqué la suite, ne pas repartir en boucle à la première phrase.
-    if (!liveMic) stopListening();
+    if (!liveMic || isIOS) stopListening();
     setAudioSession('playback'); voiceAudioBusy = true;
     const gen = speakGen;
     voiceAudio.play().then(() => {
@@ -833,7 +833,7 @@ function speak(text) {
   try {
     text = lastSpeechText;
     if (!text) return;
-    if (!liveMic) stopListening();
+    if (!liveMic || isIOS) stopListening();
     stopSpeech();
     setAudioSession('playback');
     // cancel() vide la file, mais ne retire pas l'état pause du navigateur.
@@ -1231,7 +1231,7 @@ function startListening() {
       if (!text) return;
       heardSpeech = true;
       armWatchdog();
-      if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) {
+      if (!isIOS && (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking))) {
         stopSpeech();
       }
       const completeText = [draftPrefix, text].filter(Boolean).join(' ');
@@ -1257,9 +1257,11 @@ function startListening() {
     session.onerror = (e) => {
       if (recog !== session) return;
       stopListening();
-      if ((e.error === 'no-speech' || e.error === 'aborted') && liveMic) {
+      if ((e.error === 'no-speech' || e.error === 'aborted' || e.error === 'audio-capture') && liveMic) {
         emptyMicSessions = heardSpeech ? 0 : emptyMicSessions + 1;
         setStatus(heardSpeech ? 'Phrase conservée — reprise du micro…' : 'Conversation activée — reprise du micro…');
+        // Si la voix joue, on évite de relancer en boucle pour ne pas crasher Safari
+        if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) return;
         micLiveRestart(Math.min(1500, 600 + emptyMicSessions * 150));
         return;
       }
@@ -1269,7 +1271,7 @@ function startListening() {
       if (recog === session) {
         armWatchdog();
         // Couper la parole de Lumi si l'enfant l'interrompt en parlant
-        if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) {
+        if (!isIOS && (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking))) {
           stopSpeech();
         }
       }

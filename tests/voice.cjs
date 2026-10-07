@@ -68,7 +68,7 @@ test('voix longue : première phrase jouée sans attendre la suite, micro repris
  assert.equal(t.$('voice-player').open,false);
  const next=t.audio.onended();assert.equal(t.sessions.length,1);
  await t.finishVoice('b');await next;assert.ok(t.audio.src.endsWith('b'.repeat(48)));
- await t.audio.onended();
+ assert.equal(t.timers.size,0);await t.audio.onended();assert.equal(t.timers.size,1);
  assert.equal(t.$('voice-player').classList.contains('hidden'),true);
 });
 
@@ -106,11 +106,11 @@ test('voix fichier : active la sortie dans le toucher, lit la réponse et repren
   assert.equal(t.spoken.length, 0);
   await new Promise(resolve => setImmediate(resolve));
   t.c.micLiveResume();
-  assert.ok(t.timers.size > 0, 'le délai réseau et le watchdog sont actifs');
+  assert.equal(t.timers.size, 1, 'seul le délai réseau reste actif pendant la préparation');
   await t.finishVoice();
   assert.equal(t.audio.src, '/api/speech/audio/'+'a'.repeat(48)); assert.match(t.c.status, /Je parle/);
-  t.c.micLiveResume(); assert.ok(t.timers.size > 0, 'le watchdog continue pendant la lecture');
-  t.audio.onended(); assert.ok(t.timers.size > 0, 'reprise après la voix');
+  t.c.micLiveResume(); assert.equal(t.timers.size, 0, 'aucun micro pendant la lecture');
+  t.audio.onended(); assert.equal(t.timers.size, 1, 'reprise après la voix');
 });
 
 test('voix mobile : un déverrouillage sonore bloqué ne bloque pas la génération ni le lecteur visible',async()=>{
@@ -204,12 +204,12 @@ test('mode discussion : le micro se rouvre tout seul et s’éteint au bouton', 
 });
 test('mode discussion : le micro reprend après la lecture de Lumi', () => {
   const t = setup(); t.click('btn-mic-live');
-  t.c.speak('Réponse de Lumi.'); // la lecture ne coupe plus le micro
-  assert.equal(t.sessions[0].aborted, undefined); // n'est pas interrompu
+  t.c.speak('Réponse de Lumi.'); // la lecture coupe le micro
+  assert.ok(t.sessions[0].aborted);
   t.spoken[t.spoken.length - 1].utterance.onstart();
   t.spoken[t.spoken.length - 1].utterance.onend(); // Lumi a fini de parler
   [...t.timers.values()].forEach(fn => fn());
-  assert.equal(t.sessions.length, 1); // le micro reste ouvert tout du long
+  assert.equal(t.sessions.length, 2); // le micro s'est rouvert tout seul
   assert.ok(t.$('btn-mic-live').classList.contains('live'));
 });
 test('micro : permission refusée affiche une aide iPhone (QR code, pas de certificat)', () => {
@@ -332,20 +332,20 @@ test('les deux boutons : 🎙️ remplace une dictée par une nouvelle session d
   t.sessions[0].onerror({error:'aborted'});
   assert.ok(t.$('btn-mic-live').classList.contains('live'));
 });
-test('🎤 arrête la discussion pendant la voix du mode discussion', () => {
+test('🎤 passe directement à une question pendant la voix du mode discussion', () => {
   const t = setup(); t.click('btn-mic-live'); t.c.speak('Je réponds.');
   t.click('btn-mic');
   assert.equal(t.$('btn-mic-live').classList.contains('live'), false);
-  assert.equal(t.sessions.length, 1); assert.equal(t.sessions[0].aborted, true);
+  assert.equal(t.sessions.length, 2); assert.ok(t.sessions[1].startedInGesture);
 });
 test('mode discussion : une reprise pendant la préparation de la voix ne coupe pas la réponse', () => {
   const t = setup(); t.click('btn-mic-live'); t.c.speak('Réponse de Lumi.');
   const count=t.sessions.length;
   t.c.micLiveResume();
   t.spoken.at(-1).utterance.onstart(); // retire le délai de préparation
-  assert.ok(t.timers.size > 0); assert.equal(t.sessions.length, count);
+  assert.equal(t.timers.size, 0); assert.equal(t.sessions.length, count);
   t.spoken.at(-1).utterance.onend();
-  assert.ok(t.timers.size > 0);
+  assert.equal(t.timers.size, 1);
 });
 test('une dictée : ignore les résultats intermédiaires et un doublon final', () => {
   const t = setup(); let sends=0;t.c.send=()=>sends++;
@@ -386,8 +386,8 @@ test('micro dictée : blocage après résultat intermédiaire garde le texte san
 test('lecteur en pause : micro reprend et nouvelle lecture arrête à nouveau le micro',async()=>{
  const t=setup(true);t.click('btn-mic-live');t.c.speak('Une réponse.');await t.finishVoice();t.audio.onplay();
  t.audio.paused=true;t.audio.ended=false;t.audio.onpause();assert.equal(vm.runInContext('voiceAudioBusy',t.c),false);
-   [...t.timers.values()].forEach(fn => fn());
- t.audio.paused=false;t.audio.onplay();assert.equal(vm.runInContext('voiceAudioBusy',t.c),true);
+ const [id,fn]=[...t.timers.entries()][0];t.timers.delete(id);fn();assert.equal(t.sessions.length,2);
+ t.audio.paused=false;t.audio.onplay();assert.equal(t.sessions[1].aborted,true);assert.equal(vm.runInContext('voiceAudioBusy',t.c),true);
 });
 test('lecteur : pause de fin ou événement tardif après Stop ne relance pas une ancienne voix',async()=>{
  const t=setup(true);t.click('btn-mic-live');t.c.speak('Une réponse.');await t.finishVoice();const oldPause=t.audio.onpause;
