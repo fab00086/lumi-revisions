@@ -48,12 +48,14 @@ test('photo : transcription jointe au tuteur et retournée pour sauvegarde', asy
     reserveUsage:async()=>({account:{id:'test'}}), resolveAccount:async()=>({account:{id:'test'}}), accountPut:async()=>{}, buildSystemPrompt:()=> 'Tuteur', lessonHistory:h=>h,
     callOllama:async(messages,options)=>{visionCall={messages,options};return {content:'Exercice 9 : comparer 7/8 et 5/6.'};},
     streamOllama:async(messages,options)=>{tutorMessages=messages;options.onDelta('Quel dénominateur commun ?');},
-    searchWeb:async()=>{throw Error('recherche non demandée');}});
+    searchWeb:async()=>{throw Error('recherche non demandée');}, Buffer});
   vm.runInContext(extract(back, 'const FREE_DAILY', 'function rowToAccount'), c);
+  vm.runInContext(extract(back, 'const PHOTO_MAX_BYTES', '// Les erreurs affichees'), c);
   vm.runInContext(extract(back, "app.post('/api/chat'", '// ---------- Quiz'), c);
   const res={writeHead(){},write(line){events.push(JSON.parse(line));},end(){}};
-  await handler({body:{image:'fake-image',history:[{role:'user',content:'Je suis en CM2'}],profile:{}}},res);
-  assert.equal(visionCall.options.image,'fake-image');
+  const jpeg=Buffer.from([0xFF,0xD8,0xFF,0xE0,1,2,3,4,5,6,7,8]).toString('base64');
+  await handler({body:{image:jpeg,history:[{role:'user',content:'Je suis en CM2'}],profile:{}}},res);
+  assert.equal(visionCall.options.image,jpeg);
   assert.ok(tutorMessages.some(m=>m.content==='Je suis en CM2'));
   assert.match(tutorMessages.at(-1).content,/7\/8 et 5\/6/);
   assert.match(events.at(-1).userContent,/\[Lecture de la photo\]/);

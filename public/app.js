@@ -22,6 +22,9 @@ let chatGeneration = 0;
 let activeChat = null;
 let chatLoading = false;
 let archiving = false;
+// Lumi est occupée (réponse en cours, leçon en chargement ou en archivage) :
+// send() ignorerait l'envoi, donc on prévient l'enfant au lieu de perdre sa photo.
+function chatBusy() { return !!(activeChat || chatLoading || archiving); }
 function cancelChat() {
   stopListening();
   stopSpeech();
@@ -612,7 +615,8 @@ function unlockVoiceAudio() {
     voiceAudio = new Audio('/audio-ready.wav');
     voiceAudio.id = 'lumi-audio'; voiceAudio.hidden = true;
     voiceAudio.onplay = () => {
-      stopListening(); setAudioSession('playback'); voiceAudioBusy = true;
+      if (!liveMic) stopListening();
+      setAudioSession('playback'); voiceAudioBusy = true;
       if (voiceAudioUrl && voiceAudio.src !== '/audio-ready.wav' && !voiceAudio.src.endsWith('/audio-ready.wav')) {
         $('avatar').classList.add('talking'); $('btn-stop').classList.remove('hidden');
         setStatus('Je parle 🗣️ (appuie sur ✋ pour me couper)');
@@ -626,7 +630,7 @@ function unlockVoiceAudio() {
   return Promise.resolve();
 }
 async function speakAudio(text) {
-  stopListening();
+  if (!liveMic) stopListening();
   stopSpeech();
   setAudioSession('playback');
   const gen = ++speakGen;
@@ -753,7 +757,8 @@ $('btn-listen').addEventListener('click', () => {
   if (player?.open && !voiceAudioBusy && voiceAudio && voiceAudioText === lastSpeechText && Date.now() - voiceAudioCreated < 240000) {
     // Relancer le morceau prêt, sans requête ni changement de source dans le toucher.
     // Si Safari a bloqué la suite, ne pas repartir en boucle à la première phrase.
-    stopListening(); setAudioSession('playback'); voiceAudioBusy = true;
+    if (!liveMic) stopListening();
+    setAudioSession('playback'); voiceAudioBusy = true;
     const gen = speakGen;
     voiceAudio.play().then(() => {
       if (gen !== speakGen) return;
@@ -828,7 +833,7 @@ function speak(text) {
   try {
     text = lastSpeechText;
     if (!text) return;
-    stopListening();
+    if (!liveMic) stopListening();
     stopSpeech();
     setAudioSession('playback');
     // cancel() vide la file, mais ne retire pas l'état pause du navigateur.
@@ -900,8 +905,15 @@ function speak(text) {
 let cameraStream = null;
 let cameraCallback = null;
 let cameraFileTarget = null;
+// Taille max de l'image produite : 2000 px pour lire un cahier, 300 px pour
+// un selfie de profil (stocké avec le profil, il doit rester léger).
+let cameraMaxDim = 2000;
+// Chaque ouverture a son numéro : si la caméra est fermée pendant que le
+// navigateur demande la permission, le flux arrivé en retard est coupé.
+let cameraSession = 0;
 
 function stopCamera() {
+  cameraSession++;
   if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
   const v = $('camera-video');
   if (v) v.srcObject = null;
@@ -916,28 +928,33 @@ function finishCamera(base64) {
   if (cb && base64) cb(base64);
 }
 
-async function openCamera(callback, facingMode, fileTarget) {
+async function openCamera(callback, facingMode, fileTarget, maxDim) {
   setLiveMic(false);
   stopSpeech();
+  stopCamera(); // jamais deux flux caméra en même temps
   cameraCallback = callback;
   cameraFileTarget = fileTarget || $('mic');
+  cameraMaxDim = maxDim || 2000;
   // iPhone/iPad : ouvrir l'appareil photo NATIF tout de suite.
   // La camera de Safari est bloquee tant que le certificat n'est pas
   // approuve ; l'app native, elle, marche toujours, sans permission.
   if (isIOS && cameraFileTarget) { cameraFileTarget.click(); return; }
+  const session = cameraSession;
   $('camera-msg').classList.add('hidden');
   $('camera-modal').classList.remove('hidden');
   const v = $('camera-video');
   $('btn-camera-capture').classList.remove('hidden');
   v.classList.remove('hidden');
   try {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode || 'environment' }, audio: false });
-      v.srcObject = cameraStream;
-    } else {
-      throw new Error('no camera');
-    }
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) throw new Error('no camera');
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facingMode || 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false
+    });
+    if (session !== cameraSession) { stream.getTracks().forEach(t => t.stop()); return; } // fermée entre-temps
+    cameraStream = stream;
+    v.srcObject = stream;
   } catch (e) {
+    if (session !== cameraSession) return;
     v.classList.add('hidden');
     $('btn-camera-capture').classList.add('hidden');
     $('camera-msg').classList.remove('hidden');
@@ -945,35 +962,64 @@ async function openCamera(callback, facingMode, fileTarget) {
   }
 }
 
+// Dessine une image/vidéo dans un canvas réduit et renvoie le JPEG en base64.
+// Fond blanc : un PNG transparent (capture d'écran, fiche) deviendrait noir en JPEG.
+function drawToJpeg(source, width, height, maxDim, quality) {
+  if (!width || !height) return null;
+  const scale = Math.min(1, maxDim / Math.max(width, height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(width * scale));
+  c.height = Math.max(1, Math.round(height * scale));
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(source, 0, 0, c.width, c.height);
+  const b64 = c.toDataURL('image/jpeg', quality).split(',')[1];
+  return b64 || null; // canvas trop grand (iOS) : "data:," -> rien
+}
+
 $('btn-camera-capture').addEventListener('click', () => {
   const v = $('camera-video');
   if (!v.srcObject) return;
-  const c = document.createElement('canvas');
-  c.width = v.videoWidth || 640;
-  c.height = v.videoHeight || 480;
-  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-  finishCamera(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+  // Vidéo pas encore prête : la photo serait noire.
+  if (v.readyState < 2 || !v.videoWidth) { toast('La caméra démarre… réessaie dans une seconde ! 📷'); return; }
+  const b64 = drawToJpeg(v, v.videoWidth, v.videoHeight, cameraMaxDim, 0.88);
+  if (b64) finishCamera(b64);
+  else toast("Oups, la photo n'a pas marché. Réessaie ! 📷");
 });
 
 $('btn-camera-close').addEventListener('click', stopCamera);
 
+// « Choisir une image » : input SANS capture, sinon le téléphone rouvre
+// l'appareil photo au lieu de la galerie.
 $('btn-camera-gallery').addEventListener('click', () => {
-  stopCamera();
-  if (cameraFileTarget) cameraFileTarget.click();
+  $('camera-modal').classList.add('hidden');
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  $('gallery-file').click();
+});
+
+$('gallery-file').addEventListener('change', (e) => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  compressImage(f, cameraMaxDim, cameraMaxDim > 500 ? 0.9 : 0.8).then(b64 => {
+    if (b64) finishCamera(b64);
+    else toast("Oups, impossible de lire cette image. Essaie une photo JPEG ou PNG ! 📷");
+  });
 });
 
 // Bouton 📷 du cahier : la photo passe par la prévisualisation avant d'aller à Lumi
-$('btn-camera').addEventListener('click', () => openCamera(showNotebookPhotoPreview, 'environment', $('mic')));
+$('btn-camera').addEventListener('click', () => openCamera(showNotebookPhotoPreview, 'environment', $('mic'), 2000));
 
 // Galerie / téléphone (cahier)
 $('mic').addEventListener('change', (e) => {
   const f = e.target.files && e.target.files[0];
+  e.target.value = '';
   if (!f) return;
-  compressImage(f, 2000, 0.92).then(b64 => {
+  compressImage(f, 2000, 0.9).then(b64 => {
     if (b64) finishCamera(b64);
     else toast("Oups, impossible de lire cette photo. Réessaie ! 📷");
   });
-  e.target.value = '';
 });
 
 // ---------- Prévisualisation de la photo du cahier ----------
@@ -995,15 +1041,18 @@ function hideNotebookPhotoPreview() {
 // ✅ Envoyer : la photo part à Lumi (le tuteur)
 $('btn-photo-send').addEventListener('click', () => {
   const b64 = pendingNotebookPhoto;
+  if (!b64) return hideNotebookPhotoPreview();
+  // Lumi répond encore : send() ignorerait la photo. On la garde à l'écran.
+  if (chatBusy()) { toast('Attends que Lumi ait fini de répondre, puis renvoie ta photo ! ⏳'); return; }
   hideNotebookPhotoPreview();
-  if (b64) send('', b64);
+  send('', b64);
 });
 
 // 🔄 Refaire : rouvre la caméra (ou l'appareil photo natif sur iPhone),
 // dans le geste utilisateur du clic, donc Safari autorise toujours.
 $('btn-photo-retake').addEventListener('click', () => {
   hideNotebookPhotoPreview();
-  openCamera(showNotebookPhotoPreview, 'environment', $('mic'));
+  openCamera(showNotebookPhotoPreview, 'environment', $('mic'), 2000);
 });
 
 // ✕ Annuler
@@ -1011,6 +1060,7 @@ $('btn-photo-preview-close').addEventListener('click', hideNotebookPhotoPreview)
 
 // Photo de profil (selfie) via la caméra aussi
 function setProfilePhoto(base64) {
+  if (!base64) { toast("Oups, impossible de lire cette photo. Réessaie ! 📷"); return; }
   pendingPhoto = 'data:image/jpeg;base64,' + base64;
   const img = $('pf-photo-preview');
   img.src = pendingPhoto;
@@ -1018,33 +1068,31 @@ function setProfilePhoto(base64) {
   $('pf-photo-btn').textContent = '📷 Changer la photo';
 }
 
-$('pf-photo-btn').addEventListener('click', () => openCamera(setProfilePhoto, 'user', $('pf-photo-file')));
+// 300 px : le selfie est enregistré avec le profil et renvoyé dans chaque liste.
+$('pf-photo-btn').addEventListener('click', () => openCamera(setProfilePhoto, 'user', $('pf-photo-file'), 300));
 
 $('pf-photo-file').addEventListener('change', (e) => {
   const f = e.target.files && e.target.files[0];
+  e.target.value = '';
   if (!f) return;
   compressImage(f, 300, 0.8).then(b64 => setProfilePhoto(b64));
-  e.target.value = '';
 });
 
+// Object URL plutôt que FileReader : évite de charger une photo de 12 Mpx
+// en base64 dans la mémoire du téléphone avant même de la réduire.
 function compressImage(file, maxDim, quality) {
   return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const c = document.createElement('canvas');
-        c.width = Math.round(img.width * scale);
-        c.height = Math.round(img.height * scale);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL('image/jpeg', quality).split(',')[1]);
-      };
-      img.onerror = () => resolve(null);
-      img.src = reader.result;
+    let url;
+    try { url = URL.createObjectURL(file); } catch { return resolve(null); }
+    const img = new Image();
+    img.onload = () => {
+      let b64 = null;
+      try { b64 = drawToJpeg(img, img.naturalWidth || img.width, img.naturalHeight || img.height, maxDim, quality); } catch {}
+      URL.revokeObjectURL(url);
+      resolve(b64);
     };
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); }; // ex. HEIC hors Safari
+    img.src = url;
   });
 }
 
@@ -1183,6 +1231,9 @@ function startListening() {
       if (!text) return;
       heardSpeech = true;
       armWatchdog();
+      if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) {
+        stopSpeech();
+      }
       const completeText = [draftPrefix, text].filter(Boolean).join(' ');
       if (result?.isFinal === false) {
         // Un son a ete entendu : ce n'est pas une session vide. En mode
@@ -1214,7 +1265,15 @@ function startListening() {
       }
       if (e.error !== 'aborted') micError(e.error);
     };
-    session.onspeechstart = session.onsoundstart = () => { if (recog === session) armWatchdog(); };
+    session.onspeechstart = session.onsoundstart = () => {
+      if (recog === session) {
+        armWatchdog();
+        // Couper la parole de Lumi si l'enfant l'interrompt en parlant
+        if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) {
+          stopSpeech();
+        }
+      }
+    };
     session.onspeechend = () => {
       if (recog !== session) return;
       setStatus('Je termine la dictée…');

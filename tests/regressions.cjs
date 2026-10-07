@@ -123,7 +123,7 @@ test('nouvelle leçon : confirmation en 2 taps, erreur d’archivage préserve l
 });
 test('photo du cahier : prévisualisation, envoi seulement sur confirmation',async()=>{
  const u=ui();let sent=-1,opened=0;
- const c=context({...u,send:(t,img)=>{sent=img;},openCamera:()=>{opened++;},finishCamera:(b)=>{c.__finished=b;},compressImage:async()=>null,toast(){},stopSpeech(){},stopListening(){},stopCamera(){},cameraStream:null,cameraCallback:null,cameraFileTarget:null});
+ const c=context({...u,send:(t,img)=>{sent=img;},openCamera:()=>{opened++;},finishCamera:(b)=>{c.__finished=b;},compressImage:async()=>null,toast(){},stopSpeech(){},stopListening(){},stopCamera(){},chatBusy:()=>false,cameraStream:null,cameraCallback:null,cameraFileTarget:null});
  run(c,section(front,'// Bouton 📷 du cahier','// Photo de profil (selfie)'));
  const img=u.$('photo-preview-img'),modal=u.$('photo-preview-modal');
  u.$('btn-camera').handlers.click();assert.equal(opened,1,'la caméra s’ouvre, rien de plus');assert.equal(sent,-1);
@@ -134,6 +134,30 @@ test('photo du cahier : prévisualisation, envoi seulement sur confirmation',asy
  u.$('btn-photo-preview-close').handlers.click();assert.equal(run(c,'pendingNotebookPhoto'),null);
  // galerie : image illisible -> message, pas d'envoi
  u.els.mic.handlers.change({target:{files:[{}],value:''}});await new Promise(r=>setImmediate(r));assert.equal(c.__finished,undefined);assert.equal(sent,'IMG');
+});
+test('photo du cahier : Lumi encore en train de répondre -> la photo reste en prévisualisation',()=>{
+ const u=ui();let sent=null,msg='';
+ const c=context({...u,send:(t,img)=>{sent=img;},openCamera(){},finishCamera(){},compressImage:async()=>null,toast:m=>{msg=m;},chatBusy:()=>true});
+ run(c,section(front,'// Bouton 📷 du cahier','// Photo de profil (selfie)'));
+ c.showNotebookPhotoPreview('IMG');u.$('btn-photo-send').handlers.click();
+ assert.equal(sent,null,'pas d’envoi perdu');assert.equal(run(c,'pendingNotebookPhoto'),'IMG');
+ assert.ok(!u.$('photo-preview-modal').classList.contains('hidden'));assert.match(msg,/Attends/);
+});
+test('photo : validation serveur (type, encodage, taille)',()=>{
+ const c=context({Buffer});run(c,section(back,'const PHOTO_MAX_BYTES','// Les erreurs affichees'));
+ const jpeg=Buffer.from([0xFF,0xD8,0xFF,0xE0,1,2,3,4,5,6,7,8]).toString('base64');
+ const png=Buffer.from([0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A,0,0,0,0]).toString('base64');
+ assert.equal(c.cleanPhoto(null),null);assert.equal(c.cleanPhoto(''),null);
+ assert.equal(c.cleanPhoto(jpeg),jpeg);assert.equal(c.cleanPhoto('data:image/jpeg;base64,'+jpeg),jpeg);assert.equal(c.cleanPhoto(png),png);
+ assert.equal(c.cleanPhoto({}),false);assert.equal(c.cleanPhoto('pas une image !'),false);
+ assert.equal(c.cleanPhoto(Buffer.from('<svg></svg>').toString('base64')),false);
+ assert.equal(c.cleanPhoto('data:text/html;base64,'+jpeg),false);
+ assert.equal(c.cleanPhoto(jpeg+'A'.repeat(12*1024*1024)),false,'trop lourde');
+});
+test('photo : erreur de lecture expliquée à l’enfant',()=>{
+ const c=context();run(c,section(back,'const CHILD_SAFE_ERROR','// Conserve le début'));
+ assert.match(c.friendlyError(new Error('La lecture de la photo n’a pas marché. Réessaie.')),/photo/);
+ assert.match(c.friendlyError(new Error('Ollama 500: {secret}')),/occupée/);
 });
 test('freemium : local et essai illimités, free plafonné et compté par jour',async()=>{
  const c=context({accountPut:async()=>{},console,ENV:{}});
