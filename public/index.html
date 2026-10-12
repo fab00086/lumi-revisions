@@ -103,6 +103,7 @@
         <summary aria-label="Ouvrir les outils de Lumi">☰ Outils</summary>
         <div class="topbar-actions">
         <button id="btn-quiz" class="icon-btn labeled-btn" title="Interro-moi"><span class="button-icon" aria-hidden="true">🎯</span><span class="button-label">Quiz</span></button>
+        <button id="btn-classe" class="icon-btn labeled-btn" title="Mini-cours généré par Lumi"><span class="button-icon" aria-hidden="true">🏫</span><span class="button-label">Classe</span></button>
         <button id="btn-video" class="icon-btn labeled-btn" title="Vidéo d'explication"><span class="button-icon" aria-hidden="true">🎬</span><span class="button-label">Vidéo</span></button>
         <button id="btn-new" class="icon-btn labeled-btn" title="Nouvelle leçon"><span class="button-icon" aria-hidden="true">🆕</span><span class="button-label">Leçon</span></button>
         <button id="btn-progress" class="icon-btn labeled-btn" title="Progression"><span class="button-icon" aria-hidden="true">📊</span><span class="button-label">Progrès</span></button>
@@ -184,6 +185,25 @@
       </div>
       <div id="quiz-progress" class="hint"></div>
       <div id="quiz-area"></div>
+    </div>
+  </div>
+
+  <!-- ===== Mode Classe (mini-cours genere) ===== -->
+  <div id="classroom-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <strong>🏫 Mode Classe</strong>
+        <button id="btn-class-close" class="icon-btn" title="Fermer">✕</button>
+      </div>
+      <div id="classroom-start">
+        <p class="hint">Sur quoi veux-tu un mini-cours ? 🎓</p>
+        <div class="video-search">
+          <input id="class-topic" type="text" placeholder="Ex : les fractions, la conjugaison…">
+          <button id="btn-class-go" class="btn btn-primary">C'est parti !</button>
+        </div>
+        <p id="class-error" class="hint"></p>
+      </div>
+      <div id="classroom-room" class="hidden"></div>
     </div>
   </div>
 

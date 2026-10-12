@@ -11,7 +11,7 @@
     "postinstall": "node scripts/setup-voice.mjs --render-only",
     "setup:voice": "node scripts/setup-voice.mjs",
     "start": "node server.js",
-    "test": "node --test tests/*.cjs"
+    "test": "node --test tests/*.cjs && node tests/test-api-stream.mjs && node tests/test-api-reasoning.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

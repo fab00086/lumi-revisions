@@ -48,6 +48,13 @@ test('quiz : rejette indices décimaux, absents et hors limites',()=>{
  assert.equal(c.parseQuiz(JSON.stringify([{question:'Q',options:['A','B'],answer:1}]),5)[0].answer,1);
  assert.equal(c.parseQuiz(JSON.stringify([{question:'Q',options:['A','B','C','D','E'],answer:4}]),5).length,0);
 });
+test('classe : parse le JSON du mini-cours noye dans du markdown',()=>{
+ const c=context();run(c,section(back,'function parseClassroom(raw)',"app.post('/api/classroom'"));
+ const j=c.parseClassroom('```json\n{"titre":"T","etapes":[{"titre":"A","contenu":"x","question":{"question":"Q","options":["1","2","3","4"],"answer":1,"explication":"E"}},{"titre":"B","contenu":"y"}]}\n```');
+ assert.ok(j&&j.titre==='T'&&j.etapes.length===2&&j.etapes[0].question&&j.etapes[0].question.answer===1);
+ assert.equal(c.parseClassroom('aucun json ici'),null);
+ assert.equal(c.parseClassroom('{"titre":"Vide","etapes":[]}'),null);
+});
 test('instructions mathématiques : LaTeX conservé',()=>{
  const c=context();run(c,section(back,'function buildSystemPrompt(profile = {})','// ---------- Recherche web'));const prompt=c.buildSystemPrompt();assert.ok(prompt.includes('\\frac{3}{4}'));assert.ok(prompt.includes('\\times'));assert.ok(!prompt.includes('\f'));assert.ok(!prompt.includes('\t'));
 });

@@ -103,6 +103,14 @@ async function initSql() {
       );
       CREATE INDEX IF NOT EXISTS idx_messages_child
         ON messages (account_id, child_id, seq);
+      CREATE TABLE IF NOT EXISTS classrooms (
+        account_id TEXT NOT NULL,
+        child_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}',
+        created TEXT NOT NULL,
+        PRIMARY KEY (account_id, id)
+      );
     `);
   } catch (e) {
     sql = null;
@@ -1758,6 +1766,109 @@ app.post('/api/quiz', async (req, res) => {
   }
 });
 
+// ---------- Mode Classe : mini-cours genere (inspire d'OpenMAIC, simplifie) ----------
+// Le modele produit un JSON {titre, etapes:[{titre, contenu, question?}]},
+// stocke en SQLite pour pouvoir rouvrir la classe, et note a la fin comme
+// une interro (route /api/quiz-score existante). L'IA reste celle des cles
+// Ollama du .env (callOllama).
+function parseClassroom(raw) {
+  if (!raw) return null;
+  let obj = null;
+  try { obj = JSON.parse(String(raw).replace(/```json|```/g, '').trim()); } catch {}
+  if (!obj) {
+    const m = String(raw).match(/\{[\s\S]*\}/);
+    if (m) { try { obj = JSON.parse(m[0]); } catch {} }
+  }
+  if (!obj || typeof obj !== 'object') return null;
+  const titre = String(obj.titre || obj.title || '').slice(0, 120);
+  const steps = Array.isArray(obj.etapes) ? obj.etapes : (Array.isArray(obj.steps) ? obj.steps : []);
+  const etapes = steps.map(s => {
+    if (!s || typeof s !== 'object') return null;
+    const contenu = String(s.contenu ?? s.content ?? '').trim();
+    if (!contenu) return null;
+    const q = s.question || s.quiz || null;
+    let question = null;
+    if (q && q.question && Array.isArray(q.options) && Number.isInteger(q.answer)) {
+      const options = q.options.map(String).slice(0, 4);
+      if (q.answer >= 0 && q.answer < options.length) {
+        question = { question: String(q.question).slice(0, 500), options, answer: q.answer, explication: String(q.explication || '').slice(0, 600) };
+      }
+    }
+    return {
+      titre: String(s.titre ?? s.title ?? 'Étape').slice(0, 120),
+      contenu: contenu.slice(0, 4000),
+      question
+    };
+  }).filter(Boolean).slice(0, 7);
+  if (!etapes.length) return null;
+  return { titre: titre || 'Ma classe', etapes };
+}
+
+app.post('/api/classroom', async (req, res) => {
+  try {
+    const access = await reserveUsage(req, 'chat');
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const acc = access.account;
+    const { childId, topic, profile } = req.body || {};
+    const cleanTopic = String(topic || '').trim().slice(0, 600);
+    if (!cleanTopic) return res.status(400).json({ error: "Dis-moi sur quoi tu veux un mini-cours." });
+    const p = {
+      name: String((profile && profile.name) || '').slice(0, 60),
+      age: Number((profile && profile.age)) || 10,
+      level: String((profile && profile.level) || '')
+    };
+    const lvl = p.level || profileLevel(p);
+    const notions = lvl && CURRICULUM[lvl]
+      ? Object.entries(CURRICULUM[lvl]).map(([m, a]) => m + ' : ' + a.join(', ')).join('\n')
+      : '';
+    // Prompt volontairement COURT (comme le quiz) : les modeles raisonnnent
+    // longtemps sinon, et le JSON arrive tronque.
+    let sys = `Tu es Lumi, professeur bienveillant pour un enfant de ${p.age} ans${lvl ? ' de classe ' + lvl : ''}. Genere une MINI-CLASSE sur le sujet demande. Reponds UNIQUEMENT avec un objet JSON (rien autour, pas de markdown). Format EXACT : {"titre":"...","etapes":[{"titre":"...","contenu":"3 a 6 phrases simples, une notion par etape, un exemple concret, ton chaleureux","question":{"question":"petite question de controle","options":["a","b","c","d"],"answer":INDEX_bonne_0_a_3,"explication":"une phrase"}}]}. Entre 4 et 6 etapes. L'enfant ne sait rien du sujet : demarre par le plus simple. Les mauvaises options sont plausibles et l'index answer varie d'une etape a l'autre. Le contenu est du MARKDOWN tres simple (gras **...**, listes -, maths en $...$). Tu EXPLIQUES la notion : jamais une correction toute faite.`;
+    if (notions) sys += '\n\nProgramme ' + lvl + ' a respecter :\n' + notions;
+    const msgs = [
+      { role: 'system', content: sys },
+      { role: 'user', content: 'Mini-classe sur : ' + cleanTopic }
+    ];
+    const classId = 'cr_' + newToken();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const msg = await callOllama(msgs, { maxTokens: 6500 });
+      await countTokens(acc, messageTokens(msgs) + tokenEstimate(msg.content || '') + tokenEstimate(msg.reasoning || ''));
+      for (const raw of [msg.content, msg.reasoning]) {
+        const cls = parseClassroom(raw);
+        if (cls && cls.etapes.length >= 3) {
+          const id = classId;
+          if (sql) {
+            try {
+              sql.prepare('INSERT OR REPLACE INTO classrooms (account_id, child_id, id, data, created) VALUES (?,?,?,?,?)')
+                .run(acc.id || 'local', String(childId || '').slice(0, 100) || '', id, JSON.stringify(cls), new Date().toISOString());
+            } catch (e) { console.warn('Classe non sauvegardee :', e.message); }
+          }
+          return res.json({ id, classroom: cls });
+        }
+      }
+    }
+    res.status(502).json({ error: "Je n'ai pas réussi à construire la classe. Réessaie dans un instant. 🏫" });
+  } catch (e) {
+    console.error('[classe]', e);
+    res.status(500).json({ error: friendlyError(e) });
+  }
+});
+
+app.get('/api/classroom', async (req, res) => {
+  const r = await requireAccount(req, res);
+  if (!r) return;
+  const id = String(req.query.id || '').trim();
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(id)) return res.status(400).json({ error: 'id invalide' });
+  try {
+    if (!sql) return res.status(404).json({ error: 'Classe introuvable.' });
+    const row = sql.prepare('SELECT data FROM classrooms WHERE account_id=? AND id=?').get(r.account.id, id);
+    if (!row) return res.status(404).json({ error: 'Classe introuvable.' });
+    res.json({ id, classroom: JSON.parse(row.data) });
+  } catch (e) {
+    res.status(500).json({ error: friendlyError(e) });
+  }
+});
+
 // ---------- Recherche de videos YouTube ----------
 function extractVideos(obj, out) {
   if (!obj || typeof obj !== 'object') return;
@@ -1803,6 +1914,155 @@ app.get('/api/videos', async (req, res) => {
     res.json({ videos: [] });
   }
 });
+
+// ---------- Pronote : les devoirs du cahier de textes, automatiquement ----------
+// Python (pronotepy, meme protocole que l'app mobile Pronote) est appele en
+// one-shot avec les identifiants du .env ; le JSON est renvoye au front.
+// Cache memoire 30 min + une seule execution a la fois (pas de spam du site).
+const PRONOTE_SCRIPT = path.join(__dirname, 'scripts', 'pronote-devoirs.py');
+const PRONOTE_PYTHON = [process.env.PRONOTE_PYTHON,
+  path.join(process.env.HOME || '', 'Projets', 'lumi-pronote-venv', 'bin', 'python'),
+  'python3'].filter(Boolean);
+const PRONOTE_TTL = 30 * 60 * 1000;
+let pronoteCache = { at: 0, data: null, pending: null };
+// Identifiants Pronote : saisis dans l'espace parent et stockes dans
+// app_settings (comme les reglages de notifications), avec repli sur le .env.
+let pronoteDbConf = null; // {url, username, password, days} | null
+function loadPronoteConf() {
+  try {
+    if (!sql) return;
+    sql.exec('CREATE TABLE IF NOT EXISTS app_settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    const row = sql.prepare('SELECT value FROM app_settings WHERE name=?').get('pronote');
+    if (row) pronoteDbConf = JSON.parse(row.value) || null;
+  } catch (e) { console.warn('Config Pronote :', e.message); }
+}
+function savePronoteConf(conf) {
+  pronoteDbConf = conf || null;
+  try {
+    if (!sql) return;
+    sql.prepare('INSERT OR REPLACE INTO app_settings(name,value) VALUES (?,?)').run('pronote', JSON.stringify(pronoteDbConf));
+  } catch (e) { console.warn('Config Pronote :', e.message); }
+}
+function pronoteConf() {
+  const s = pronoteDbConf || {};
+  return {
+    url: String(s.url || process.env.PRONOTE_URL || '').trim(),
+    username: String(s.username || process.env.PRONOTE_USERNAME || '').trim(),
+    password: String(s.password || process.env.PRONOTE_PASSWORD || ''),
+    days: Math.min(30, Math.max(1, Number(s.days || process.env.PRONOTE_DAYS || 7) || 7))
+  };
+}
+function pronoteConfigured() {
+  const c = pronoteConf();
+  return Boolean(c.url && c.username && c.password);
+}
+
+function runPronote() {
+  const exe = PRONOTE_PYTHON.find(p => path.isAbsolute(p) ? fs.existsSync(p) : true) || 'python3';
+  const c = pronoteConf();
+  return new Promise((resolve, reject) => {
+    const p = spawn(exe, [PRONOTE_SCRIPT], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, PRONOTE_URL: c.url, PRONOTE_USERNAME: c.username, PRONOTE_PASSWORD: c.password, PRONOTE_DAYS: String(c.days) }
+    });
+    let out = '', err = '';
+    const timer = setTimeout(() => { p.kill('SIGKILL'); }, 60000);
+    timer.unref();
+    p.stdout.on('data', d => out += d);
+    p.stderr.on('data', d => err += d);
+    p.on('error', e => { clearTimeout(timer); reject(new Error('Python introuvable : ' + e.message)); });
+    p.on('exit', () => {
+      clearTimeout(timer);
+      let parsed;
+      try {
+        // pronotepy peut polluer stdout ; le JSON est sur la derniere ligne.
+        const lines = out.trim().split('\n').filter(l => l.trim());
+        parsed = JSON.parse(lines[lines.length - 1] || '');
+      } catch {
+        return reject(new Error('Sortie invalide du script Pronote' + (err ? ' : ' + err.slice(-200) : '')));
+      }
+      if (parsed && parsed.ok) resolve(parsed);
+      else reject(new Error((parsed && parsed.error) || 'Erreur Pronote'));
+    });
+  });
+}
+
+function pronoteDevoirs() {
+  if (pronoteCache.data && Date.now() - pronoteCache.at < PRONOTE_TTL) return Promise.resolve(pronoteCache.data);
+  if (!pronoteCache.pending) {
+    pronoteCache.pending = runPronote()
+      .then(data => { pronoteCache = { at: Date.now(), data, pending: null }; return data; })
+      .catch(e => { pronoteCache.pending = null; throw e; });
+  }
+  return pronoteCache.pending;
+}
+
+app.get('/api/pronote/devoirs', async (req, res) => {
+  const r = await requireAccount(req, res);
+  if (!r) return;
+  if (!fs.existsSync(PRONOTE_SCRIPT) || !pronoteConfigured()) {
+    return res.json({ ok: false, configured: false, jours: [], error: 'Pronote non configuré (espace parent)' });
+  }
+  try {
+    const data = await pronoteDevoirs();
+    res.json({ ok: true, configured: true, fetchTs: data.fetchTs, jours: data.jours || [] });
+  } catch (e) {
+    console.error('Pronote:', e.message);
+    res.status(502).json({ ok: false, configured: true, jours: [], error: e.message });
+  }
+});
+
+// Etat Pronote pour l'espace parent (aucun secret renvoye : host seulement).
+app.get('/api/pronote/status', async (req, res) => {
+  const r = await requireAccount(req, res);
+  if (!r) return;
+  const c = pronoteConf();
+  const hasUrl = Boolean(c.url);
+  const hasUserPass = Boolean(c.username && c.password);
+  let host = '';
+  try { host = hasUrl ? (new URL(c.url).host || '') : ''; } catch { host = ''; }
+  res.json({ configured: hasUrl && hasUserPass, host, days: c.days, source: pronoteDbConf ? 'ui' : 'env' });
+});
+
+// Enregistrer / effacer la configuration Pronote depuis l'espace parent.
+app.post('/api/pronote/config', storedRoute(async (req, res) => {
+  const r = await requireAccount(req, res);
+  if (!r) return;
+  const body = req.body || {};
+  // Reglage familial sensible comme la suppression de profils : sans mot de
+  // passe parent pour le mode local et les essais Admin, avec pour le reste.
+  if (!r.local && !r.adminTest) {
+    const credential = String(body.parentPassword || '');
+    if (!r.account.passHash)
+      return res.status(409).json({ error: "Crée d'abord un mot de passe parent pour la configuration Pronote.", needParentPassword: true });
+    if (!(await verifyPassword(credential, r.account.passHash)))
+      return res.status(401).json({ error: 'Mot de passe parent incorrect : configuration Pronote non enregistrée.' });
+  }
+  if (body.clear) {
+    savePronoteConf(null);
+    pronoteCache = { at: 0, data: null, pending: null };
+    return res.json({ ok: true, configured: false });
+  }
+  const url = String(body.url || '').trim();
+  const username = String(body.username || '').trim();
+  const password = String(body.password || '');
+  if (!/^https?:\/\/.+/i.test(url))
+    return res.status(400).json({ error: 'URL Pronote invalide. Exemple : https://xxx.index-education.net/pronote/eleve.html' });
+  if (!username || !password)
+    return res.status(400).json({ error: 'Identifiant et mot de passe élève requis.' });
+  savePronoteConf({ url, username, password, days: Math.min(30, Math.max(1, Number(body.days) || 7)) });
+  pronoteCache = { at: 0, data: null, pending: null }; // forcer un fetch frais
+  if (body.test) {
+    try {
+      await pronoteDevoirs();
+      res.json({ ok: true, configured: true, test: { ok: true } });
+    } catch (e) {
+      res.json({ ok: true, configured: true, test: { ok: false, error: e.message } });
+    }
+  } else {
+    res.json({ ok: true, configured: true });
+  }
+}));
 
 // ---------- QR code de connexion ----------
 function lanUrls() {
@@ -1981,6 +2241,7 @@ app.post('/api/child', storedRoute(async (req, res) => {
 (async () => {
   await initStore();
   await loadMailSettings();
+  loadPronoteConf();
   notifyAccessRequests().catch(() => console.warn('Notification de demande : reprise différée.'));
   setInterval(() => { notifyAccessRequests().catch(() => console.warn('Notification de demande : reprise différée.')); }, 60000).unref();
 

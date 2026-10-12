@@ -319,6 +319,7 @@ async function startChat(p) {
     const greeting = `Salut ${escapeHtml(p.name)} ! 👋 Je suis Lumi. Montre-moi ton devoir (photo 📷) ou pose-moi une question. Je vais t'aider à trouver la réponse toi-même, promis !`;
     addBubble('assistant', greeting);
     speak(`Salut ${p.name} ! Je suis Lumi, ton maître ou ta maîtresse. Montre-moi ton devoir, ou pose-moi une question, et je t'aiderai à trouver la réponse toi-même.`);
+    if (typeof afficheDevoirsPronote === 'function') afficheDevoirsPronote();
   }
 }
 
@@ -351,6 +352,78 @@ function addBubble(role, html, sources) {
   chat.appendChild(wrap);
   chat.scrollTop = chat.scrollHeight;
   return b;
+}
+
+// ---------- Pronote : les devoirs du jour remontes automatiquement ----------
+let pronoteCache = null;
+async function chargerDevoirsPronote() {
+  try {
+    if (pronoteCache && Date.now() - pronoteCache.at < 10 * 60 * 1000) return pronoteCache.data;
+    const r = await fetch('/api/pronote/devoirs');
+    const j = await r.json();
+    if (!r.ok || !j.ok) return null;
+    pronoteCache = { at: Date.now(), data: j };
+    return j;
+  } catch { return null; }
+}
+
+async function afficheDevoirsPronote() {
+  const j = await chargerDevoirsPronote();
+  if (!j || !Array.isArray(j.jours)) return;
+  // Le plan porte sur le jour le plus proche qui a des devoirs non faits :
+  // si tout est coche fait, on le dit et on s'arrete la.
+  const jour = j.jours.find(d => Array.isArray(d.devoirs) && d.devoirs.length) || null;
+  if (!jour) return;
+  const restants = jour.devoirs.filter(x => (x.description || '').trim());
+  const faits = restants.filter(x => x.fait).length;
+  const plan = restants.filter(x => !x.fait);
+  const label = new Date(jour.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  if (!plan.length) {
+    if (restants.length) {
+      const msg = faits === restants.length
+        ? '🎉 Ton cahier de textes Pronote est vide pour le moment : tous tes devoirs sont marqués faits. Montre-moi ce que tu as envie de travailler !'
+        : '📒 Ton cahier de textes Pronote est vide pour le moment. Montre-moi ton devoir (photo 📷) et on regarde ensemble !';
+      addBubble('assistant', msg + `<span class="devoir-date">vérifié le ${escapeHtml(label)}</span>`);
+      speak('Ton cahier de textes est vide pour le moment.');
+    }
+    return;
+  }
+  const html = '<strong>📒 Ton plan de révisions</strong>'
+    + `<span class="devoir-date">devoirs du cahier de textes Pronote, pour le ${escapeHtml(label)}</span>`
+    + '<div class="devoir-list">'
+    + plan.map((d, i) =>
+        `<div class="devoir-card">`
+        + `<span class="devoir-matiere">${i + 1}. 📘 ${escapeHtml(d.matiere)}</span>`
+        + `<span class="devoir-texte">${escapeHtml(String(d.description).trim().slice(0, 240))}</span>`
+        + (d.fichiers && d.fichiers.length ? `<span class="devoir-fichiers">📎 ${d.fichiers.map(f => escapeHtml(f.nom)).join(', ')}</span>` : '')
+        + '</div>').join('')
+    + (restants.some(x => x.fait) ? '<span class="devoir-fichiers">✓ Devoir déjà coché fait sur Pronote : on le laisse de côté.</span>' : '')
+    + '</div>'
+    + '<p class="devoir-q">Par quoi tu veux commencer ?</p>'
+    + '<div class="devoir-list">'
+    + plan.map((d, i) =>
+        `<div class="devoir-pick">`
+        + `<button type="button" class="devoir-btn" data-devoir="${i}">📘 ${escapeHtml(d.matiere)}</button>`
+        + `<button type="button" class="classe-pick" data-classe="${i}" title="Mini-cours généré">🏫 Classe</button>`
+        + '</div>').join('')
+    + '</div>';
+  const b = addBubble('assistant', html);
+  b.querySelectorAll('button[data-devoir]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const d = plan[Number(btn.dataset.devoir)];
+      if (d) send(`Mon devoir de ${d.matiere} : ${String(d.description).trim()}. On va le faire ensemble : propose-moi un plan d'étapes simple (ce qu'on fait d'abord, ensuite, et comment vérifier que c'est bon à la fin), puis commence par la première étape.`);
+    });
+  });
+  b.querySelectorAll('button[data-classe]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const d = plan[Number(btn.dataset.classe)];
+      if (!d) return;
+      const sujet = `${d.matiere} : ${String(d.description).trim().slice(0, 300)}`;
+      $('btn-classe').click();
+      $('class-topic').value = sujet;
+      startClassroom();
+    });
+  });
 }
 
 function addTyping() {
@@ -1112,6 +1185,11 @@ let micTimer = null;
 // rappuie sur le bouton 🎙️. Un appui sur 🎤 coupe aussi le mode.
 let liveMic = false;
 let emptyMicSessions = 0;
+// Auto-reparation iOS : apres que Lumi a parle, Safari peut garder le micro
+// (marche une seule fois par page). On relance une fois, puis on recharge la
+// page tout seul — la lecon reprend ensuite ou on s'etait arrete.
+let micStartedOnce = false;
+let micSilentDeaths = 0;
 let micDraftReview = false;
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1204,7 +1282,20 @@ function micLiveResume() {
     micLiveRestart(350);
   }
 }
-function startListening() {
+// Retourne true si une reprise (puis une recharge de secours) est lancee
+// pour Safari iOS qui garde le micro apres la voix de Lumi.
+// Jamais avant que le micro ait marche au moins une fois sur la page, et
+// jamais hors mode discussion : on ne recharge pas une page dont on n'est
+// pas sur d'etre en charge.
+function iosMicroSelfRepair() {
+  if (!isIOS || !liveMic || !micStartedOnce) return false;
+  if (++micSilentDeaths < 2) return micLiveRestart(600), true;
+  micSilentDeaths = 0;
+  setStatus('Je me reconnecte… une seconde 🎙️');
+  setTimeout(() => { if (liveMic) location.reload(); }, 700);
+  return true;
+}
+async function startListening() {
   if (typeof voiceAudioBusy !== 'undefined' && voiceAudioBusy) return;
   if (recog || chatLoading || activeChat || archiving || document.hidden || speechUtterances.length) return;
   setAudioSession('play-and-record');
@@ -1223,13 +1314,17 @@ function startListening() {
     recog = session;
     const generation = chatGeneration;
     let heardSpeech = false;
+    let started = false;
     const draftPrefix = $('input').value.trim();
     micDraftReview = false;
     session.lang = 'fr-FR';
     session.continuous = false;
     session.interimResults = true;
     session.onstart = () => {
-      if (recog === session) setStatus(liveMic ? 'Mode discussion 🎙️ — parle, je t’écoute !' : "Je t'écoute… 🎤");
+      if (recog !== session) return;
+      started = true;
+      micStartedOnce = true;
+      setStatus(liveMic ? 'Mode discussion 🎙️ — parle, je t’écoute !' : "Je t'écoute… 🎤");
     };
     session.onresult = (e) => {
       if (recog !== session || generation !== chatGeneration) return;
@@ -1272,7 +1367,14 @@ function startListening() {
         micLiveRestart(Math.min(1500, 600 + emptyMicSessions * 150));
         return;
       }
-      if (e.error !== 'aborted') micError(e.error);
+      if (e.error !== 'aborted') {
+        // Safari iOS qui garde le micro apres la voix : tenter la reparation
+        // auto (une relance, puis si necessaire une recharge de la page)
+        // avant d'afficher l'aide habituelle.
+        if ((e.error === 'not-allowed' || e.error === 'service-not-allowed'
+          || e.error === 'audio-capture' || e.error === 'network') && iosMicroSelfRepair()) return;
+        micError(e.error);
+      }
     };
     session.onspeechstart = session.onsoundstart = () => {
       if (recog === session) {
@@ -1293,6 +1395,11 @@ function startListening() {
       if (recog !== session) return;
       stopListening();
       if (liveMic) {
+        // Jamais demarre : le micro est garde par Safari (iOS) — reparation auto.
+        if (!started && iosMicroSelfRepair()) {
+          setStatus('Conversation activée — reprise du micro…');
+          return;
+        }
         emptyMicSessions = heardSpeech ? 0 : emptyMicSessions + 1;
         // Une fin normale ou un silence n'est pas une panne du micro.
         setStatus(heardSpeech ? 'Phrase conservée — reprise du micro…' : 'Conversation activée — reprise du micro…');
@@ -1308,6 +1415,11 @@ function startListening() {
       if (recog !== session) return;
       stopListening();
       if (liveMic && !document.hidden) {
+        // Le micro n'a jamais demarre : Safari iOS le garde apres la voix.
+        if (!started && iosMicroSelfRepair()) {
+          setStatus('Le micro se relance… Le mode Conversation reste activé 🎙️');
+          return;
+        }
         setStatus('Le micro se relance… Le mode Conversation reste activé 🎙️');
         micLiveRestart(1500);
         return;
@@ -1322,11 +1434,26 @@ function startListening() {
       }, delay);
     }
     armWatchdog();
-    // Safari gère lui-même ses permissions. Ne pas attendre getUserMedia
-    // avant start() : cela peut perdre le geste et monopoliser le micro.
+    if (isIOS) {
+      // Bogue Safari iOS : après avoir joué un son, il ne rend plus le micro
+      // à la reconnaissance vocale (marche une seule fois par chargement).
+      // Rouvrir puis refermer la capture avec getUserMedia force Safari à
+      // ré-attribuer le micro. Si c'est refusé, on laisse Safari décider.
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+      } catch { /* le start() affichera l'erreur habituelle si le micro reste refusé */ }
+      // Pendant l'attente, la page a pu passer en arrière-plan ou charge une réponse.
+      if (recog !== session || document.hidden || chatLoading) return;
+    }
+    // Le getUserMedia ci-dessus est refermé tout de suite (sauf sur iOS où c'est
+    // obligatoire pour récupérer le micro) : Safari gère lui-même ses permissions,
+    // et attendre ailleurs qu'en reprise rapide peut perdre le geste.
     session.start();
   } catch {
     stopListening();
+    // Safari iOS qui garde le micro apres la voix : reparation auto.
+    if (iosMicroSelfRepair()) return;
     micError('service-not-allowed');
   }
 }
@@ -1502,6 +1629,132 @@ async function startQuiz() {
 }
 $('btn-quiz-start').addEventListener('click', startQuiz);
 $('quiz-topic').addEventListener('keydown', (e) => { if (e.key === 'Enter') startQuiz(); });
+
+// ---------- Mode Classe (mini-cours genere) ----------
+let classGeneration = 0, classBusy = false;
+let classData = null, classIdx = 0, classAnswered = {};
+
+$('btn-classe').addEventListener('click', () => {
+  classGeneration++; classBusy = false;
+  $('classroom-start').classList.remove('hidden');
+  $('classroom-room').classList.add('hidden');
+  $('class-error').textContent = '';
+  $('class-topic').value = '';
+  $('classroom-modal').classList.remove('hidden');
+});
+$('btn-class-close').addEventListener('click', () => {
+  classGeneration++; classBusy = false;
+  $('classroom-modal').classList.add('hidden');
+  stopSpeech();
+});
+
+async function startClassroom() {
+  if (classBusy) return;
+  const topic = $('class-topic').value.trim();
+  if (!topic) { $('class-error').textContent = "Écris sur quoi tu veux un cours 🙂"; return; }
+  classBusy = true;
+  const generation = ++classGeneration;
+  $('class-error').textContent = '';
+  $('classroom-start').classList.add('hidden');
+  $('classroom-room').classList.remove('hidden');
+  $('classroom-room').innerHTML = '<p class="hint">Je prépare ta classe… 🏫 (une ou deux minutes)</p>';
+  try {
+    const r = await fetch('/api/classroom', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, childId: currentProfile && currentProfile.id, profile: currentProfile })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (generation !== classGeneration) return;
+    if (!r.ok || !j.classroom) {
+      $('class-error').textContent = '⚠️ ' + (j.error || 'Impossible de préparer la classe. Réessaie.');
+      $('classroom-room').classList.add('hidden');
+      $('classroom-start').classList.remove('hidden');
+      return;
+    }
+    classData = j; classIdx = 0; classAnswered = {};
+    renderClassroomStep();
+  } catch {
+    if (generation !== classGeneration) return;
+    $('class-error').textContent = '⚠️ Serveur injoignable, réessaie.';
+    $('classroom-room').classList.add('hidden');
+    $('classroom-start').classList.remove('hidden');
+  } finally {
+    if (generation === classGeneration) classBusy = false;
+  }
+}
+$('btn-class-go').addEventListener('click', startClassroom);
+$('class-topic').addEventListener('keydown', (e) => { if (e.key === 'Enter') startClassroom(); });
+
+function renderClassroomStep() {
+  if (!classData) return;
+  const etapes = classData.classroom.etapes;
+  const room = $('classroom-room');
+  if (classIdx >= etapes.length) return renderClassroomRecap();
+  const e = etapes[classIdx];
+  const q = e.question;
+  const answered = classAnswered[classIdx];
+  const opts = q ? q.options.map((o, i) =>
+    `<button type="button" class="classroom-option${answered ? (i === q.answer ? ' correct' : (i === answered.chosen ? ' wrong' : '')) : ''}" data-i="${i}"${answered ? ' disabled' : ''}>${escapeHtml(o)}</button>`
+  ).join('') : '';
+  room.innerHTML =
+    `<div class="classroom-progress">Étape ${classIdx + 1} / ${etapes.length} 🏫 ${escapeHtml(classData.classroom.titre)}</div>`
+    + '<div class="classroom-slide">'
+    + `<h3>${escapeHtml(e.titre)}</h3>`
+    + `<div class="cl-content">${renderMarkdown(e.contenu)}</div>`
+    + (q ? `<p class="devoir-q">${escapeHtml(q.question)}</p><div class="classroom-options">${opts}</div>`
+        + (answered ? `<p class="hint">${answered.ok ? '✅ Bravo ! ' : '❌ La bonne réponse était : ' + escapeHtml(q.options[q.answer]) + '. '}${escapeHtml(q.explication || '')}</p>` : '')
+      : '')
+    + '</div>'
+    + '<div class="classroom-nav">'
+    + `<button type="button" class="btn" id="cl-prev"${classIdx === 0 ? ' disabled' : ''}>◀ Précédent</button>`
+    + '<button type="button" class="btn" id="cl-voice" title="Écouter">🔊 Écouter</button>'
+    + `<button type="button" class="btn btn-primary" id="cl-next">${classIdx === etapes.length - 1 ? 'Voir mon résultat 🎉' : 'Suivant ▶'}</button>`
+    + '</div>';
+  $('cl-prev').onclick = () => { stopSpeech(); classIdx--; renderClassroomStep(); };
+  $('cl-next').onclick = () => { stopSpeech(); classIdx++; renderClassroomStep(); };
+  const clVoice = $('cl-voice');
+  clVoice.onclick = () => speak(e.titre + '. ' + e.contenu.replace(/[#*_`>]/g, ' '));
+  if (q && !answered) {
+    room.querySelectorAll('.classroom-option').forEach(btn => btn.addEventListener('click', () => {
+      const i = Number(btn.dataset.i);
+      classAnswered[classIdx] = { chosen: i, ok: i === q.answer };
+      renderClassroomStep();
+      speak(classAnswered[classIdx].ok ? 'Bravo ! C\'est tout à fait ça.' : 'Pas tout à fait. ' + (q.explication || 'La bonne réponse était : ' + q.options[q.answer]));
+    }));
+  }
+  room.scrollTop = 0;
+}
+
+function renderClassroomRecap() {
+  const etapes = classData.classroom.etapes;
+  let total = 0, score = 0;
+  etapes.forEach((e, idx) => { if (e.question) { total++; if (classAnswered[idx] && classAnswered[idx].ok) score++; } });
+  const room = $('classroom-room');
+  const canSave = total > 0 && currentProfile && currentProfile.id;
+  room.innerHTML =
+    `<div class="classroom-slide"><h3>🎉 Classe terminée : ${escapeHtml(classData.classroom.titre)}</h3>`
+    + (total ? `<p><strong>${score} / ${total}</strong> bonnes réponses</p>` : '<p>Bonne découverte 🏫</p>')
+    + '<p class="hint">Tu peux la refaire ou en demander une autre 🏫</p></div>'
+    + '<div class="classroom-nav">'
+    + '<button type="button" class="btn" id="cl-restart">↺ Recommencer</button>'
+    + (canSave ? '<button type="button" class="btn btn-primary" id="cl-save">🎯 Enregistrer comme interro</button>' : '<button type="button" class="btn btn-primary" id="cl-done">✨ C\'est fini</button>')
+    + '</div>';
+  $('cl-restart').onclick = () => { classIdx = 0; classAnswered = {}; renderClassroomStep(); };
+  const done = $('cl-done');
+  if (done) done.onclick = () => $('btn-class-close').click();
+  const save = $('cl-save');
+  if (save) save.onclick = async () => {
+    try {
+      const r = await fetch('/api/quiz-score', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentProfile.id, topic: 'Classe : ' + classData.classroom.titre, score, total })
+      });
+      if (!r.ok) throw new Error();
+      save.textContent = '✅ Enregistré';
+      save.disabled = true;
+    } catch { save.textContent = '⚠️ Réessaie'; }
+  };
+}
 
 function renderQuizQuestion() {
   const area = $('quiz-area');
@@ -1907,6 +2160,69 @@ function enterParentArea() {
 // n'a pas ete choisie dans le formulaire de profil.
 const AGE_LEVEL_FRONT = { 6: 'CP', 7: 'CE1', 8: 'CE2', 9: 'CM1', 10: 'CM2', 11: '6e', 12: '5e', 13: '4e', 14: '3e' };
 
+// ---------- Pronote (espace parent) : saisie des identifiants ----------
+function pronoteCardHtml(pronote) {
+  const etat = pronote && pronote.configured
+    ? `<p class="parent-line">✅ Connecté${pronote.host ? ` — ${escapeHtml(pronote.host)}` : ''} · devoirs sur ${pronote.days} jour${pronote.days > 1 ? 's' : ''}${pronote.source === 'env' ? ' · depuis .env' : ''}</p>`
+    : `<p class="parent-line">Non configuré : la carte « cahier de textes » n'apparaît pas pour l'élève.</p>`;
+  return `
+  <div class="parent-kid">
+    <h3>📒 Pronote — devoirs automatiques</h3>${etat}
+    <label class="field">Adresse Pronote de l'élève
+      <input id="pr-url" type="url" placeholder="https://xxx.index-education.net/pronote/eleve.html" autocomplete="off"></label>
+    <label class="field">Identifiant de l'élève
+      <input id="pr-user" type="text" autocomplete="off"></label>
+    <label class="field">Mot de passe Pronote
+      <input id="pr-pass" type="password" autocomplete="new-password"></label>
+    <label class="field">Jours d'avance à afficher
+      <input id="pr-days" type="number" min="1" max="30" value="7"></label>
+    <label class="field">Mot de passe parent (accès distant uniquement)
+      <input id="pr-pp" type="password" autocomplete="off"></label>
+    <div class="video-search" style="margin-top: 8px;">
+      <button id="btn-pronote-save" class="btn btn-primary" type="button">💾 Enregistrer et tester</button>
+      <button id="btn-pronote-clear" class="btn" type="button">🗑️ Effacer</button>
+    </div>
+    <p id="pr-msg" class="hint"></p>
+  </div>`;
+}
+
+async function wirePronoteCard() {
+  const btnSave = $('btn-pronote-save');
+  const btnClear = $('btn-pronote-clear');
+  if (!btnSave || !btnClear) return;
+  btnSave.addEventListener('click', async () => {
+    const msg = $('pr-msg');
+    msg.textContent = 'Test de connexion en cours… ⏳';
+    try {
+      const r = await fetch('/api/pronote/config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: $('pr-url').value, username: $('pr-user').value,
+          password: $('pr-pass').value, days: Number($('pr-days').value) || 7,
+          parentPassword: $('pr-pp').value, test: true
+        })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { msg.textContent = '⚠️ ' + (j.error || 'Enregistrement impossible.'); return; }
+      if (j.test && j.test.ok) msg.textContent = '✅ Connexion réussie : les devoirs arrivent du Pronote. L\'élève les verra à sa prochaine leçon.';
+      else if (j.test) msg.textContent = '💾 Enregistré, mais le test a échoué : ' + (j.test.error || 'raison inconnue');
+      else msg.textContent = '💾 Enregistré.';
+    } catch { msg.textContent = '⚠️ Serveur injoignable, réessaie.'; }
+  });
+  btnClear.addEventListener('click', async () => {
+    const msg = $('pr-msg');
+    msg.textContent = '';
+    try {
+      const r = await fetch('/api/pronote/config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clear: true, parentPassword: $('pr-pp').value })
+      });
+      const j = await r.json().catch(() => ({}));
+      msg.textContent = r.ok ? '🗑️ Configuration Pronote effacée.' : '⚠️ ' + (j.error || 'Effacement impossible.');
+    } catch { msg.textContent = '⚠️ Serveur injoignable, réessaie.'; }
+  });
+}
+
 async function renderParentArea() {
   const box = $('parent-content');
   box.innerHTML = '<p class="hint">Chargement… ⏳</p>';
@@ -1916,9 +2232,12 @@ async function renderParentArea() {
   let curriculum = null;
   try { curriculum = await (await fetch('/api/curriculum')).json(); } catch {}
   const kids = list.filter(p => p && p.id);
-  if (!kids.length) { box.innerHTML = '<p class="hint">Aucun profil enfant pour le moment.</p>'; return; }
+  // Carte de configuration Pronote et ses boutons, avant les profils enfants.
+  let pronote = null;
+  try { pronote = await (await fetch('/api/pronote/status')).json(); } catch {}
+  let html = pronoteCardHtml(pronote);
+  if (!kids.length) { html += '<p class="hint">Aucun profil enfant pour le moment.</p>'; box.innerHTML = html; wirePronoteCard(); return; }
 
-  let html = '';
   const now = Date.now();
   for (const kid of kids) {
     let d = null;
@@ -1968,6 +2287,7 @@ async function renderParentArea() {
     html += '</div>';
   }
   box.innerHTML = html;
+  wirePronoteCard();
 }
 
 // ---------- Navigation réservée à la session administrateur ----------
