@@ -6,10 +6,17 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '.lumi-voice');
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.join(here, '.lumi-voice');
 const binary = path.join(root, 'piper', process.platform === 'win32' ? 'piper.exe' : 'piper');
 const model = path.join(root, 'fr_FR-siwis-medium.onnx');
-export const speechAvailable = () => existsSync(binary) && existsSync(model) && existsSync(model + '.json');
+const edgePython = path.join(root, 'venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+const edgeScript = path.join(here, 'scripts', 'edge_say.py');
+export const voiceEngine = process.env.VOICE_ENGINE === 'edge' ? 'edge' : 'piper';
+const edgeVoice = process.env.EDGE_VOICE || 'fr-FR-VivienneMultilingualNeural';
+export const speechAvailable = () => voiceEngine === 'edge'
+  ? existsSync(edgePython) && existsSync(edgeScript)
+  : existsSync(binary) && existsSync(model) && existsSync(model + '.json');
 let tail = Promise.resolve(), waiting = 0;
 let worker = null, pending = null;
 export function closeSpeechWorker() {
@@ -42,6 +49,22 @@ function speechWorker() {
   return child;
 }
 process.once('exit', () => worker?.kill());
+function edgeSpeech(text, wav) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(edgePython, [edgeScript, '--voice', edgeVoice, '--text', String(text).replace(/\r?\n/g, ' '), '--out', wav], {
+      windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    let details = '';
+    child.stderr.on('data', data => { details += data.toString(); if (details.length > 4000) details = details.slice(-4000); });
+    const timer = setTimeout(() => { child.kill(); reject(Error('Voix : délai dépassé.')); }, 45000);
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+    child.once('close', code => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(Error('Voix edge : ' + (details.trim().slice(-200) || 'échec')));
+    });
+  });
+}
 let samplePromise = null, sampleRetryAt = 0;
 export function generateSpeechSample() {
   if (samplePromise) return samplePromise;
@@ -59,12 +82,16 @@ export function generateSpeech(text) {
     const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'lumi-voice-'));
     const wav = path.join(folder, 'voice.wav');
     try {
-      await new Promise((resolve, reject) => {
-        const child = speechWorker();
-        const timer = setTimeout(() => closeSpeechWorker(), 60000);
-        pending = { child, wav, resolve, reject, timer };
-        child.stdin.write(JSON.stringify({ text: String(text).replace(/\r?\n/g, ' '), output_file: wav }) + '\n');
-      });
+      if (voiceEngine === 'edge') {
+        await edgeSpeech(text, wav);
+      } else {
+        await new Promise((resolve, reject) => {
+          const child = speechWorker();
+          const timer = setTimeout(() => closeSpeechWorker(), 60000);
+          pending = { child, wav, resolve, reject, timer };
+          child.stdin.write(JSON.stringify({ text: String(text).replace(/\r?\n/g, ' '), output_file: wav }) + '\n');
+        });
+      }
       const audio = await fs.readFile(wav);
       if (audio.length < 44 || audio.toString('ascii', 0, 4) !== 'RIFF') throw Error('Audio invalide.');
       return audio;
