@@ -616,6 +616,7 @@ app.post('/api/speech', async (req, res) => {
   const owner = await resolveAccount(req);
   if (!owner) return res.status(401).json({ error: 'Accès famille requis.' });
   const text = req.body?.text;
+  const voice = typeof req.body?.voice === 'string' ? req.body.voice : '';
   if (typeof text !== 'string' || !text.trim() || text.length > 3000) return res.status(400).json({ error: 'Texte vocal invalide ou trop long.' });
   const now = Date.now(), id = owner.account.id;
   for (const [key, value] of speechRequests) if (now - value.start >= 60000) speechRequests.delete(key);
