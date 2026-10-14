@@ -61,3 +61,81 @@ Le PC reste utilisable : la version locale continue de fonctionner comme avant.
 - **Clé API** : jamais dans le code, seulement dans les réglages de Render.
 - L'app affiche un écran « code d'accès » avant tout : seuls ceux qui ont le
   code peuvent utiliser ta clé Ollama.
+
+## 5. 💳 Paiement en ligne « Lumi Famille » (Stripe) — à tester en local d'abord
+
+L'abonnement famille (accès illimité) s'active depuis **l'espace parent →
+carte « Passe à Lumi Famille »** : 7,99 €/mois ou 79 €/an. Tant que Stripe
+n'est pas configuré, cette carte reste invisible et Lumi marche comme avant.
+
+1. Crée un compte Stripe (mode **Test** au début) : https://dashboard.stripe.com/register
+2. Crée un produit « Lumi Famille » avec deux tarifs récurrents :
+   - `7,99 € / mois` → note l'identifiant `price_...`
+   - `79 € / an` → note l'identifiant `price_...`
+3. Dans le `.env` local, **à la fin du fichier** (ne jamais insérer au milieu) :
+
+   ```
+   STRIPE_SECRET_KEY=sk_test_...
+   STRIPE_PRICE_MONTHLY=price_...
+   STRIPE_PRICE_YEARLY=price_...
+   STRIPE_WEBHOOK_SECRET=whsec_...   (donné à l'étape 4)
+   ```
+
+4. Webhooks en local : installe le Stripe CLI (https://docs.stripe.com/stripe-cli),
+   puis `stripe login` et :
+
+   ```
+   stripe listen --forward-to http://localhost:3000/api/stripe/webhook
+   ```
+
+   La commande affiche un secret `whsec_...` → mets-le dans
+   `STRIPE_WEBHOOK_SECRET` puis relance Lumi (`bash lancer-lumi.sh`).
+
+5. Test : espace parent → carte abonnement → paie avec la carte de test
+   `4242 4242 4242 4242` (date future, CVC quelconque). Au retour sur Lumi :
+   « Merci ! L'abonnement Lumi Famille est actif 💜 », et l'admin voit
+   « 💳 Abonnement mensuel jusqu'au … » dans `/admin.html`.
+
+   📱 **iPhone/iPad** : le paiement par carte fonctionne aussi dans l'app
+   installée (Lumi pré-ouvre la page de paiement pour contourner le blocage
+   des popups par Safari). En revanche **Apple Pay n'apparaît que si Lumi est
+   ouverte dans Safari** (règle Apple : jamais dans une app-webview). En cas
+   de souci, conseille d'ouvrir Lumi dans Safari pour payer.
+
+## 6. Stripe en ligne (Render) — quand le test local est validé
+
+- Ajoute dans Render → Environment les 4 variables `STRIPE_*` avec les
+  valeurs **Live** (`sk_live_...`, prix live) → puis Manual Deploy.
+- Crée le webhook en ligne : Stripe → Développeurs → Webhooks → Ajouter un
+  point de terminaison `https://lumi-revisions.onrender.com/api/stripe/webhook`
+  → événements : `checkout.session.completed`, `customer.subscription.created`,
+  `customer.subscription.updated`, `customer.subscription.deleted` →
+  copie le secret `whsec_...` dans `STRIPE_WEBHOOK_SECRET` → redéploie.
+- Résiliation, changement de carte, factures : via « Gérer mon abonnement »
+  (portail Stripe) dans l'espace parent. Abonnement expiré ou impayé → Lumi
+  repasse doucement au quota gratuit (pas de coupure brutale).
+- Sécurité : chaque webhook est vérifié par signature, les clés restent
+  uniquement dans les variables d'environnement (jamais dans le code, jamais
+  affichées dans l'app), et les comptes famille offerts à la main restent
+  illimités sans toucher à Stripe.
+
+## 7. 🎤 Dictée Whisper locale (optionnel — bien meilleure pour les enfants)
+
+Si **Whishper** (Whisper en Docker) tourne sur le PC : `docker compose up -d`
+dans `~/Projets/whishper` → interface sur http://localhost:8082. Lumi le
+détecte tout seul (`/api/transcribe/status`) :
+
+- 🎤 (appui simple ou appuyé long) enregistre la voix puis la fait transcrire
+  par Whisper (`small`, français) — beaucoup plus fiable que le navigateur
+  sur les petites voix. Sinon, la dictée du navigateur est utilisée : rien
+  ne casse, sur Render comme sur o2switch.
+- Confidentialité : l'audio et la transcription sont supprimés après coup,
+  côté Lumi **et** côté Whishper (rien ne s'accumule).
+- Réglages `.env` optionnels : `WHISPER_API_URL` (défaut
+  `http://127.0.0.1:8082`), `WHISPER_MODEL_SIZE` (défaut `small`),
+  `WHISPER_DEVICE` (`cpu`).
+- o2switch : l'app Node s'y héberge de la même façon (mêmes variables
+  d'environnement), mais un hébergement mutualisé ne peut pas faire tourner
+  Whisper — la dictée repassera automatiquement sur le navigateur. Pour
+  Whisper partout, il faut que le PC (ou un petit serveur dédié) soit
+  joignable.

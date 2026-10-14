@@ -89,6 +89,12 @@
       </div>
       </div>
     </div>
+
+    <div id="install-banner" class="install-banner hidden" role="status">
+      <span class="install-banner-text">📲 Garde Lumi à portée de main : installe-la sur ton téléphone.</span>
+      <button id="btn-install-banner-action" class="btn btn-primary" type="button">Installer</button>
+      <button id="btn-install-banner-dismiss" class="icon-btn" type="button" title="Plus tard">✕</button>
+    </div>
   </div>
 
   <!-- ===== Écran : chat ===== -->
@@ -266,11 +272,14 @@
         <span>Vitesse de la voix : <span id="rate-val">1.0</span></span>
         <input id="rate-slider" type="range" min="0.8" max="1.3" step="0.05" value="1.0">
       </label>
+      <label class="consent-row"><input id="dictation-review" type="checkbox"> Relire la dictée 🎤 avant l'envoi (le mode Conversation 🎙️ envoie tout seul). Maintenir 🎤 appuyé pour parler, relâcher pour terminer.</label>
+      <label class="consent-row"><input id="dictation-keyboard" type="checkbox"> Dictée iPhone : utiliser le micro du clavier d'Apple 🎤 (recommandé — plus fiable que le micro de Safari).</label>
       <p class="hint">Choisis « Lumi — voix française » sur iPhone et Android. La première lecture peut prendre quelques secondes.</p>
       <p class="hint">🔊 Pour entendre Lumi sur ton téléphone, désactive le mode silencieux et monte le volume.</p>
       <button id="btn-test-voice" class="btn" type="button">🔊 Tester la voix</button>
       <a class="btn" href="/test-voix.html" target="_blank" rel="noopener">Tester les voix du téléphone seules</a>
       <button class="btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
+      <p class="hint" id="lumi-version"></p>
       <a class="btn" href="/confidentialite.html" target="_blank" rel="noopener">Confidentialité et mes données</a>
       <button id="btn-test-sound" class="btn" type="button">🎵 Tester le son du téléphone</button>
       <p class="hint">Test direct de la voix française : appuie sur ▶ dans ce lecteur.</p>
@@ -322,6 +331,7 @@
         <li>Vérifie que <strong>Siri est activé</strong> dans les Réglages de l'iPhone : Safari s'appuie sur ce service pour reconnaître la parole.</li>
         <li>Le mode 🎙️ réécoute après les réponses. Si iOS bloque une relance, Lumi arrête le mode et te propose de retoucher 🎤. Si cela continue, recharge dans Safari. Tu peux aussi dicter dans le champ de texte avec le micro du clavier, puis envoyer ta question.</li>
       </ol>
+      <p class="hint">Pour une dictée réussie : parle à ~20 cm du téléphone, dans un endroit calme, et fais une petite pause après chaque phrase. Si la dictée s'arrête en plein milieu, reparle simplement : Lumi reprend la phrase là où elle en était (tu peux aussi toucher Envoyer quand tout est écrit).</p>
       <p class="hint">Le site en ligne utilise déjà HTTPS : aucun certificat ni profil à installer. Si Safari affiche une alerte de sécurité, vérifie l'adresse sans contourner l'alerte.</p>
     </div>
   </div>

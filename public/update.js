@@ -1,5 +1,5 @@
 // Explicit updates preserve account cookies and all saved family data.
-const lumiInterfaceVersion = '2026-10-03.21';
+const lumiInterfaceVersion = '2026-10-13.4';
 let lumiUpdateBusy = false;
 let lumiUpdateNotice = false;
 async function checkLumiUpdate() {
@@ -7,6 +7,10 @@ async function checkLumiUpdate() {
     const response = await fetch('/api/version', { cache: 'no-store' });
     if (!response.ok) return;
     const { version } = await response.json();
+    const badge = document.getElementById?.('lumi-version');
+    if (badge) badge.textContent = version === lumiInterfaceVersion
+      ? `Version installée : ${lumiInterfaceVersion} — à jour`
+      : `Version installée : ${lumiInterfaceVersion} — le serveur propose ${version}. Touche « Mettre à jour Lumi ».`;
     if (version !== lumiInterfaceVersion) {
       document.querySelectorAll('[data-update-lumi]').forEach(button => { button.textContent = '🔄 Nouvelle version — mettre à jour'; });
       if (!lumiUpdateNotice) { lumiUpdateNotice = true; toast('Une nouvelle version de Lumi est disponible. Utilise « Mettre à jour Lumi ».', 8000); }

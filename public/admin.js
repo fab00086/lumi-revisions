@@ -53,9 +53,15 @@ function confirmTwice(button, fn) {
 function renderFamily(a, freeDaily) {
   const card = document.createElement('div'); card.className='client-card';
   const limit = a.dailyLimit ?? (a.plan === 'free' ? freeDaily : null);
+  const sub = a.subscription;
+  const subLine = sub
+    ? (['active','trialing'].includes(sub.status)
+        ? `<p>💳 Abonnement ${sub.interval==='year'?'annuel':'mensuel'}${sub.currentPeriodEnd?` jusqu’au ${new Date(sub.currentPeriodEnd).toLocaleDateString('fr-FR')}`:''}${sub.cancelAtPeriodEnd?' · résiliation en cours':''}</p>`
+        : `<p>💳 Abonnement : ${esc(sub.status)}</p>`)
+    : '';
   card.innerHTML = `<div class="client-id"><strong>${esc(a.label)}</strong><small>${esc(a.email)}</small>${a.contactPhone?`<small>Téléphone SMS : ${esc(a.contactPhone)}</small>`:''}
     <div class="badges"><span class="badge-plan ${a.pending?'trial':a.blocked?'trial expired':'family'}">${a.pending?'Demande à approuver':a.blocked?'Accès bloqué':'Accès autorisé'}</span></div>
-    <p>${a.connectedDevices} / ${a.maxDevices} appareils connectés</p><p><b>${count(a.usage)}</b> échanges aujourd’hui · ${limit === null?'illimité':limit+'/jour'}</p>${a.pending && a.notificationStatus?`<small>${a.notificationStatus==='sent'?'Notification transmise au service e-mail':a.notificationStatus==='review'?'Notification à vérifier auprès du service e-mail':'Notification en attente'}</small>`:''}</div>
+    <p>${a.connectedDevices} / ${a.maxDevices} appareils connectés</p><p><b>${count(a.usage)}</b> échanges aujourd’hui · ${limit === null?'illimité':limit+'/jour'}</p>${subLine}${a.pending && a.notificationStatus?`<small>${a.notificationStatus==='sent'?'Notification transmise au service e-mail':a.notificationStatus==='review'?'Notification à vérifier auprès du service e-mail':'Notification en attente'}</small>`:''}</div>
     <div class="client-ctl"><label>Utilisation<select class="plan-select plan"><option value="free" ${a.plan==='free'||a.pending?'selected':''}>Quota quotidien</option><option value="family" ${a.plan==='family'?'selected':''}>Illimitée</option><option value="trial" ${a.plan==='trial'?'selected':''}>Essai 14 jours</option></select></label>
     <label>Échanges par jour<input class="limit-input daily" type="number" min="1" max="10000" value="${limit ?? freeDaily}"></label><button class="btn-sm save-limit">Enregistrer l’utilisation</button>
     <label>Appareils autorisés<input class="limit-input devices" type="number" min="1" max="20" value="${a.maxDevices}"></label><button class="btn-sm save-devices">Enregistrer les appareils</button></div>

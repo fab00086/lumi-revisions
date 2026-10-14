@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
 function section(a, b) { return source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a))); }
-function setup(serverVoice = false, blockedSilent = false, blockedAuto = false) {
+function setup(serverVoice = false, blockedSilent = false, blockedAuto = false, seed = {}) {
   const elements = new Map(), timers = new Map(), bubbles = [], spoken = [], sessions = [], documentHandlers = {}, reminders = [];
   let timerId = 0, gesture = false;
   const $ = id => {
@@ -33,11 +33,40 @@ function setup(serverVoice = false, blockedSilent = false, blockedAuto = false) 
     return Promise.resolve();
   } };
   const pendingVoices = [], voiceRequests = [];
-  const c = vm.createContext({ $, navigator: { userAgent: 'iPhone' },
-    voiceMode: serverVoice ? 'server' : 'native', AbortController,
+  const location = { reload() { location.reloaded = (location.reloaded || 0) + 1; } };
+  const sessionStorage = { store: new Map(), getItem(k) { return this.store.has(k) ? this.store.get(k) : null; },
+    setItem(k, v) { this.store.set(k, String(v)); }, removeItem(k) { this.store.delete(k); } };
+  const localStorage = { store: new Map(Object.entries(seed)), getItem(k) { return this.store.has(k) ? this.store.get(k) : null; },
+    setItem(k, v) { this.store.set(k, String(v)); }, removeItem(k) { this.store.delete(k); } };
+  // Dictée Whisper : faux MediaRecorder + micro + serveur de transcription.
+  const recorders = [], transcribeBodies = [];
+  class MediaRecorderMock {
+    constructor(stream, opts) { this.stream = stream; this.mimeType = (opts && opts.mimeType) || ''; this.state = 'inactive'; this.ondataavailable = null; this.onstop = null; recorders.push(this); }
+    static isTypeSupported(t) { return String(t).startsWith('audio/webm') || t === 'audio/mp4'; }
+    start() { this.state = 'recording'; }
+    stop() {
+      this.state = 'inactive';
+      if (this.ondataavailable) this.ondataavailable({ data: new Blob(['faux-son'], { type: this.mimeType || 'audio/webm' }) });
+      if (this.onstop) this.onstop();
+    }
+  }
+  const fakeStream = { getTracks: () => [{ stopped: 0, stop() { this.stopped++; } }] };
+  // Le micro n'est « disponible » que sur demande (tests Whisper) : sans lui,
+  // les chemins historiques démarrent la session dans le clic, comme avant.
+  const enableMic = () => { c.navigator.mediaDevices = { getUserMedia: async () => fakeStream }; };
+  const c = vm.createContext({ $, navigator: { userAgent: 'iPhone' }, location, sessionStorage, localStorage,
+    voiceMode: serverVoice ? 'server' : 'native', AbortController, Blob, btoa, MediaRecorder: MediaRecorderMock,
     Audio: class { constructor() { return audio; } },
     URL: { createObjectURL: () => '/api/speech/audio/'+'a'.repeat(48), revokeObjectURL() {} },
-    fetch: (url, options) => new Promise(resolve => { voiceRequests.push({url,...options}); pendingVoices.push(resolve); }),
+    fetch: (url, options) => {
+      // Dictée Whisper (PC) : statut et transcription répondent tout de suite.
+      if (url === '/api/transcribe/status') return Promise.resolve({ ok: true, json: async () => ({ available: true, model: 'small' }) });
+      if (url === '/api/transcribe' && options && options.method === 'POST') {
+        transcribeBodies.push(JSON.parse(options.body));
+        return Promise.resolve({ ok: true, json: async () => ({ ok: true, texte: 'bonjour les enfants' }) });
+      }
+      return new Promise(resolve => { voiceRequests.push({url,...options}); pendingVoices.push(resolve); });
+    },
     document: { hidden: false, addEventListener(type, fn) { documentHandlers[type] = fn; } },
     window: { webkitSpeechRecognition: Recognition, isSecureContext: true, speechSynthesis: synth },
     speechSynthesis: synth, SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
@@ -53,7 +82,7 @@ function setup(serverVoice = false, blockedSilent = false, blockedAuto = false) 
   vm.runInContext(section('// ---------- Micro (voix)', '// ---------- Envoi'), c);
   const click = id => { gesture = true; try { $(id).handlers.click(); documentHandlers.click?.(); } finally { gesture = false; } };
   return { c, $, click, timers, bubbles, spoken, sessions, documentHandlers, synth, audioPlays, audio, reminders,
-    voiceRequests,
+    voiceRequests, location, sessionStorage, localStorage, recorders, transcribeBodies, enableMic,
     finishVoice: async (letter='a') => { pendingVoices.shift()({ ok: true, json: async () => ({url:'/api/speech/audio/'+letter.repeat(48)}) }); await new Promise(resolve => setImmediate(resolve)); } };
 }
 
@@ -68,7 +97,7 @@ test('voix longue : première phrase jouée sans attendre la suite, micro repris
  assert.equal(t.$('voice-player').open,false);
  const next=t.audio.onended();assert.equal(t.sessions.length,1);
  await t.finishVoice('b');await next;assert.ok(t.audio.src.endsWith('b'.repeat(48)));
- assert.equal(t.timers.size,0);await t.audio.onended();assert.equal(t.timers.size,1);
+ assert.ok(t.timers.size<=1,'aucune relance micro pendant la lecture');await t.audio.onended();assert.equal(t.timers.size,1);
  assert.equal(t.$('voice-player').classList.contains('hidden'),true);
 });
 
@@ -104,13 +133,13 @@ test('voix fichier : active la sortie dans le toucher, lit la réponse et repren
   t.click('btn-test-voice');
   assert.equal(t.audioPlays[0].gesture, true);
   assert.equal(t.spoken.length, 0);
-  await new Promise(resolve => setImmediate(resolve));
-  t.c.micLiveResume();
-  assert.equal(t.timers.size, 1, 'seul le délai réseau reste actif pendant la préparation');
-  await t.finishVoice();
-  assert.equal(t.audio.src, '/api/speech/audio/'+'a'.repeat(48)); assert.match(t.c.status, /Je parle/);
-  t.c.micLiveResume(); assert.equal(t.timers.size, 0, 'aucun micro pendant la lecture');
-  t.audio.onended(); assert.equal(t.timers.size, 1, 'reprise après la voix');
+ await new Promise(resolve => setImmediate(resolve));
+ t.c.micLiveResume();
+ assert.equal(t.sessions.length, 1, 'pas de nouveau micro pendant la préparation');
+ await t.finishVoice();
+ assert.equal(t.audio.src, '/api/speech/audio/'+'a'.repeat(48)); assert.match(t.c.status, /Je parle/);
+ t.c.micLiveResume(); assert.equal(t.sessions.length, 1, 'la session vivante continue pendant la lecture');
+ t.audio.onended(); assert.equal(t.timers.size, 1, 'reprise confirmée après la voix');
 });
 
 test('voix mobile : un déverrouillage sonore bloqué ne bloque pas la génération ni le lecteur visible',async()=>{
@@ -132,7 +161,7 @@ test('micro mobile : aucune lecture audio concurrente au démarrage du micro',()
 });
 
 test('micro : la fin de parole demande le résultat final sans abandonner la phrase',()=>{
- const t=setup();t.click('btn-mic');const session=t.sessions[0];session.onspeechend();assert.equal(session.stopped,true);assert.equal(session.aborted,undefined);
+ const t=setup();vm.runInContext('dictationReview = false',t.c);t.click('btn-mic');const session=t.sessions[0];session.onspeechend();assert.equal(session.stopped,true);assert.equal(session.aborted,undefined);
  session.onresult({results:[[{transcript:'Ma question'}]]});assert.equal(t.c.sent,'Ma question');
 });
 
@@ -180,7 +209,7 @@ test('voix sans événement : sort de l’attente', () => {
   assert.match(t.c.status, /Écouter Lumi/);
 });
 test('micro : démarre dans le clic et renouvelle la session après un arrêt', () => {
-  const t = setup(); t.click('btn-mic'); const old = t.sessions[0];
+  const t = setup(); vm.runInContext('dictationReview = false', t.c); t.click('btn-mic'); const old = t.sessions[0];
   assert.ok(old.startedInGesture, 'start doit rester dans le clic');
   t.click('btn-mic'); assert.ok(old.aborted); t.click('btn-mic');
   assert.equal(t.sessions.length, 2); old.onresult({ results: [[{ transcript: 'ancien' }]] });
@@ -202,14 +231,14 @@ test('mode discussion : le micro se rouvre tout seul et s’éteint au bouton', 
   [...t.timers.values()].forEach(fn => fn());
   assert.equal(t.sessions.length, n); // plus de renouvellement
 });
-test('mode discussion : le micro reprend après la lecture de Lumi', () => {
+test('mode discussion : le micro reste ouvert pendant la lecture de Lumi', () => {
   const t = setup(); t.click('btn-mic-live');
-  t.c.speak('Réponse de Lumi.'); // la lecture coupe le micro
-  assert.ok(t.sessions[0].aborted);
+  t.c.speak('Réponse de Lumi.'); // le micro n'est plus coupé pendant la voix
+  assert.equal(t.sessions[0].aborted, undefined);
   t.spoken[t.spoken.length - 1].utterance.onstart();
   t.spoken[t.spoken.length - 1].utterance.onend(); // Lumi a fini de parler
   [...t.timers.values()].forEach(fn => fn());
-  assert.equal(t.sessions.length, 2); // le micro s'est rouvert tout seul
+  assert.equal(t.sessions.length, 1, 'la session vivante continue, sans re-création');
   assert.ok(t.$('btn-mic-live').classList.contains('live'));
 });
 test('micro : permission refusée affiche une aide iPhone (QR code, pas de certificat)', () => {
@@ -332,10 +361,13 @@ test('les deux boutons : 🎙️ remplace une dictée par une nouvelle session d
   t.sessions[0].onerror({error:'aborted'});
   assert.ok(t.$('btn-mic-live').classList.contains('live'));
 });
-test('🎤 passe directement à une question pendant la voix du mode discussion', () => {
+test('🎤 pendant la voix du mode discussion : coupe la discussion, second appui pour dicter', () => {
   const t = setup(); t.click('btn-mic-live'); t.c.speak('Je réponds.');
   t.click('btn-mic');
   assert.equal(t.$('btn-mic-live').classList.contains('live'), false);
+  assert.ok(t.sessions[0].aborted, 'la session de discussion est arrêtée proprement');
+  assert.equal(t.sessions.length, 1);
+  t.click('btn-mic');
   assert.equal(t.sessions.length, 2); assert.ok(t.sessions[1].startedInGesture);
 });
 test('mode discussion : une reprise pendant la préparation de la voix ne coupe pas la réponse', () => {
@@ -343,12 +375,12 @@ test('mode discussion : une reprise pendant la préparation de la voix ne coupe 
   const count=t.sessions.length;
   t.c.micLiveResume();
   t.spoken.at(-1).utterance.onstart(); // retire le délai de préparation
-  assert.equal(t.timers.size, 0); assert.equal(t.sessions.length, count);
+  assert.equal(t.sessions.length, count, 'aucune nouvelle session pendant la préparation');
   t.spoken.at(-1).utterance.onend();
   assert.equal(t.timers.size, 1);
 });
 test('une dictée : ignore les résultats intermédiaires et un doublon final', () => {
-  const t = setup(); let sends=0;t.c.send=()=>sends++;
+  const t = setup(); vm.runInContext('dictationReview = false', t.c); let sends=0;t.c.send=()=>sends++;
   t.click('btn-mic'); const session=t.sessions[0];
   const interim=[{transcript:'question incomplète'}];interim.isFinal=false;
   session.onresult({results:[interim]});assert.equal(sends,0);assert.equal(t.$('input').value,'question incomplète');
@@ -383,14 +415,239 @@ test('micro dictée : blocage après résultat intermédiaire garde le texte san
  t.sessions[0].onresult({results:[result]});const [id,fn]=[...t.timers.entries()][0];t.timers.delete(id);fn();
  assert.equal(t.$('input').value,'Mon début de question');assert.equal(t.c.sent,undefined);assert.match(t.c.status,/Phrase conservée/);
 });
-test('lecteur en pause : micro reprend et nouvelle lecture arrête à nouveau le micro',async()=>{
+test('iPhone mode discussion : le micro reste vivant pendant la voix et l’enfant peut couper Lumi',async()=>{
  const t=setup(true);t.click('btn-mic-live');t.c.speak('Une réponse.');await t.finishVoice();t.audio.onplay();
- t.audio.paused=true;t.audio.ended=false;t.audio.onpause();assert.equal(vm.runInContext('voiceAudioBusy',t.c),false);
- const [id,fn]=[...t.timers.entries()][0];t.timers.delete(id);fn();assert.equal(t.sessions.length,2);
- t.audio.paused=false;t.audio.onplay();assert.equal(t.sessions[1].aborted,true);assert.equal(vm.runInContext('voiceAudioBusy',t.c),true);
+ assert.equal(t.sessions.length,1);assert.equal(t.sessions[0].aborted,undefined);
+ assert.equal(vm.runInContext('voiceAudioBusy',t.c),true);
+ t.sessions[0].onresult({results:[[{transcript:'Attends Lumi'}]]});
+ assert.equal(t.audio.paused,true,'Lumi se tait immédiatement');
+ assert.equal(vm.runInContext('voiceAudioBusy',t.c),false);
+ assert.equal(t.c.sent,'Attends Lumi','la phrase de l’enfant part à Lumi');
 });
 test('lecteur : pause de fin ou événement tardif après Stop ne relance pas une ancienne voix',async()=>{
  const t=setup(true);t.click('btn-mic-live');t.c.speak('Une réponse.');await t.finishVoice();const oldPause=t.audio.onpause;
  t.audio.paused=true;t.audio.ended=true;oldPause();assert.equal(vm.runInContext('voiceAudioBusy',t.c),true);
  t.click('btn-stop');assert.equal(t.audio.onpause,null);const before=t.timers.size;oldPause();assert.equal(t.timers.size,before);
+});
+
+test('dictée : ponctuation dictée convertie, espaces propres, mots de maths intacts', () => {
+  const c = vm.createContext({});
+  vm.runInContext(section('function tidyDictation(', 'function stopListening'), c);
+  assert.equal(c.tidyDictation('quel est le résultat  point d’interrogation'), 'quel est le résultat ?');
+  assert.equal(c.tidyDictation('Bravo  point d’exclamation'), 'Bravo !');
+  assert.equal(c.tidyDictation('ouvre la parenthèse trois plus cinq ferme la parenthèse'), '(trois plus cinq)');
+  assert.equal(c.tidyDictation('  trop   d’espaces '), 'trop d’espaces');
+  // Les mots des énoncés de maths ne sont jamais transformés.
+  assert.equal(c.tidyDictation('place deux points A et B'), 'place deux points A et B');
+  assert.equal(c.tidyDictation('trois virgule cinq'), 'trois virgule cinq');
+  // Enfants : les hésitations disparaissent, pas les vrais mots.
+  assert.equal(c.tidyDictation('euh combien font  heu  deux plus trois'), 'combien font deux plus trois');
+  assert.equal(c.tidyDictation('quelle heure est-il hum'), 'quelle heure est-il');
+  assert.equal(c.tidyDictation('humour et heureux'), 'humour et heureux');
+  assert.equal(c.tidyDictation(''), '');
+  assert.equal(c.tidyDictation(null), '');
+});
+test('mode discussion : après trois silences, un conseil gentil à l’enfant (une seule fois)', () => {
+  const t = setup(); t.click('btn-mic-live');
+  const restart = () => {
+    const [id, fn] = [...t.timers.entries()][0]; t.timers.delete(id); fn();
+  };
+  t.sessions.at(-1).onend(); restart();
+  assert.equal(t.bubbles.filter(x => /plus fort/.test(x)).length, 0, 'pas de reproche après un seul silence');
+  t.sessions.at(-1).onend(); restart();
+  t.sessions.at(-1).onend(); restart();
+  assert.equal(t.bubbles.filter(x => /plus fort/.test(x)).length, 1);
+  assert.match(t.bubbles.at(-1), /Approche le téléphone/);
+  // Une phrase entendue remet le compteur à zéro, mais le conseil ne se répète pas.
+  const ok = [{ transcript: 'ma question' }]; ok.isFinal = false;
+  t.sessions.at(-1).onresult({ results: [ok] });
+  assert.equal(vm.runInContext('emptyMicSessions', t.c), 0);
+  for (let i = 0; i < 6; i++) { t.sessions.at(-1).onend(); restart(); }
+  assert.equal(t.bubbles.filter(x => /plus fort/.test(x)).length, 1);
+  assert.equal(t.$('btn-mic-live').classList.contains('live'), true);
+});
+test('dictée : le texte envoyé à Lumi est nettoyé (ponctuation parlée)', () => {
+  const t = setup(); vm.runInContext('dictationReview = false', t.c); t.click('btn-mic');
+  t.sessions[0].onresult({ results: [[{ transcript: 'c’est quoi les fractions point d’interrogation' }]] });
+  assert.equal(t.c.sent, 'c’est quoi les fractions ?');
+});
+test('dictée iPhone : une session coupée puis reprise garde le début et la ponctuation finale', () => {
+  const t = setup(); t.click('btn-mic-live');
+  const result = [{ transcript: 'combien font vingt plus' }]; result.isFinal = false;
+  t.sessions[0].onresult({ results: [result] });
+  t.sessions[0].onend();
+  const [id, fn] = [...t.timers.entries()][0]; t.timers.delete(id); fn();
+  const final = [{ transcript: 'trente point d’interrogation' }]; final.isFinal = true;
+  t.sessions[1].onresult({ results: [final] });
+  assert.equal(t.$('input').value, 'combien font vingt plus trente ?');
+  assert.equal(t.c.sent, undefined, 'phrase complétée soumise à relecture');
+  assert.match(t.c.status, /vérifie-la/);
+});
+
+test('dictée : par défaut, Lumi propose la phrase à relire avant l’envoi', () => {
+  const t = setup(); t.click('btn-mic');
+  t.sessions[0].onresult({ results: [[{ transcript: 'combien font sept plus cinq' }]] });
+  assert.equal(t.c.sent, undefined);
+  assert.equal(t.$('input').value, 'combien font sept plus cinq');
+  assert.equal(vm.runInContext('micDraftReview', t.c), true);
+  assert.match(t.c.status, /vérifie-la.*Envoyer/);
+  // Le mode Conversation reste mains libres : il envoie tout seul.
+  const t2 = setup(); t2.click('btn-mic-live');
+  t2.sessions[0].onresult({ results: [[{ transcript: 'combien font sept plus cinq' }]] });
+  assert.equal(t2.c.sent, 'combien font sept plus cinq');
+});
+test('réglage : la relecture avant envoi se désactive et se retient', () => {
+  const t = setup();
+  assert.equal(vm.runInContext('dictationReview', t.c), true);
+  assert.equal(t.$('dictation-review').checked, true);
+  t.$('dictation-review').checked = false;
+  t.$('dictation-review').handlers.change();
+  assert.equal(vm.runInContext('dictationReview', t.c), false);
+  assert.equal(t.localStorage.getItem('lumidictationreview'), '0');
+  t.click('btn-mic');
+  t.sessions[0].onresult({ results: [[{ transcript: 'une question' }]] });
+  assert.equal(t.c.sent, 'une question');
+});
+test('push-to-talk : maintenir 🎤, parler, relâcher termine la dictée', () => {
+  const t = setup();
+  t.$('btn-mic').handlers.pointerdown({});
+  const [id, fn] = [...t.timers.entries()][0]; t.timers.delete(id); fn(); // appui long
+  assert.equal(t.sessions.length, 1);
+  t.sessions[0].onstart();
+  t.$('btn-mic').handlers.pointerup();
+  assert.equal(t.sessions[0].stopped, true, 'relâcher demande le résultat final');
+  // Le clic qui suit un appui long ne rouvre pas le micro.
+  t.click('btn-mic');
+  assert.equal(t.sessions.length, 1);
+  t.sessions[0].onresult({ results: [[{ transcript: 'ma question' }]] });
+  assert.equal(t.c.sent, undefined, 'relecture avant envoi (réglage par défaut)');
+  assert.equal(t.$('input').value, 'ma question');
+});
+test('push-to-talk : appui court = dictée classique, relâche trop tôt = annulation propre', () => {
+  const t = setup();
+  t.$('btn-mic').handlers.pointerdown({});
+  t.$('btn-mic').handlers.pointerup();
+  assert.equal(t.sessions.length, 0);
+  t.click('btn-mic');
+  assert.equal(t.sessions.length, 1);
+  assert.ok(t.sessions[0].startedInGesture);
+  // Appui long puis relâche avant que la session démarre : rien ne traîne.
+  const t2 = setup();
+  t2.$('btn-mic').handlers.pointerdown({});
+  const [id, fn] = [...t2.timers.entries()][0]; t2.timers.delete(id); fn();
+  t2.$('btn-mic').handlers.pointerup();
+  assert.equal(t2.sessions[0].aborted, true);
+  assert.equal(vm.runInContext('recog', t2.c), null);
+});
+
+test('dictée Whisper : 🎤 enregistre, transcrit, propose la relecture', async () => {
+  const t = setup(); await t.c.checkWhisperStt(); t.enableMic();
+  assert.equal(vm.runInContext('whisperStt', t.c), true);
+  t.click('btn-mic');
+  for (let i = 0; i < 3; i++) await new Promise(r => setImmediate(r));
+  assert.equal(t.recorders.length, 1);
+  assert.equal(t.recorders[0].state, 'recording');
+  assert.equal(t.sessions.length, 0, 'pas de reconnaissance navigateur quand Whisper est là');
+  t.click('btn-mic'); // deuxième appui : je transcris
+  for (let i = 0; i < 6; i++) await new Promise(r => setImmediate(r));
+  assert.equal(t.recorders[0].state, 'inactive');
+  assert.equal(t.transcribeBodies.length, 1);
+  assert.equal(t.transcribeBodies[0].mime, 'audio/webm;codecs=opus');
+  assert.equal(t.$('input').value, 'bonjour les enfants');
+  assert.equal(t.c.sent, undefined, 'relecture par défaut');
+  assert.match(t.c.status, /transcrite/);
+});
+test('push-to-talk Whisper : maintenir 🎤 enregistre, relâcher transcrit', async () => {
+  const t = setup(); await t.c.checkWhisperStt(); t.enableMic();
+  t.$('btn-mic').handlers.pointerdown({});
+  const [id, fn] = [...t.timers.entries()][0]; t.timers.delete(id); fn();
+  for (let i = 0; i < 3; i++) await new Promise(r => setImmediate(r));
+  assert.equal(t.recorders.length, 1);
+  t.$('btn-mic').handlers.pointerup();
+  for (let i = 0; i < 6; i++) await new Promise(r => setImmediate(r));
+  assert.equal(t.$('input').value, 'bonjour les enfants');
+  t.click('btn-mic'); // le clic qui suit l'appui long est ignoré
+  assert.equal(t.recorders.length, 1);
+  assert.equal(t.sessions.length, 0, 'aucune session navigateur concurrente');
+});
+
+// « Le micro marche une fois puis plus jamais » : après la voix de Lumi,
+// Safari garde le micro et les sessions démarrent puis meurent sans rien
+// capter (audio-capture / aborted / mort en < 2,5 s). Ces morts anormales
+// doivent déclencher la réparation auto (relance, puis recharge) — avant ce
+// correctif, seules les sessions « jamais démarrées » la déclenchaient.
+test('micro iPhone bloqué après la voix : relance puis recharge, avec reprise de la leçon', () => {
+  const t = setup(); t.c.currentProfile = { id: 'manon', name: 'Manon' };
+  t.click('btn-mic-live');
+  t.sessions[0].onstart(); // le micro a déjà marché une fois sur la page
+  t.sessions[0].onerror({ error: 'audio-capture' }); // Safari a repris le micro
+  assert.equal(t.$('btn-mic-live').classList.contains('live'), true, 'la conversation reste active');
+  const [id, fn] = [...t.timers.entries()][0]; t.timers.delete(id); fn();
+  assert.equal(t.sessions.length, 2, 'une relance est tentée');
+  t.sessions[1].onstart();
+  t.sessions[1].onerror({ error: 'aborted' });
+  const [id2, fn2] = [...t.timers.entries()][0]; t.timers.delete(id2); fn2();
+  assert.equal(t.location.reloaded, 1, 'deuxième échec : recharge de secours');
+  const flag = JSON.parse(t.sessionStorage.getItem('lumi-mic-repair'));
+  assert.equal(flag.id, 'manon', 'la leçon en cours est notée pour reprise');
+});
+
+test('micro iPhone : session morte en moins de 2,5 s sans parole = micro bloqué, pas une pause', () => {
+  const t = setup(); t.click('btn-mic-live');
+  const s = t.sessions[0]; s.onstart(); s.onend();
+  assert.equal(t.timers.size, 1, 'la réparation relance le micro');
+  const [id, fn] = [...t.timers.entries()][0]; t.timers.delete(id); fn();
+  assert.equal(t.sessions.length, 2);
+  assert.equal(vm.runInContext('micSilentDeaths', t.c), 1);
+});
+
+test('micro iPhone : une vraie pause de 5 s reste une simple relance, jamais une réparation', () => {
+  const t = setup(); t.click('btn-mic-live');
+  const s = t.sessions[0]; s.onstart();
+  // Simule une session qui a vécu 6 s : iOS abandonne seul sur un vrai silence.
+  vm.runInContext('Date.now = (() => { const real = Date.now; return () => real() + 6000; })()', t.c);
+  s.onend();
+  assert.equal(vm.runInContext('micSilentDeaths', t.c), 0);
+  assert.equal(vm.runInContext('emptyMicSessions', t.c), 1);
+  assert.equal(t.$('btn-mic-live').classList.contains('live'), true);
+});
+
+test('après recharge micro : la leçon du profil est rouverte automatiquement', () => {
+  const opened = [];
+  const store = new Map([['lumi-mic-repair', JSON.stringify({ id: 'manon', at: Date.now() })]]);
+  const c = vm.createContext({
+    sessionStorage: { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) },
+    loadProfiles: () => [{ id: 'manon', name: 'Manon' }],
+    toast(text) { c.toasted = text; },
+    startChat(profile) { opened.push(profile.id); }
+  });
+  vm.runInContext(section('function resumeAfterMicRepair()', 'async function initApp()'), c);
+  c.resumeAfterMicRepair();
+  assert.deepEqual(opened, ['manon']);
+  assert.match(c.toasted, /🎙️/);
+  assert.equal(store.has('lumi-mic-repair'), false, 'drapeau consommé une seule fois');
+  // Profil inconnu ou drapeau périmé : on ne rouvre rien de force.
+  store.set('lumi-mic-repair', JSON.stringify({ id: 'inconnu', at: Date.now() }));
+  c.resumeAfterMicRepair();
+  assert.deepEqual(opened, ['manon']);
+  store.set('lumi-mic-repair', JSON.stringify({ id: 'manon', at: Date.now() - 600000 }));
+  c.resumeAfterMicRepair();
+  assert.deepEqual(opened, ['manon']);
+});
+
+test('iPhone réglé sur le clavier : 🎤 ouvre le clavier au lieu du micro Safari', () => {
+  const t = setup(false, false, false, { lumidictkeyboard: '1' });
+  assert.equal(vm.runInContext('keyboardDictation', t.c), true);
+  t.click('btn-mic');
+  assert.equal(t.sessions.length, 0, 'aucun micro Safari lancé');
+  assert.match(t.c.status, /clavier/i);
+});
+test('iPhone mode clavier : éteint la discussion puis ouvre le clavier', () => {
+  const t = setup(false, false, false, { lumidictkeyboard: '1' });
+  t.click('btn-mic-live');
+  assert.equal(t.sessions.length, 1);
+  t.click('btn-mic');
+  assert.ok(t.sessions[0].aborted, 'la discussion est arrêtée');
+  assert.match(t.c.status, /clavier/i);
+  assert.equal(t.sessions.length, 1, 'pas de nouveau micro Safari');
 });

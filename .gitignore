@@ -11,3 +11,5 @@ AUDIT-*.html
 PLAN-ACTION-*.md
 corrections-voix
 SUIVI-*.md
+.lumi-whisper/
+graphify-out/

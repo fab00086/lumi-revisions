@@ -29,3 +29,14 @@ services:
         sync: false
       - key: UPSTASH_REDIS_REST_TOKEN
         sync: false
+      # Paiement « Lumi Famille » (Stripe) — voir DEPLOY-RENDER.md §6.
+      # Laisser vides tant que le compte Stripe n'est pas prêt : la carte
+      # abonnement reste alors invisible dans l'espace parent.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_YEARLY
+        sync: false

@@ -9,8 +9,9 @@ import fs from 'fs';
 import http from 'http';
 import https from 'https';
 import selfsigned from 'selfsigned';
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { speechAvailable, generateSpeech, generateSpeechSample } from './speech.js';
+import { createWhisperRunner } from './whisper-python.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -325,6 +326,10 @@ app.use('/api', (_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   next();
 });
+// Stripe : le webhook est enregistre AVANT le parseur JSON global car la
+// signature se verifie sur le corps BRUT de la requete (jamais transforme).
+// Il doit aussi passer avant la porte d'acces : Stripe n'a pas de cookie.
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
 app.use(express.json({ limit: '25mb' })); // pour les photos en base64
 // KaTeX (rendu des maths) servi depuis node_modules
 app.use('/katex', express.static(path.join(__dirname, 'node_modules', 'katex', 'dist')));
@@ -493,7 +498,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-03.21' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-13.4' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -753,9 +758,34 @@ function planLimit(acc) {
   const raw = acc.settings && acc.settings.dailyLimit;
   const daily = Number(raw);
   if (raw != null && Number.isFinite(daily) && daily >= 0) return Math.round(daily);
+  if (acc.plan === 'family' && acc.settings && acc.settings.stripe && !stripeSubscriptionActive(acc))
+    return FREE_DAILY; // abonnement Stripe expiré/impayé : retour en douceur au quota gratuit
   if (acc.plan === 'trial' && (!acc.trialEnds || new Date(acc.trialEnds) > new Date())) return Infinity;
   if (acc.plan !== 'free' && acc.plan !== 'trial') return Infinity; // famille / payant : illimité par défaut
   return FREE_DAILY;
+}
+// ---------- Abonnement Stripe : état de l'accès famille payant ----------
+// Un compte famille offert par l'admin n'a PAS de settings.stripe : il reste
+// illimité, jamais concerné par ces règles. Pour un abonné :
+//  - active / trialing : accès illimité ;
+//  - past_due (paiement en retard) : accès conservé le temps que Stripe
+//    réessaie (30 jours après la fin de période, puis plafonné) ;
+//  - résilié : accès jusqu'au bout de la période déjà payée, puis plafonné.
+function stripeSubscriptionActive(acc) {
+  const s = acc && acc.settings && acc.settings.stripe;
+  if (!s || typeof s !== 'object') return false;
+  const end = s.currentPeriodEnd ? Date.parse(s.currentPeriodEnd) : NaN;
+  if (s.status === 'active' || s.status === 'trialing') return true;
+  if (s.status === 'past_due') return !(Number.isFinite(end) && Date.now() > end + 30 * 86400000);
+  if (Number.isFinite(end) && end > Date.now()) return true;
+  return false;
+}
+// Plan effectif pour l'affichage (abonnement lapsed ou essai fini -> 'free').
+function effectivePlan(acc) {
+  if (!acc) return 'free';
+  if (acc.plan === 'family' && acc.settings && acc.settings.stripe && !stripeSubscriptionActive(acc)) return 'free';
+  if (acc.plan === 'trial' && acc.trialEnds && new Date(acc.trialEnds) <= new Date()) return 'free';
+  return acc.plan;
 }
 function quotaOk(acc, kind) {
   if (!acc || !Number.isFinite(planLimit(acc))) return true;
@@ -1218,6 +1248,7 @@ app.get('/api/admin/accounts', async (req, res, next) => {
       maxDevices: a.settings?.maxDevices || 1, connectedDevices: (await activeSessions(a.id)).length,
       trialEnds: a.trial_ends || a.trialEnds || null, created: a.created || null,
       dailyLimit: (a.settings && Number.isFinite(Number(a.settings.dailyLimit)) && a.settings.dailyLimit !== null) ? Number(a.settings.dailyLimit) : null,
+      subscription: stripeSubView(a), planEffective: effectivePlan(a),
       usage: (a.usage || {})
     })))
   });
@@ -1279,6 +1310,361 @@ app.post('/api/admin/account', storedRoute(async (req, res) => {
   await accountPut(acc);
   res.json({ ok: true });
 }));
+
+// ---------- Stripe : paiement « Lumi Famille » (abonnement) ----------
+// Les familles déjà ouvertes par code s'abonnent elles-mêmes depuis l'espace
+// parent : 7,99 €/mois ou 79 €/an. Pas de SDK : appels REST directs a
+// api.stripe.com (comme Ollama/Resend) et signature verifiee avec node:crypto.
+// Les infos d'abonnement vivent dans acc.settings.stripe : aucune migration
+// de table, et cela marche aussi sur le stockage Redis de Render.
+// Le webhook (enregistre plus haut, avant le parseur JSON) est la seule
+// source de verite : il met a jour plan + periode a chaque evenement Stripe.
+const STRIPE_KEY = String(ENV.STRIPE_SECRET_KEY || '').trim();
+const STRIPE_WEBHOOK_SECRET = String(ENV.STRIPE_WEBHOOK_SECRET || '').trim();
+const STRIPE_PRICE_MONTHLY = String(ENV.STRIPE_PRICE_MONTHLY || '').trim();
+const STRIPE_PRICE_YEARLY = String(ENV.STRIPE_PRICE_YEARLY || '').trim();
+function stripePriceId(interval) { return interval === 'year' ? STRIPE_PRICE_YEARLY : STRIPE_PRICE_MONTHLY; }
+function stripeEnabled(interval) { return Boolean(STRIPE_KEY && stripePriceId(interval)); }
+// Adresse publique pour les retours Stripe : config explicite, sinon l'hote
+// de la requete (localhost en local, lumi-revisions.onrender.com en ligne).
+function billingBaseUrl(req) {
+  const configured = String(process.env.LUMI_PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || '').trim();
+  if (/^https?:\/\//.test(configured)) return configured.replace(/\/+$/, '');
+  return (isSecureReq(req) ? 'https' : 'http') + '://' + req.get('host');
+}
+// Parametres imbriques Stripe : { line_items: [{price:'x'}] } -> line_items[0][price]=x
+function stripeForm(params) {
+  const out = new URLSearchParams();
+  const add = (key, value) => {
+    if (value === undefined || value === null || value === '') return;
+    if (Array.isArray(value)) { value.forEach((v, i) => add(key + '[' + i + ']', v)); return; }
+    if (typeof value === 'object') { for (const [k, v] of Object.entries(value)) add(key + '[' + k + ']', v); return; }
+    out.append(key, String(value));
+  };
+  for (const [k, v] of Object.entries(params)) add(k, v);
+  return out;
+}
+async function stripeRequest(route, params = {}, method = 'POST') {
+  const r = await fetch('https://api.stripe.com/v1/' + route + (method === 'GET' ? '?' + stripeForm(params).toString() : ''), {
+    method,
+    headers: { 'Authorization': 'Bearer ' + STRIPE_KEY, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: method === 'GET' ? undefined : stripeForm(params).toString(),
+    signal: AbortSignal.timeout(20000)
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((body && body.error && body.error.message) || 'Stripe a refuse la demande (' + r.status + ').');
+  return body;
+}
+// Tarifs affiches dans l'espace parent : lus chez Stripe (cache 1 h) pour ne
+// jamais promettre un prix different de celui reellement facture.
+let stripePricesCache = { at: 0, data: null };
+async function stripePrices() {
+  if (stripePricesCache.data && Date.now() - stripePricesCache.at < 3600000) return stripePricesCache.data;
+  const read = async interval => {
+    const id = stripePriceId(interval);
+    const fallback = { interval, amount: null, currency: 'eur' };
+    if (!id || !STRIPE_KEY) return fallback;
+    try {
+      const p = await stripeRequest('prices/' + encodeURIComponent(id), {}, 'GET');
+      return { interval, amount: Number.isFinite(p.unit_amount) ? p.unit_amount / 100 : null, currency: p.currency || 'eur' };
+    } catch (e) { console.warn('Stripe tarifs :', e.message); return fallback; }
+  };
+  const data = { month: await read('month'), year: await read('year') };
+  stripePricesCache = { at: Date.now(), data };
+  return data;
+}
+function stripeSubView(acc) {
+  const s = acc && acc.settings && acc.settings.stripe;
+  if (!s || typeof s !== 'object') return null;
+  return {
+    status: String(s.status || ''), interval: s.interval || null,
+    currentPeriodEnd: s.currentPeriodEnd || null, cancelAtPeriodEnd: s.cancelAtPeriodEnd === true
+  };
+}
+// Stripe envoie des secondes Unix (ancien format) ou des chaines : on normalise.
+function stripePeriodIso(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return new Date(value * 1000).toISOString();
+  if (typeof value === 'string' && value) {
+    const t = Date.parse(value);
+    if (Number.isFinite(t)) return new Date(t).toISOString();
+  }
+  return null;
+}
+async function stripeAccountByCustomer(customerId) {
+  if (!customerId) return null;
+  return (await allAccounts()).find(a => a && a.settings && a.settings.stripe && a.settings.stripe.customerId === customerId) || null;
+}
+// Met a jour le compte concerne par un objet subscription Stripe : retrouve
+// par metadata.accountId (pose a la creation du checkout) puis par client.
+// Actif -> plan family. Termine/impaye -> retour free (mais un compte famille
+// offert par l'admin, sans donnees Stripe, n'est jamais touche).
+async function stripeApplySubscription(sub) {
+  if (!sub || typeof sub !== 'object') return null;
+  const metaId = String((sub.metadata && sub.metadata.accountId) || '');
+  let acc = metaId ? await accountById(metaId) : null;
+  if (!acc) acc = await stripeAccountByCustomer(typeof sub.customer === 'string' ? sub.customer : '');
+  if (!acc || acc.plan === 'local' || acc.id === '__lumi_admin_test') return null;
+  const item = (sub.items && Array.isArray(sub.items.data) && sub.items.data[0]) || null;
+  // L'API Stripe recente deplace la fin de periode sur l'item : lire les deux.
+  const ends = [sub.current_period_end, item && item.current_period_end].map(stripePeriodIso).filter(Boolean).sort();
+  const previous = (acc.settings && acc.settings.stripe) || {};
+  acc.settings = acc.settings || {};
+  acc.settings.stripe = {
+    customerId: (typeof sub.customer === 'string' && sub.customer) || previous.customerId || null,
+    subscriptionId: sub.id || previous.subscriptionId || null,
+    priceId: (item && item.price && item.price.id) || previous.priceId || null,
+    interval: (item && item.price && item.price.recurring && item.price.recurring.interval) || previous.interval || null,
+    status: String(sub.status || previous.status || ''),
+    currentPeriodEnd: ends.length ? ends[ends.length - 1] : (previous.currentPeriodEnd || null),
+    cancelAtPeriodEnd: sub.cancel_at_period_end === true,
+    updatedAt: new Date().toISOString()
+  };
+  acc.plan = stripeSubscriptionActive(acc) ? 'family' : 'free';
+  await accountPut(acc);
+  return acc;
+}
+async function stripeHandleEvent(event) {
+  const type = String((event && event.type) || '');
+  const obj = (event && event.data && event.data.object) || {};
+  if (type === 'checkout.session.completed') {
+    if (obj.mode !== 'subscription') return;
+    const accountId = String((obj.metadata && obj.metadata.accountId) || obj.client_reference_id || '');
+    if (typeof obj.subscription === 'string' && obj.subscription) {
+      try {
+        const sub = await stripeRequest('subscriptions/' + encodeURIComponent(obj.subscription), {}, 'GET');
+        if (sub.metadata && !sub.metadata.accountId && accountId) sub.metadata.accountId = accountId;
+        await stripeApplySubscription(sub);
+        return;
+      } catch (e) { console.warn('Stripe : abonnement non relu (' + e.message + '), repli sur l\'evenement.'); }
+    }
+    // Repli : on note au moins client + abonnement pour que la famille voie l'etat.
+    const acc = accountId ? await accountById(accountId) : null;
+    if (acc && acc.plan !== 'local' && acc.id !== '__lumi_admin_test') {
+      acc.settings = acc.settings || {};
+      const previous = acc.settings.stripe || {};
+      acc.settings.stripe = {
+        ...previous,
+        customerId: typeof obj.customer === 'string' ? obj.customer : (previous.customerId || null),
+        subscriptionId: typeof obj.subscription === 'string' ? obj.subscription : (previous.subscriptionId || null),
+        status: 'active', updatedAt: new Date().toISOString()
+      };
+      acc.plan = 'family';
+      await accountPut(acc);
+    }
+    return;
+  }
+  if (type === 'customer.subscription.created' || type === 'customer.subscription.updated' || type === 'customer.subscription.deleted')
+    await stripeApplySubscription(obj);
+}
+// Verification de la signature Stripe (en-tete stripe-signature) : HMAC-SHA256
+// de « timestamp.corps brut », tolerance 5 minutes, comparaison a temps constant.
+function stripeVerifySignature(payload, header, secret) {
+  const parts = String(header || '').split(',').map(p => p.split('='));
+  const t = (parts.find(p => p[0] === 't') || [])[1];
+  const sigs = parts.filter(p => p[0] === 'v1').map(p => p[1]).filter(Boolean);
+  if (!t || !sigs.length || !/^\d+$/.test(t)) return false;
+  if (Math.abs(Date.now() / 1000 - Number(t)) > 300) return false;
+  const expected = Buffer.from(createHmac('sha256', secret).update(t + '.' + payload).digest('hex'), 'hex');
+  return sigs.some(sig => {
+    try {
+      const got = Buffer.from(sig, 'hex');
+      return got.length === expected.length && timingSafeEqual(got, expected);
+    } catch { return false; }
+  });
+}
+// Handler du webhook (route enregistree tout en haut, avant express.json) :
+// verification de signature, puis traitement serialise avec les autres
+// ecritures pour ne jamais ecraser une sauvegarde concurrente.
+function stripeWebhook(req, res) {
+  if (!STRIPE_WEBHOOK_SECRET) return res.status(503).json({ error: 'Paiement non configure : webhook Stripe indisponible.' });
+  const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body || ''), 'utf8');
+  if (!stripeVerifySignature(raw, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET))
+    return res.status(400).json({ error: 'Signature Stripe invalide.' });
+  let event = null;
+  try { event = JSON.parse(raw.toString('utf8')); } catch {}
+  if (!event || typeof event !== 'object') return res.status(400).json({ error: 'Evenement Stripe illisible.' });
+  const task = writeQueue.then(() => stripeHandleEvent(event));
+  writeQueue = task.catch(() => {});
+  task.then(() => res.json({ received: true }))
+    .catch(e => { console.error('Stripe webhook :', e.message); if (!res.headersSent) res.status(500).json({ error: 'Traitement impossible, Stripe reessaiera.' }); });
+}
+
+// Etat de l'abonnement pour l'espace parent (jamais de cle ni d'identifiant client).
+app.get('/api/billing/status', async (req, res) => {
+  const r = await requireAccount(req, res);
+  if (!r) return;
+  const acc = r.account;
+  const enabled = stripeEnabled('month') || stripeEnabled('year');
+  let prices = { month: null, year: null };
+  if (enabled && !r.local && !r.adminTest) { try { prices = await stripePrices(); } catch {} }
+  res.json({
+    enabled, plan: effectivePlan(acc), trialEnds: acc.trialEnds || null,
+    subscription: stripeSubView(acc), prices
+  });
+});
+// Ouverture du paiement : Stripe Checkout en mode abonnement, retour sur Lumi.
+app.post('/api/billing/checkout', async (req, res) => {
+  const r = await requireAccount(req, res);
+  if (!r) return;
+  if (r.local || r.adminTest) return res.status(400).json({ error: 'Ce mode n\'a pas besoin d\'abonnement.' });
+  const interval = (req.body || {}).interval === 'year' ? 'year' : 'month';
+  if (!stripeEnabled(interval)) return res.status(503).json({ error: 'Le paiement n\'est pas encore configure. Reessaie plus tard.' });
+  const acc = r.account;
+  if (acc.settings && acc.settings.stripe && acc.settings.stripe.subscriptionId && stripeSubscriptionActive(acc))
+    return res.status(409).json({ error: 'Cet abonnement est deja actif. Utilise « Gerer mon abonnement ».', portal: true });
+  const params = {
+    mode: 'subscription',
+    line_items: [{ price: stripePriceId(interval), quantity: 1 }],
+    client_reference_id: acc.id,
+    metadata: { accountId: acc.id },
+    subscription_data: { metadata: { accountId: acc.id } },
+    allow_promotion_codes: true,
+    locale: 'fr',
+    success_url: billingBaseUrl(req) + '/?billing=success',
+    cancel_url: billingBaseUrl(req) + '/?billing=cancel'
+  };
+  const previousCustomer = acc.settings && acc.settings.stripe && acc.settings.stripe.customerId;
+  if (previousCustomer) params.customer = previousCustomer;
+  else if (acc.email) params.customer_email = acc.email;
+  try {
+    const session = await stripeRequest('checkout/sessions', params);
+    if (!session.url) throw new Error('Stripe n\'a pas renvoye d\'adresse de paiement.');
+    res.json({ ok: true, url: session.url });
+  } catch (e) {
+    console.error('Stripe checkout :', e.message);
+    res.status(502).json({ error: 'Le paiement n\'a pas pu s\'ouvrir. Reessaie dans un instant.' });
+  }
+});
+// Portail client Stripe : changer de carte, voir les factures, resilier.
+app.post('/api/billing/portal', async (req, res) => {
+  const r = await requireAccount(req, res);
+  if (!r) return;
+  if (r.local || r.adminTest) return res.status(400).json({ error: 'Ce mode n\'a pas d\'abonnement.' });
+  const customerId = r.account.settings && r.account.settings.stripe && r.account.settings.stripe.customerId;
+  if (!customerId) return res.status(400).json({ error: 'Aucun abonnement a gerer pour le moment.' });
+  try {
+    const session = await stripeRequest('billing_portal/sessions', { customer: customerId, return_url: billingBaseUrl(req) + '/?billing=portal' });
+    if (!session.url) throw new Error('Stripe n\'a pas renvoye d\'adresse.');
+    res.json({ ok: true, url: session.url });
+  } catch (e) {
+    console.error('Stripe portail :', e.message);
+    res.status(502).json({ error: 'La gestion de l\'abonnement n\'a pas pu s\'ouvrir. Reessaie dans un instant.' });
+  }
+});
+
+// ---------- Dictée Whisper locale (Whishper ou Python, optionnel) ----------
+// Quand Whisper tourne sur le PC (Whishper : http://127.0.0.1:8082), la dictée
+// des enfants passe par ce moteur, bien meilleur que la reconnaissance du
+// navigateur pour les petites voix. Lumi enregistre l'audio, l'envoie à l'API
+// Whishper, attend le texte, puis supprime la transcription chez Whishper et
+// le fichier temporaire local (les voix des enfants ne s'accumulent nulle
+// part). Sans serveur Whisper joignable, la dictée du navigateur reste
+// utilisée : rien ne casse.
+const WHISPER_API_URL = String(ENV.WHISPER_API_URL || (ENV.RENDER ? '' : 'http://127.0.0.1:8082')).trim().replace(/\/+$/, '');
+const WHISPER_MODEL_SIZE = String(ENV.WHISPER_MODEL_SIZE || 'small').trim();
+const WHISPER_DEVICE = String(ENV.WHISPER_DEVICE || 'cpu').trim();
+const WHISPER_PYTHON = String(ENV.WHISPER_PYTHON || '').trim();
+const pythonWhisper = WHISPER_PYTHON ? createWhisperRunner({
+  python: WHISPER_PYTHON,
+  script: path.join(__dirname, 'scripts', 'whisper-transcribe.py'),
+  modelPath: String(ENV.WHISPER_MODEL_PATH || '').trim(),
+}) : null;
+const WHISPER_MIME_EXT = {
+  'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'mp4', 'audio/m4a': 'm4a',
+  'audio/x-m4a': 'm4a', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/mpeg': 'mp3'
+};
+const WHISPER_MAX_BYTES = 12 * 1024 * 1024;
+let whisperStatusCache = { at: 0, available: false };
+async function whisperAvailable() {
+  if (WHISPER_PYTHON) return pythonWhisper.available();
+  if (!WHISPER_API_URL) return false;
+  if (Date.now() - whisperStatusCache.at < 60000) return whisperStatusCache.available;
+  let available = false;
+  try {
+    const r = await fetch(WHISPER_API_URL + '/api/transcriptions', { signal: AbortSignal.timeout(1500) });
+    available = r.ok;
+  } catch {}
+  whisperStatusCache = { at: Date.now(), available };
+  return available;
+}
+app.get('/api/transcribe/status', async (req, res) => {
+  const r = await requireAccount(req, res);
+  if (!r) return;
+  res.json({ available: await whisperAvailable(), model: WHISPER_MODEL_SIZE, engine: 'whisper' });
+});
+// Même limitation que la voix : 20 dictées par minute et par compte.
+const transcribeRequests = new Map();
+function allowTranscribe(accountId) {
+  const now = Date.now();
+  for (const [key, value] of transcribeRequests) if (now - value.start >= 60000) transcribeRequests.delete(key);
+  const limit = transcribeRequests.get(accountId) || { start: now, count: 0 };
+  if (++limit.count > 20) return false;
+  transcribeRequests.set(accountId, limit);
+  return true;
+}
+function whisperDecodeAudio(raw) {
+  if (typeof raw !== 'string') return null;
+  let b64 = raw.trim();
+  if (!b64 || b64.length > Math.ceil(WHISPER_MAX_BYTES * 4 / 3) + 64) return null;
+  b64 = b64.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return null;
+  return Buffer.from(b64, 'base64');
+}
+async function whisperTranscribe(buffer, mime) {
+  const ext = WHISPER_MIME_EXT[mime] || 'webm';
+  if (WHISPER_PYTHON) return pythonWhisper.transcribe(buffer, ext);
+  const tmp = path.join(os.tmpdir(), 'lumi-dictee-' + newToken() + '.' + ext);
+  fs.writeFileSync(tmp, buffer);
+  let id = '';
+  try {
+    const form = new FormData();
+    form.append('file', new Blob([buffer], { type: mime }), 'dictee.' + ext);
+    form.append('language', 'fr');
+    form.append('modelSize', WHISPER_MODEL_SIZE);
+    form.append('task', 'transcribe');
+    form.append('device', WHISPER_DEVICE);
+    const created = await (await fetch(WHISPER_API_URL + '/api/transcriptions', { method: 'POST', body: form, signal: AbortSignal.timeout(30000) })).json();
+    id = String((created && created.id) || '');
+    if (!id) throw new Error('Whisper a refusé la dictée.');
+    const deadline = Date.now() + 90000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 400));
+      const t = await (await fetch(WHISPER_API_URL + '/api/transcriptions/' + encodeURIComponent(id), { signal: AbortSignal.timeout(10000) })).json();
+      const status = Number(t && t.status);
+      if (status === 2) {
+        const texte = String((t.result && t.result.text) || '').trim();
+        if (!texte) throw new Error('Transcription vide.');
+        return texte;
+      }
+      if (status === -1) throw new Error('Transcription impossible.');
+    }
+    throw new Error('Transcription trop longue.');
+  } finally {
+    try { fs.unlinkSync(tmp); } catch {}
+    // Chez Whishper aussi : l'audio et le texte des enfants ne s'accumulent pas.
+    if (id) fetch(WHISPER_API_URL + '/api/transcriptions/' + encodeURIComponent(id), { method: 'DELETE', signal: AbortSignal.timeout(5000) }).catch(() => {});
+  }
+}
+app.post('/api/transcribe', async (req, res) => {
+  const r = await requireAccount(req, res);
+  if (!r) return;
+  const acc = r.account;
+  if (!WHISPER_API_URL && !WHISPER_PYTHON) return res.status(503).json({ error: 'La dictée Whisper n\'est pas configurée sur ce serveur.' });
+  if (acc.plan !== 'local' && acc.id !== '__lumi_admin_test' && !allowTranscribe(acc.id))
+    return res.status(429).json({ error: 'Trop de dictées d\'un coup. Attends une minute.' });
+  const mime = String((req.body || {}).mime || '').toLowerCase().split(';')[0].trim();
+  if (!WHISPER_MIME_EXT[mime]) return res.status(400).json({ error: 'Format audio non reconnu. Réessaie la dictée.' });
+  const buffer = whisperDecodeAudio((req.body || {}).audio);
+  if (!buffer || !buffer.length) return res.status(400).json({ error: 'Audio vide ou trop lourd. Réessaie la dictée.' });
+  try {
+    const texte = await whisperTranscribe(buffer, mime);
+    res.json({ ok: true, texte });
+  } catch (e) {
+    console.error('Whisper :', e.message);
+    if (e.status === 429) return res.status(429).json({ error: e.message });
+    res.status(502).json({ error: 'La transcription n\'a pas marché. Réessaie, ou utilise la dictée du navigateur.' });
+  }
+});
 
 // ---------- RGPD : export et effacement du compte ----------
 // Droit d'acces (art. 15) : la famille recupere TOUTES ses donnees en JSON.

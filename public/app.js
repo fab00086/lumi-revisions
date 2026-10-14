@@ -244,6 +244,8 @@ function renderProfiles() {
     });
     box.appendChild(el);
   });
+  // Propose l'installation PWA (une fois par appareil) quand les profils s'affichent.
+  if (typeof maybeShowInstallBanner === 'function') maybeShowInstallBanner();
 }
 
 // Photo de profil (selfie)
@@ -676,6 +678,23 @@ let voiceAudioText = '';
 let voiceAudioCreated = 0;
 let voiceAudioParts = [];
 let voiceAudioBusy = false;
+// Safari iOS oublie parfois l'événement de fin de lecture : ce veilleur vérifie
+// l'état réel du lecteur et termine la voix même si « ended » n'arrive jamais
+// (sinon le micro ne reprend plus jamais après la première réponse).
+let voiceWatch = null;
+function armVoiceWatchdog(gen) {
+  if (typeof setInterval !== 'function') return;
+  clearInterval(voiceWatch);
+  voiceWatch = setInterval(() => {
+    if (gen !== speakGen) { clearInterval(voiceWatch); voiceWatch = null; return; }
+    if (!voiceAudio) return;
+    const dur = Number(voiceAudio.duration) || 0;
+    if (voiceAudio.ended || (dur > 0 && Number(voiceAudio.currentTime) >= dur - 0.4)) {
+      clearInterval(voiceWatch); voiceWatch = null;
+      try { voiceAudio.onended?.(); } catch {}
+    }
+  }, 1500);
+}
 let voiceRequest = null;
 function setAudioSession(type) {
   try { if (navigator.audioSession) navigator.audioSession.type = type; } catch { /* API facultative. */ }
@@ -695,7 +714,7 @@ function unlockVoiceAudio() {
     voiceAudio = new Audio('/audio-ready.wav');
     voiceAudio.id = 'lumi-audio'; voiceAudio.hidden = true;
     voiceAudio.onplay = () => {
-      if (!liveMic || isIOS) stopListening();
+      if (!liveMic) stopListening();
       setAudioSession('playback'); voiceAudioBusy = true;
       if (voiceAudioUrl && voiceAudio.src !== '/audio-ready.wav' && !voiceAudio.src.endsWith('/audio-ready.wav')) {
         $('avatar').classList.add('talking'); $('btn-stop').classList.remove('hidden');
@@ -710,7 +729,7 @@ function unlockVoiceAudio() {
   return Promise.resolve();
 }
 async function speakAudio(text) {
-  if (!liveMic || isIOS) stopListening();
+  if (!liveMic) stopListening();
   stopSpeech();
   setAudioSession('playback');
   const gen = ++speakGen;
@@ -784,6 +803,7 @@ async function speakAudio(text) {
     voiceAudio.playbackRate = Math.max(0.6, Math.min(1.5, voiceRate || 1));
     let partIndex = 0;
     let switchingPart = false;
+    let endHandled = false;
     voiceAudio.onpause = () => {
       if (gen !== speakGen || switchingPart || !voiceAudio.paused || voiceAudio.ended) return;
       voiceAudioBusy = false;
@@ -793,7 +813,8 @@ async function speakAudio(text) {
       if (typeof micLiveResume === 'function') micLiveResume();
     };
     voiceAudio.onended = async () => {
-      if (gen !== speakGen) return;
+      if (gen !== speakGen || endHandled) return;
+      endHandled = true;
       if (++partIndex < voiceAudioParts.length) {
         switchingPart = true;
         try {
@@ -804,8 +825,9 @@ async function speakAudio(text) {
           voiceAudio.src = next.url;
           await voiceAudio.play();
           if (gen === speakGen) setStatus('Je parle 🗣️ (appuie sur ✋ pour me couper)');
+          if (gen === speakGen) armVoiceWatchdog(gen);
         } catch (error) { failed(error); }
-        finally { switchingPart = false; }
+        finally { switchingPart = false; endHandled = false; }
         return;
       }
       voiceAudioBusy = false;
@@ -824,6 +846,7 @@ async function speakAudio(text) {
     // When Safari requires another touch, retry plays this cached file directly.
     await voiceAudio.play();
     if (gen !== speakGen) return;
+    armVoiceWatchdog(gen);
     $('avatar').classList.add('talking');
     setStatus('Je parle 🗣️ (appuie sur ✋ pour me couper)');
   } catch (error) {
@@ -837,9 +860,10 @@ $('btn-listen').addEventListener('click', () => {
   if (player?.open && !voiceAudioBusy && voiceAudio && voiceAudioText === lastSpeechText && Date.now() - voiceAudioCreated < 240000) {
     // Relancer le morceau prêt, sans requête ni changement de source dans le toucher.
     // Si Safari a bloqué la suite, ne pas repartir en boucle à la première phrase.
-    if (!liveMic || isIOS) stopListening();
+    if (!liveMic) stopListening();
     setAudioSession('playback'); voiceAudioBusy = true;
     const gen = speakGen;
+    armVoiceWatchdog(gen);
     voiceAudio.play().then(() => {
       if (gen !== speakGen) return;
       player.open = false;
@@ -882,6 +906,7 @@ function stopSpeech() {
     voiceRequest.abort(); voiceRequest = null;
   }
   $('voice-player')?.classList.add('hidden');
+  if (voiceWatch && typeof clearInterval === 'function') { clearInterval(voiceWatch); voiceWatch = null; }
   if (voiceAudio) { voiceAudio.onended = null; voiceAudio.onerror = null; voiceAudio.onpause = null; voiceAudio.pause(); }
   clearTimeout(speechTimer);
   speechUtterances = [];
@@ -913,7 +938,7 @@ function speak(text) {
   try {
     text = lastSpeechText;
     if (!text) return;
-    if (!liveMic || isIOS) stopListening();
+    if (!liveMic) stopListening();
     stopSpeech();
     setAudioSession('playback');
     // cancel() vide la file, mais ne retire pas l'état pause du navigateur.
@@ -1185,6 +1210,46 @@ let micTimer = null;
 // rappuie sur le bouton 🎙️. Un appui sur 🎤 coupe aussi le mode.
 let liveMic = false;
 let emptyMicSessions = 0;
+// La session de reconnaissance en cours a-t-elle vraiment démarré ? (sert au
+// push-to-talk : relâcher termine en douceur si oui, annule proprement sinon.)
+let micCurrentStarted = false;
+// Enfants : après plusieurs silences d'affilée en mode discussion (voix douce,
+// téléphone trop loin…), un petit conseil gentil — une seule fois par page.
+let micQuietTipShown = false;
+function remindChildToSpeak() {
+  if (micQuietTipShown || !liveMic || emptyMicSessions < 3) return;
+  micQuietTipShown = true;
+  addBubble('assistant', '🎤 Je n’ai rien entendu. Approche le téléphone de ta bouche et parle un peu plus fort — je garde l’écoute !');
+}
+// Relecture avant envoi : la phrase dictée s'affiche dans le champ, l'enfant
+// (ou le parent) la vérifie puis touche Envoyer. Réglable dans ⚙️ Réglages ;
+// jamais appliquée au mode Conversation 🎙️ (mains libres par nature).
+let dictationReview = true;
+try { dictationReview = localStorage.getItem('lumidictationreview') !== '0'; } catch {}
+try {
+  const reviewBox = $('dictation-review');
+  if (reviewBox) {
+    reviewBox.checked = dictationReview;
+    reviewBox.addEventListener('change', () => {
+      dictationReview = reviewBox.checked;
+      try { localStorage.setItem('lumidictationreview', dictationReview ? '1' : '0'); } catch {}
+    });
+  }
+} catch {}
+// Dictée iPhone : passer par le micro natif du clavier d'Apple (réglage ⚙️).
+// C'est la dictée d'iOS elle-même : bien plus fiable que le micro de Safari.
+let keyboardDictation = false;
+try { keyboardDictation = localStorage.getItem('lumidictkeyboard') === '1'; } catch {}
+try {
+  const keyboardBox = $('dictation-keyboard');
+  if (keyboardBox) {
+    keyboardBox.checked = keyboardDictation;
+    keyboardBox.addEventListener('change', () => {
+      keyboardDictation = keyboardBox.checked;
+      try { localStorage.setItem('lumidictkeyboard', keyboardDictation ? '1' : '0'); } catch {}
+    });
+  }
+} catch {}
 // Auto-reparation iOS : apres que Lumi a parle, Safari peut garder le micro
 // (marche une seule fois par page). On relance une fois, puis on recharge la
 // page tout seul — la lecon reprend ensuite ou on s'etait arrete.
@@ -1199,10 +1264,31 @@ function remindPhoneSound() {
   phoneSoundReminderShown = true;
   if (typeof toast === 'function') toast('🔊 Pour entendre Lumi, désactive le mode silencieux et monte le volume du téléphone.', 8000);
 }
+// Dictée : petite toilette du texte reconnu (l'API du navigateur n'ajoute ni
+// ponctuation ni espaces propres). On ne corrige que ce qui est sans
+// ambiguïté — les mots de maths (« point », « virgule », « deux points »)
+// restent intacts, car ils font partie des énoncés.
+function tidyDictation(raw) {
+  let t = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  t = t
+    .replace(/\bpoint d['’]interrogation\b/gi, '?')
+    .replace(/\bpoint d['’]exclamation\b/gi, '!')
+    .replace(/\bouvre (?:la )?parenthèse\b/gi, '(')
+    .replace(/\bferme (?:la )?parenthèse\b/gi, ')');
+  t = t.replace(/\s+([,)])/g, '$1').replace(/(\()\s+/g, '$1');
+  // Enfants : les hésitations (« euh », « heu », « hum ») polluent la phrase
+  // sans rien apporter — les mots qui commencent pareil (« heure », « humour »)
+  // sont intacts grâce à la limite de mot.
+  t = t.replace(/(^|\s)(?:euh+|heu+|hum+)(?=\s|$|[?!.,;:])/gi, '$1');
+  t = t.replace(/\s+/g, ' ').trim();
+  return t;
+}
 function stopListening() {
   clearTimeout(micTimer);
   const previous = recog;
   recog = null; // ignore les événements tardifs (profil changé, voix démarrée)
+  micCurrentStarted = false;
   $('btn-mic').classList.remove('recording');
   if (previous) { try { previous.abort(); } catch {} }
 }
@@ -1210,7 +1296,7 @@ function micError(error) {
   setLiveMic(false);
   setStatus('Micro indisponible — tu peux utiliser la dictée du clavier.');
   const help = isIOS
-    ? "Sur iPhone : ouvre Lumi directement dans Safari via le QR code (pas dans le navigateur d'une autre application, ni l'adresse https://192.168…). Autorise le micro dans les réglages du site et active Siri et la Dictée dans les Réglages de l'iPhone."
+    ? "Sur iPhone : ouvre Lumi directement dans Safari via le QR code (pas dans le navigateur d'une autre application, ni l'adresse https://192.168…). Autorise le micro dans les réglages du site, active Siri et la Dictée — et si le micro reste bloqué, recharge la page (tire vers le bas) puis réessaie."
     : "Autorise le microphone dans les réglages du site de ton navigateur.";
   const messages = {
     'not-allowed': help,
@@ -1291,6 +1377,12 @@ function iosMicroSelfRepair() {
   if (!isIOS || !liveMic || !micStartedOnce) return false;
   if (++micSilentDeaths < 2) return micLiveRestart(600), true;
   micSilentDeaths = 0;
+  // Avant la recharge, on note la leçon en cours : au retour sur le profil,
+  // Lumi la rouvrira toute seule (l'enfant n'a plus qu'à retoucher 🎙️).
+  try {
+    if (typeof sessionStorage !== 'undefined' && typeof currentProfile !== 'undefined' && currentProfile && currentProfile.id)
+      sessionStorage.setItem('lumi-mic-repair', JSON.stringify({ id: currentProfile.id, at: Date.now() }));
+  } catch {}
   setStatus('Je me reconnecte… une seconde 🎙️');
   setTimeout(() => { if (liveMic) location.reload(); }, 700);
   return true;
@@ -1315,6 +1407,7 @@ async function startListening() {
     const generation = chatGeneration;
     let heardSpeech = false;
     let started = false;
+    let startedAt = 0;
     const draftPrefix = $('input').value.trim();
     micDraftReview = false;
     session.lang = 'fr-FR';
@@ -1323,18 +1416,24 @@ async function startListening() {
     session.onstart = () => {
       if (recog !== session) return;
       started = true;
+      startedAt = Date.now();
       micStartedOnce = true;
+      micCurrentStarted = true;
       setStatus(liveMic ? 'Mode discussion 🎙️ — parle, je t’écoute !' : "Je t'écoute… 🎤");
     };
     session.onresult = (e) => {
       if (recog !== session || generation !== chatGeneration) return;
       const result = e.results?.[e.resultIndex || 0];
-      const text = String(result?.[0]?.transcript || '').trim();
+      const text = tidyDictation(result?.[0]?.transcript);
       if (!text) return;
       heardSpeech = true;
+      micSilentDeaths = 0; // le micro vient de vraiment fonctionner
       armWatchdog();
-      if (!isIOS && (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking))) {
+      if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) {
         stopSpeech();
+        // iPhone : si Safari a tué la session pendant la voix, on planifie
+        // une relance ; si la session est vivante, cet appel ne fait rien.
+        if (isIOS && liveMic) micLiveRestart(700);
       }
       const completeText = [draftPrefix, text].filter(Boolean).join(' ');
       if (result?.isFinal === false) {
@@ -1349,9 +1448,9 @@ async function startListening() {
       emptyMicSessions = 0;
       stopListening();
       $('input').value = completeText;
-      if (draftPrefix) {
+      if (draftPrefix || (dictationReview && !liveMic)) {
         micDraftReview = true;
-        setStatus('Phrase conservée et complétée — vérifie-la puis touche Envoyer.');
+        setStatus('Phrase conservée — vérifie-la puis touche Envoyer.');
         return;
       }
       send(completeText);
@@ -1359,11 +1458,21 @@ async function startListening() {
     session.onerror = (e) => {
       if (recog !== session) return;
       stopListening();
+      // La voix de Lumi occupe l'audio : une session qui meurt pendant la
+      // lecture sans avoir rien entendu n'est pas un micro silencieux. Elle
+      // ne compte pas comme une mort anormale, aucune relance n'est tentée
+      // ici (c'était la cause des crashes Safari) — le micro reviendra tout
+      // seul à la fin de la voix via micLiveResume.
+      if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) return;
+      // iOS : « aborted » ou « audio-capture » sans avoir rien entendu =
+      // Safari a repris le micro (souvent juste après la voix de Lumi).
+      // C'est LA cause du « le micro marche une fois puis plus jamais » :
+      // on tente la réparation auto au lieu de relancer la même session morte.
+      if (isIOS && !heardSpeech && liveMic && (e.error === 'aborted' || e.error === 'audio-capture') && iosMicroSelfRepair()) return;
       if ((e.error === 'no-speech' || e.error === 'aborted' || e.error === 'audio-capture') && liveMic) {
         emptyMicSessions = heardSpeech ? 0 : emptyMicSessions + 1;
+        remindChildToSpeak();
         setStatus(heardSpeech ? 'Phrase conservée — reprise du micro…' : 'Conversation activée — reprise du micro…');
-        // Si la voix joue, on évite de relancer en boucle pour ne pas crasher Safari
-        if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) return;
         micLiveRestart(Math.min(1500, 600 + emptyMicSessions * 150));
         return;
       }
@@ -1379,9 +1488,10 @@ async function startListening() {
     session.onspeechstart = session.onsoundstart = () => {
       if (recog === session) {
         armWatchdog();
-        // Couper la parole de Lumi si l'enfant l'interrompt en parlant
-        if (!isIOS && (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking))) {
+        // Couper la parole de Lumi si l'enfant l'interrompt en parlant.
+        if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) {
           stopSpeech();
+          if (isIOS && liveMic) micLiveRestart(700);
         }
       }
     };
@@ -1400,7 +1510,16 @@ async function startListening() {
           setStatus('Conversation activée — reprise du micro…');
           return;
         }
+        // Session bien démarrée mais morte en moins de 2,5 s sans rien capter :
+        // iOS laisse ~5 s et plus avant d'abandonner une session sur un vrai
+        // silence — une mort aussi rapide = micro resté chez Safari (bug
+        // connu après lecture audio), pas une pause de réflexion de l'enfant.
+        if (started && !heardSpeech && Date.now() - startedAt < 2500 && iosMicroSelfRepair()) {
+          setStatus('Conversation activée — reprise du micro…');
+          return;
+        }
         emptyMicSessions = heardSpeech ? 0 : emptyMicSessions + 1;
+        remindChildToSpeak();
         // Une fin normale ou un silence n'est pas une panne du micro.
         setStatus(heardSpeech ? 'Phrase conservée — reprise du micro…' : 'Conversation activée — reprise du micro…');
         micLiveRestart(heardSpeech ? 300 : Math.min(1500, 600 + emptyMicSessions * 150)); return;
@@ -1417,6 +1536,12 @@ async function startListening() {
       if (liveMic && !document.hidden) {
         // Le micro n'a jamais demarre : Safari iOS le garde apres la voix.
         if (!started && iosMicroSelfRepair()) {
+          setStatus('Le micro se relance… Le mode Conversation reste activé 🎙️');
+          return;
+        }
+        // Session « vivante » mais sans aucun son depuis 30 s : iOS termine
+        // normalement une session silencieuse bien avant — micro bloqué.
+        if (started && !heardSpeech && iosMicroSelfRepair()) {
           setStatus('Le micro se relance… Le mode Conversation reste activé 🎙️');
           return;
         }
@@ -1476,16 +1601,169 @@ document.addEventListener('visibilitychange', () => {
   stopSpeech();
   setStatus('Conversation en pause. Reviens dans Lumi et touche 🎙️ Conversation pour reprendre.');
 });
+// Dicter avec le micro du clavier d'Apple (iOS) : ouvre le clavier sur le champ,
+// la dictée native d'iOS s'occupe du reste — aucun conflit avec la voix de Lumi.
+function focusKeyboardDictation() {
+  const input = $('input');
+  input?.focus?.();
+  setStatus('Dicte avec le micro du clavier 🎤 puis touche Envoyer ✍️.');
+  try {
+    if (!localStorage.getItem('lumi-keyboard-tip')) {
+      localStorage.setItem('lumi-keyboard-tip', 'vu');
+      toast('Touche le petit 🎤 sur le clavier du téléphone, dicte ta question, puis touche Envoyer ✍️', 9000);
+    }
+  } catch {}
+}
 $('btn-mic').addEventListener('click', () => {
-  if (recog) { setLiveMic(false); setStatus('Micro arrêté. Appuie sur 🎤 pour une question ou 🎙️ pour discuter.'); return; }
+  if (micPttSkipClick) { micPttSkipClick = false; return; } // clic qui suit un appui long
+  if (recog) { setLiveMic(false); if (isIOS && keyboardDictation) { focusKeyboardDictation(); return; } setStatus('Micro arrêté. Appuie sur 🎤 pour une question ou 🎙️ pour discuter.'); return; }
+  if (whisperRecorder) { stopWhisperDictation(); return; } // deuxième appui : je transcris
   setLiveMic(false); // annule aussi toute relance automatique encore en attente
   stopSpeech();
   if (chatLoading || activeChat || archiving) {
     setStatus('Attends la fin du chargement ou de la réponse, puis appuie sur 🎤.');
     return;
   }
-  startListening();
+  // iPhone : le micro du clavier d'Apple (réglage ⚙️) est la dictée la plus fiable.
+  if (isIOS && keyboardDictation) { focusKeyboardDictation(); return; }
+  // Whisper (le PC) quand il est là : bien meilleur pour les voix d'enfants.
+  if (whisperStt && whisperSupported()) startWhisperDictation();
+  else startListening();
 });
+
+// ---------- Push-to-talk (maintenir 🎤 pour parler) ----------
+// Pensé pour les enfants : on garde le bouton appuyé, on parle tranquillement,
+// on relâche quand la phrase est finie — Lumi termine la dictée en douceur.
+// Un appui court reste la dictée classique (bouton qui s'active tout seul).
+let micPttTimer = null;
+let micPttHeld = false;
+let micPttSkipClick = false;
+const micButton = $('btn-mic');
+function pttRelease() {
+  clearTimeout(micPttTimer);
+  if (!micPttHeld) return;
+  micPttHeld = false;
+  micPttSkipClick = true;
+  if (whisperRecorder) { stopWhisperDictation(); setStatus('Dictée terminée, je transcris… ⏳'); return; }
+  if (recog) {
+    // Session déjà démarrée : on demande le résultat final (pas d'abandon).
+    // Sinon (relâché trop vite), on annule proprement, rien ne traîne.
+    try { if (micCurrentStarted) recog.stop(); else stopListening(); } catch {}
+  }
+  if (micDraftReview || $('input').value.trim()) setStatus('Dictée terminée — vérifie la phrase puis touche Envoyer ✍️');
+}
+micButton.addEventListener('pointerdown', (e) => {
+  if (e && e.pointerType === 'mouse' && e.button !== 0) return;
+  if (isIOS && keyboardDictation) return; // mode clavier : le clic ouvrira le clavier
+  if (recog || chatLoading || activeChat || archiving) return;
+  clearTimeout(micPttTimer);
+  micPttHeld = false;
+  micPttSkipClick = false; // un ancien appui long sans clic ne doit rien avaler
+  micPttTimer = setTimeout(() => {
+    micPttHeld = true;
+    setLiveMic(false);
+    stopSpeech();
+    setStatus('Parle, je t’écoute… relâche quand tu as fini 🎤');
+    if (whisperStt && whisperSupported()) startWhisperDictation();
+    else startListening();
+  }, 350);
+}, { passive: true });
+micButton.addEventListener('pointerup', pttRelease);
+micButton.addEventListener('pointercancel', pttRelease);
+micButton.addEventListener('pointerleave', pttRelease);
+micButton.addEventListener('contextmenu', (e) => { if (micPttHeld) e.preventDefault(); });
+
+// ---------- Dictée Whisper (PC) : la meilleure oreille pour les enfants ----------
+// Quand le PC fait tourner Whisper (Whishper en Docker), Lumi enregistre
+// l'audio et le fait transcrire par ce moteur — bien plus fiable que la
+// reconnaissance du navigateur sur les petites voix. Sinon, rien ne change :
+// la dictée du navigateur reste utilisée.
+let whisperStt = false;      // le serveur de dictée Whisper répond
+let whisperRecorder = null;  // MediaRecorder en cours
+let whisperStream = null;
+let whisperChunks = [];
+let whisperStopTimer = null;
+let whisperBusy = false;
+async function checkWhisperStt() {
+  try {
+    const j = await (await fetch('/api/transcribe/status')).json();
+    whisperStt = !!(j && j.available === true);
+  } catch { whisperStt = false; }
+}
+function whisperSupported() {
+  return typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+}
+async function startWhisperDictation() {
+  if (whisperRecorder || whisperBusy) return;
+  if (!window.isSecureContext) {
+    addBubble('assistant', '🎤 Ouvre l’adresse HTTPS de Lumi pour dicter, puis réessaie.');
+    return;
+  }
+  stopSpeech();
+  try {
+    whisperStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch { micError('not-allowed'); return; }
+  if (whisperRecorder) { try { whisperStream.getTracks().forEach(t => t.stop()); } catch {} whisperStream = null; return; }
+  whisperChunks = [];
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+  const mime = types.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || '';
+  try { whisperRecorder = new MediaRecorder(whisperStream, mime ? { mimeType: mime } : undefined); }
+  catch { try { whisperRecorder = new MediaRecorder(whisperStream); } catch { micError('service-not-allowed'); return; } }
+  whisperRecorder.ondataavailable = (e) => { if (e.data && e.data.size) whisperChunks.push(e.data); };
+  whisperRecorder.onstop = () => finishWhisperDictation();
+  whisperRecorder.start();
+  $('btn-mic').classList.add('recording');
+  setStatus('🎤 Je t’écoute — touche 🎤 quand ta phrase est finie (15 s max).');
+  clearTimeout(whisperStopTimer);
+  whisperStopTimer = setTimeout(() => { if (whisperRecorder) stopWhisperDictation(); }, 15000);
+}
+function stopWhisperDictation() {
+  clearTimeout(whisperStopTimer);
+  const rec = whisperRecorder;
+  whisperRecorder = null;
+  $('btn-mic').classList.remove('recording');
+  if (rec && (rec.state === undefined || rec.state !== 'inactive')) { try { rec.stop(); } catch {} }
+}
+async function blobToBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+// Transcription puis même fin de parcours que la dictée du navigateur :
+// phrase dans le champ, relecture (réglage ⚙️) ou envoi direct.
+async function finishWhisperDictation() {
+  const stream = whisperStream; whisperStream = null;
+  if (stream) { try { stream.getTracks().forEach(t => t.stop()); } catch {} }
+  const chunks = whisperChunks;
+  whisperChunks = [];
+  if (!chunks.length) { setStatus('Rien n’a été entendu. Touche 🎤 pour réessayer.'); return; }
+  const draftPrefix = $('input').value.trim();
+  whisperBusy = true;
+  setStatus('Je transcris ta phrase… ⏳');
+  try {
+    const blob = new Blob(chunks, { type: chunks[0].type || 'audio/webm' });
+    const audio = await blobToBase64(blob);
+    const r = await fetch('/api/transcribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio, mime: blob.type })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((j && j.error) || 'Transcription impossible.');
+    const text = tidyDictation(j.texte);
+    if (!text) throw new Error('Je n’ai rien compris.');
+    const completeText = [draftPrefix, text].filter(Boolean).join(' ');
+    $('input').value = completeText;
+    if (dictationReview && !liveMic) {
+      micDraftReview = true;
+      setStatus('Phrase transcrite ✍️ — vérifie-la puis touche Envoyer.');
+      return;
+    }
+    send(completeText);
+  } catch (e) {
+    setStatus('La dictée n’a pas marché (' + (e.message || 'erreur') + '). Réessaie ou écris ta question.');
+  } finally { whisperBusy = false; }
+}
 
 // ---------- Envoi ----------
 $('btn-send').addEventListener('click', () => send($('input').value));
@@ -2223,6 +2501,134 @@ async function wirePronoteCard() {
   });
 }
 
+// ---------- Abonnement Lumi Famille (Stripe, espace parent) ----------
+// La carte se construit depuis /api/billing/status : invisible tant que le
+// paiement n'est pas configuré côté serveur. Les prix affichés viennent de
+// Stripe (amount), avec un libellé de secours si la lecture échoue.
+function billingCardHtml(b) {
+  if (!b || b.enabled !== true) return '';
+  const s = b.subscription;
+  const dateOnly = iso => { try { return new Date(iso).toLocaleDateString('fr-FR'); } catch { return ''; } };
+  const price = (p, fallback) => (p && Number.isFinite(p.amount)) ? p.amount.toFixed(2).replace('.', ',').replace(/,00$/, '') : fallback;
+  const monthPrice = price(b.prices && b.prices.month, '7,99');
+  const yearPrice = price(b.prices && b.prices.year, '79');
+  const portalBtn = '<button id="btn-billing-portal" class="btn" type="button">Gérer mon abonnement</button>';
+  if (s && (s.status === 'active' || s.status === 'trialing')) {
+    const end = s.currentPeriodEnd ? ` jusqu’au ${dateOnly(s.currentPeriodEnd)}` : '';
+    const stop = s.cancelAtPeriodEnd ? ' ⏳ Résiliation enregistrée : il s’arrêtera à cette date.' : '';
+    return `<div class="parent-kid">
+      <h3>💳 Abonnement Lumi Famille</h3>
+      <p class="parent-line">✅ Actif${end} — formule ${s.interval === 'year' ? 'annuelle' : 'mensuelle'}.${stop}</p>
+      <div class="billing-actions">${portalBtn}</div>
+      <p id="billing-msg" class="hint"></p>
+    </div>`;
+  }
+  const warn = (s && (s.status === 'past_due' || s.status === 'unpaid'))
+    ? '<p class="parent-line">⚠️ Ton dernier paiement n’a pas abouti : mets à jour ta carte pour retrouver l’accès illimité.</p>' : '';
+  const trial = b.plan === 'trial' && b.trialEnds ? `<p class="parent-line">🎁 Essai en cours jusqu’au ${dateOnly(b.trialEnds)}.</p>` : '';
+  const quota = b.plan === 'free' ? ' Le quota gratuit s’applique actuellement.' : '';
+  // Safari iOS : l'app installée gère bien le paiement par carte ; Apple Pay,
+  // lui, n'est proposé que dans Safari (règle Apple, pas un bug de Lumi).
+  const iosHint = isIOSDevice() ? '<p class="hint">📱 Sur iPhone/iPad : le paiement par carte fonctionne ici. Pour Apple Pay, ouvre Lumi dans Safari.</p>' : '';
+  return `<div class="parent-kid">
+    <h3>💳 Passe à Lumi Famille</h3>
+    ${warn}${trial}
+    <p class="parent-line">Accès illimité pour toute la famille, sans engagement, résiliable à tout moment.${quota}</p>
+    <div class="billing-actions">
+      <button id="btn-billing-month" class="btn btn-primary" type="button">📅 Mensuel — ${monthPrice} €/mois</button>
+      <button id="btn-billing-year" class="btn" type="button">🌟 Annuel — ${yearPrice} €/an</button>
+      ${s && s.status !== 'past_due' && s.status !== 'unpaid' ? portalBtn : ''}
+    </div>
+    ${iosHint}
+    <p id="billing-msg" class="hint"></p>
+  </div>`;
+}
+// Sur iPhone/iPad, la page Stripe est ouverte dans une fenêtre pré-ouverte
+// AVANT le fetch : après un await, Safari bloque window.open (popup
+// interdit), ce qui casse le bouton payer. La fenêtre pré-ouverte s'affiche
+// aussi comme une vraie page Safari (Apple Pay possible si dispo).
+function isIOSDevice() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = String(navigator.userAgent || '');
+  return /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function preOpenBillingWindow() {
+  if (!isIOSDevice()) return null;
+  try { return window.open('', '_blank'); } catch { return null; }
+}
+function goBilling(url, pending) {
+  if (pending) { try { pending.location.href = url; return; } catch {} }
+  location.href = url;
+}
+async function startBilling(interval) {
+  const msg = $('billing-msg');
+  if (msg) msg.textContent = 'Ouverture du paiement sécurisé Stripe…';
+  const pending = preOpenBillingWindow();
+  try {
+    const r = await fetch('/api/billing/checkout', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interval })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (pending) { try { pending.close(); } catch {} }
+      if (msg) msg.textContent = '⚠️ ' + (j.error || 'Ouverture impossible.');
+      return;
+    }
+    goBilling(j.url, pending);
+  } catch {
+    if (pending) { try { pending.close(); } catch {} }
+    if (msg) msg.textContent = '⚠️ Connexion impossible. Réessaie.';
+  }
+}
+async function openBillingPortal() {
+  const msg = $('billing-msg');
+  if (msg) msg.textContent = 'Ouverture de la gestion d’abonnement…';
+  const pending = preOpenBillingWindow();
+  try {
+    const r = await fetch('/api/billing/portal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (pending) { try { pending.close(); } catch {} }
+      if (msg) msg.textContent = '⚠️ ' + (j.error || 'Ouverture impossible.');
+      return;
+    }
+    goBilling(j.url, pending);
+  } catch {
+    if (pending) { try { pending.close(); } catch {} }
+    if (msg) msg.textContent = '⚠️ Connexion impossible. Réessaie.';
+  }
+}
+function wireBillingCard() {
+  const month = $('btn-billing-month');
+  const year = $('btn-billing-year');
+  const portal = $('btn-billing-portal');
+  if (month) month.addEventListener('click', () => startBilling('month'));
+  if (year) year.addEventListener('click', () => startBilling('year'));
+  if (portal) portal.addEventListener('click', openBillingPortal);
+}
+// Retour de Stripe (?billing=success/cancel) : nettoie l'adresse, puis attend
+// la confirmation du webhook (quelques secondes) avant d'annoncer l'activation.
+async function handleBillingReturn() {
+  const params = new URLSearchParams(location.search || '');
+  const state = params.get('billing');
+  if (!state) return;
+  window.history.replaceState(null, '', location.pathname + location.hash);
+  if (state === 'cancel') { toast('Paiement annulé — aucun montant prélevé.'); return; }
+  if (state !== 'success') return;
+  for (let i = 0; i < 6; i++) {
+    await new Promise(r => setTimeout(r, i ? 2000 : 0));
+    try {
+      const b = await (await fetch('/api/billing/status')).json();
+      if (b.subscription && (b.subscription.status === 'active' || b.subscription.status === 'trialing')) {
+        toast('Merci ! L’abonnement Lumi Famille est actif 💜', 8000);
+        return;
+      }
+    } catch {}
+  }
+  toast('Paiement reçu ! L’activation peut prendre quelques minutes.', 8000);
+}
+
 async function renderParentArea() {
   const box = $('parent-content');
   box.innerHTML = '<p class="hint">Chargement… ⏳</p>';
@@ -2232,11 +2638,13 @@ async function renderParentArea() {
   let curriculum = null;
   try { curriculum = await (await fetch('/api/curriculum')).json(); } catch {}
   const kids = list.filter(p => p && p.id);
-  // Carte de configuration Pronote et ses boutons, avant les profils enfants.
+  // Carte abonnement (Stripe) puis carte Pronote, avant les profils enfants.
+  let billing = null;
+  try { billing = await (await fetch('/api/billing/status')).json(); } catch {}
   let pronote = null;
   try { pronote = await (await fetch('/api/pronote/status')).json(); } catch {}
-  let html = pronoteCardHtml(pronote);
-  if (!kids.length) { html += '<p class="hint">Aucun profil enfant pour le moment.</p>'; box.innerHTML = html; wirePronoteCard(); return; }
+  let html = billingCardHtml(billing) + pronoteCardHtml(pronote);
+  if (!kids.length) { html += '<p class="hint">Aucun profil enfant pour le moment.</p>'; box.innerHTML = html; wirePronoteCard(); wireBillingCard(); return; }
 
   const now = Date.now();
   for (const kid of kids) {
@@ -2288,6 +2696,7 @@ async function renderParentArea() {
   }
   box.innerHTML = html;
   wirePronoteCard();
+  wireBillingCard();
 }
 
 // ---------- Navigation réservée à la session administrateur ----------
@@ -2333,6 +2742,22 @@ function readFamilyInvitation() {
   window.history.replaceState(null, '', location.pathname + location.search);
   return /^LUMI-(?:[0-9A-F]{4}-){5}[0-9A-F]{4}$/.test(code) ? code : '';
 }
+// Après la recharge de secours iOS (micro bloqué par Safari), Lumi rouvre
+// toute seule la leçon du profil en cours : l'enfant n'a plus qu'à retoucher
+// 🎙️ pour reprendre la parole. Le drapeau est consommé une seule fois.
+function resumeAfterMicRepair() {
+  if (typeof sessionStorage === 'undefined') return;
+  let flag = null;
+  try {
+    flag = JSON.parse(sessionStorage.getItem('lumi-mic-repair') || 'null');
+    sessionStorage.removeItem('lumi-mic-repair');
+  } catch {}
+  if (!flag || typeof flag.id !== 'string' || !(Date.now() - (Number(flag.at) || 0) < 120000)) return;
+  const profile = loadProfiles().find(p => p && p.id === flag.id);
+  if (!profile) return;
+  toast('Micro reconnecté 🔧 Les profils sont revenus — touche 🎙️ Conversation pour reprendre la parole.', 10000);
+  startChat(profile);
+}
 async function initApp() {
   const invitation = readFamilyInvitation();
   if (invitation) {
@@ -2357,12 +2782,18 @@ async function initApp() {
   try { const me = await (await fetch('/api/auth/me')).json(); configureAdminTest(me.adminTest === true); }
   catch { configureAdminTest(false); }
   checkServerVoice(); // le gate est ouvert : la voix du serveur est maintenant verifiable
+  if (typeof checkWhisperStt === 'function') checkWhisperStt(); // dictée Whisper du PC, si dispo
   $('screen-profile').classList.remove('hidden');
-  fetchProfiles().then(() => renderProfiles());
+  handleBillingReturn();
+  fetchProfiles().then(() => { renderProfiles(); resumeAfterMicRepair(); });
 }
 function enterGate() {
   const code = $('gate-code').value.trim();
-  if (!code) return;
+  if (!code) {
+    $('gate-error').textContent = 'Entre d’abord ton code famille (il commence par LUMI-), ou le mot de passe de gestion.';
+    $('gate-code').focus();
+    return;
+  }
   if (code.toUpperCase().startsWith('LUMI-') && !$('gate-consent').checked) {
     $('gate-error').textContent = 'Confirme être le parent ou responsable légal en cochant la case.';
     $('gate-consent').focus();
@@ -2379,9 +2810,11 @@ function enterGate() {
       if (result.admin === true) { $('gate-code').value = ''; location.href = '/admin.html'; return; }
       configureAdminTest(result.admin === true);
       checkServerVoice(); // code accepte : bascule voix du telephone si voix serveur absente
+      if (typeof checkWhisperStt === 'function') checkWhisperStt(); // dictée Whisper du PC, si dispo
       $('screen-gate').classList.add('hidden');
       $('screen-profile').classList.remove('hidden');
-      fetchProfiles().then(() => renderProfiles());
+      handleBillingReturn();
+      fetchProfiles().then(() => { renderProfiles(); resumeAfterMicRepair(); });
     } else {
       const j = await r.json().catch(() => ({}));
       $('gate-error').textContent = j.error || 'Code incorrect 🙂';
@@ -2400,6 +2833,30 @@ window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
   installPrompt = event;
 });
+let installBannerAnnounced = false;
+function installAlreadyDone() {
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (standalone) return true;
+  try { return localStorage.getItem('lumi-install-banner') !== null; } catch { return false; }
+}
+function markInstallProposal(value) {
+  try { localStorage.setItem('lumi-install-banner', value); } catch {}
+}
+function hideInstallBanner() { $('install-banner').classList.add('hidden'); }
+// Bannière « Installer Lumi » : proposée une seule fois par appareil, après
+// l'affichage des profils. Android/Chrome → invite native ; iPhone → guide Safari.
+function maybeShowInstallBanner(delay = 1500) {
+  if (installBannerAnnounced || installAlreadyDone()) return;
+  installBannerAnnounced = true;
+  const attempt = () => {
+    if (installAlreadyDone()) return;
+    const screen = $('screen-profile');
+    if (screen.classList.contains('hidden')) { installBannerAnnounced = false; return; }
+    markInstallProposal('vu');
+    $('install-banner').classList.remove('hidden');
+  };
+  if (delay > 0 && typeof setTimeout === 'function') setTimeout(attempt, delay); else attempt();
+}
 function showInstall() {
   $('settings-modal').classList.add('hidden');
   $('install-modal').classList.remove('hidden');
@@ -2422,9 +2879,22 @@ $('btn-install-native').addEventListener('click', async () => {
   $('install-intro').textContent = result.outcome === 'accepted' ? 'Installation demandée. Ouvre Lumi depuis son icône.' : 'Tu peux installer Lumi plus tard depuis ce bouton.';
   $('btn-install-native').classList.add('hidden');
 });
+$('btn-install-banner-action').addEventListener('click', async () => {
+  hideInstallBanner();
+  const prompt = installPrompt;
+  if (prompt) {
+    installPrompt = null;
+    try { await prompt.prompt(); await prompt.userChoice; } catch {}
+    return;
+  }
+  showInstall();
+});
+$('btn-install-banner-dismiss').addEventListener('click', hideInstallBanner);
 window.addEventListener('appinstalled', () => {
   installPrompt = null;
   $('btn-install').textContent = '📲 Lumi est installée';
+  markInstallProposal('installée');
+  hideInstallBanner();
 });
 
 // ---------- Test de sortie audio, indépendant des voix du téléphone ----------

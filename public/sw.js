@@ -2,7 +2,7 @@
 // Cache l'interface ; les appels /api/* passent toujours par le reseau.
 'use strict';
 
-const CACHE = 'lumi-v36';
+const CACHE = 'lumi-v43';
 const SHELL = [
   '/',
   '/index.html',
@@ -28,7 +28,10 @@ const SHELL = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE).then(c => Promise.allSettled(SHELL.map(u => c.add(u))))
+    // Un fichier après l'autre : evite les rafales de requetes qui declenchent
+    // la protection anti-flood de l'hebergeur (erreurs 429 sur les ressources).
+    caches.open(CACHE)
+      .then(async c => { for (const u of SHELL) { try { await c.add(u); } catch {} } })
       .then(() => self.skipWaiting())
   );
 });

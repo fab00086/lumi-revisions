@@ -6,14 +6,15 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../public/update.js'), 'utf8');
 function setup({ online = true, text = '', version = '2026-10-03.20' } = {}) {
  const buttons = [{ disabled: false, addEventListener() {} }];
+ const badge = { textContent: '' };
  let reloads = 0, checks = 0, message = '';
  const c = vm.createContext({ chatLoading:false,activeChat:null,archiving:false,
-   document: {querySelectorAll:()=>buttons,querySelector:s=>s==='#input'?{value:text}:{classList:{contains:()=>true}},addEventListener(){}},
+   document: {querySelectorAll:()=>buttons,querySelector:s=>s==='#input'?{value:text}:{classList:{contains:()=>true}},getElementById:id=>id==='lumi-version'?badge:null,addEventListener(){}},
    window:{addEventListener(){}},navigator:{serviceWorker:{register:async()=>({update:async()=>{checks++;}})}},
    fetch:async()=>{if(!online)throw Error('offline');return {ok:true,json:async()=>({version})};},
    location:{reload:()=>{reloads++;}},toast:t=>{message=t;},setLiveMic(){},stopSpeech(){}
  });
- vm.runInContext(source,c);return {c,buttons,reloads:()=>reloads,checks:()=>checks,message:()=>message};
+ vm.runInContext(source,c);return {c,buttons,badge,reloads:()=>reloads,checks:()=>checks,message:()=>message};
 }
 test('mise à jour PWA : vérifie le serveur et recharge sans effacer les données ni la connexion',async()=>{
  const t=setup();await t.c.updateLumi();assert.equal(t.checks(),1);assert.equal(t.reloads(),1);
@@ -25,4 +26,10 @@ test('mise à jour PWA : message en cours ou réseau absent ne provoquent aucun 
 });
 test('mise à jour PWA : signale la nouvelle version sans interrompre la conversation',async()=>{
  const t=setup({version:'nouvelle-version'});await t.c.checkLumiUpdate();assert.equal(t.reloads(),0);assert.match(t.buttons[0].textContent,/Nouvelle version/);
+ assert.match(t.badge.textContent,/nouvelle-version/);
+});
+test('mise à jour PWA : le bandeau de version confirme quand tout est aligné',async()=>{
+ const t=setup();const v=vm.runInContext('lumiInterfaceVersion',t.c);
+ t.c.fetch=async()=>({ok:true,json:async()=>({version:v})});
+ await t.c.checkLumiUpdate();assert.match(t.badge.textContent,/à jour/);assert.ok(!/propose/.test(t.badge.textContent));
 });
