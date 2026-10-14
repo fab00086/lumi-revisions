@@ -11,9 +11,10 @@ function setup(serverVoice = false, blockedSilent = false, blockedAuto = false, 
   const $ = id => {
     if (!elements.has(id)) {
       const classes = new Set();
-      elements.set(id, { value: '', handlers: {}, classList: {
+      elements.set(id, { value: '', options: [], children: [], handlers: {}, classList: {
         add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c),
-      }, addEventListener: function (type, fn) { this.handlers[type] = fn; } });
+      }, addEventListener: function (type, fn) { this.handlers[type] = fn; },
+      appendChild: function (el) { this.options.push(el); this.children.push(el); return el; } });
     }
     return elements.get(id);
   };
@@ -67,7 +68,8 @@ function setup(serverVoice = false, blockedSilent = false, blockedAuto = false, 
       }
       return new Promise(resolve => { voiceRequests.push({url,...options}); pendingVoices.push(resolve); });
     },
-    document: { hidden: false, addEventListener(type, fn) { documentHandlers[type] = fn; } },
+    document: { hidden: false, addEventListener(type, fn) { documentHandlers[type] = fn; },
+      createElement(tag) { return { tag, value: '', textContent: '', disabled: false, selected: false }; } },
     window: { webkitSpeechRecognition: Recognition, isSecureContext: true, speechSynthesis: synth },
     speechSynthesis: synth, SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
     cleanForSpeech: String, pickBestVoice: () => null, voiceRate: 1,

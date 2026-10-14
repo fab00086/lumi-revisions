@@ -674,9 +674,7 @@ $('voice-select').addEventListener('change', (e) => {
   voiceMode = String(voicePref).startsWith('server:') ? 'server' : 'native';
   localStorage.setItem('lumivoiceengine', voiceMode);
   localStorage.setItem('lumivoice', voicePref);
-  const phrase = 'Bonjour ! Voici ma nouvelle voix.';
-  if (voiceMode === 'server') speakAudio(phrase).catch(() => {});
-  else speak(phrase);
+  speak('Bonjour ! Voici ma nouvelle voix.');
 });
 
 $('rate-slider').addEventListener('input', (e) => {
@@ -771,7 +769,7 @@ async function speakAudio(text) {
     try {
       const response = await fetch('/api/speech', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: part, format: 'url', voice: voiceMode === 'server' ? serverVoiceFromPref() : '' }), signal: controller.signal,
+        body: JSON.stringify({ text: part, format: 'url', voice: (typeof voiceMode !== 'undefined' && voiceMode === 'server' && typeof voicePref !== 'undefined' && String(voicePref).startsWith('server:')) ? String(voicePref).slice(7) : '' }), signal: controller.signal,
       });
       if (!response.ok) throw Error((await response.json()).error || 'Voix indisponible.');
       const result = await response.json();
@@ -906,11 +904,7 @@ $('btn-listen').addEventListener('click', () => {
   }
   speak(lastSpeechText || 'Bonjour ! Je suis Lumi.');
 });
-$('btn-test-voice').addEventListener('click', () => {
-  const phrase = 'Bonjour ! Je suis Lumi. Est-ce que tu entends ma voix ?';
-  if (voiceMode === 'server') speakAudio(phrase).catch(() => {});
-  else speak(phrase);
-});
+$('btn-test-voice').addEventListener('click', () => speak('Bonjour ! Je suis Lumi. Est-ce que tu entends ma voix ?'));
 
 // Decoupe le texte aux fins de phrases : iOS coupe le son sur les
 // textes longs, il faut plusieurs morceaux courts.
