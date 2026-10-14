@@ -567,6 +567,22 @@ let voiceRate = parseFloat(localStorage.getItem('lumirate') || '1.0');
 // null = pas encore vérifié, false = absente sur CE serveur (install ratée…).
 let serverVoiceOk = null;
 
+// Voix féminines du serveur (edge-tts) — choisissables dans les Paramètres.
+const LUMI_SERVER_VOICES = [
+  { id: 'vivienne', label: 'Lumi — Vivienne (expressive)' },
+  { id: 'denise', label: 'Lumi — Denise (douce)' },
+  { id: 'eloise', label: 'Lumi — Éloïse (voix d’enfant)' },
+  { id: 'sylvie', label: 'Lumi — Sylvie (accent québécois)' },
+];
+function serverVoiceFromPref() {
+  const value = String(voicePref || '');
+  if (value.startsWith('server:')) {
+    const id = value.slice(7);
+    if (LUMI_SERVER_VOICES.some(o => o.id === id)) return id;
+  }
+  return 'vivienne';
+}
+
 function frenchVoices() {
   if (!('speechSynthesis' in window)) return [];
   return (speechSynthesis.getVoices() || []).filter(v => v.lang && v.lang.toLowerCase().startsWith('fr'));
@@ -601,12 +617,21 @@ function populateVoiceSelect() {
   const sel = $('voice-select');
   const fr = frenchVoices();
   const best = pickBestVoice();
-  // Voix du serveur absente sur CE serveur : l'option reste visible mais grisee.
-  const serverOpt = serverVoiceOk === false
-    ? '<option value="__server__" disabled>Lumi — voix française (indisponible ici)</option>'
-    : '<option value="__server__">Lumi — voix française</option>';
-  sel.innerHTML = serverOpt + '<option value="__auto__">Voix du téléphone (automatique)</option>';
-  sel.value = voiceMode === 'server' ? '__server__' : (voicePref || '__auto__');
+  sel.innerHTML = '';
+  LUMI_SERVER_VOICES.forEach(({ id, label }) => {
+    const o = document.createElement('option');
+    o.value = 'server:' + id;
+    o.textContent = serverVoiceOk === false ? `${label} (indisponible ici)` : label;
+    if (serverVoiceOk === false) o.disabled = true;
+    sel.appendChild(o);
+  });
+  const auto = document.createElement('option');
+  auto.value = '__auto__';
+  auto.textContent = 'Voix du téléphone (automatique)';
+  sel.appendChild(auto);
+  if (voiceMode === 'server') sel.value = 'server:' + serverVoiceFromPref();
+  else sel.value = voicePref || '__auto__';
+  if (![...sel.options].some(o => o.value === sel.value && !o.disabled)) sel.value = '__auto__';
   if (!fr.length) {
     return;
   }
@@ -646,10 +671,12 @@ async function checkServerVoice() {
 
 $('voice-select').addEventListener('change', (e) => {
   voicePref = e.target.value;
-  voiceMode = voicePref === '__server__' ? 'server' : 'native';
+  voiceMode = String(voicePref).startsWith('server:') ? 'server' : 'native';
   localStorage.setItem('lumivoiceengine', voiceMode);
   localStorage.setItem('lumivoice', voicePref);
-  speak('Bonjour ! Voici ma nouvelle voix.');
+  const phrase = 'Bonjour ! Voici ma nouvelle voix.';
+  if (voiceMode === 'server') speakAudio(phrase).catch(() => {});
+  else speak(phrase);
 });
 
 $('rate-slider').addEventListener('input', (e) => {
@@ -658,6 +685,7 @@ $('rate-slider').addEventListener('input', (e) => {
   localStorage.setItem('lumirate', String(voiceRate));
 });
 
+if (voiceMode === 'server') { voicePref = 'server:' + serverVoiceFromPref(); localStorage.setItem('lumivoice', voicePref); }
 populateVoiceSelect();
 checkServerVoice();
 if ('speechSynthesis' in window) {
@@ -743,7 +771,7 @@ async function speakAudio(text) {
     try {
       const response = await fetch('/api/speech', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: part, format: 'url' }), signal: controller.signal,
+        body: JSON.stringify({ text: part, format: 'url', voice: voiceMode === 'server' ? serverVoiceFromPref() : '' }), signal: controller.signal,
       });
       if (!response.ok) throw Error((await response.json()).error || 'Voix indisponible.');
       const result = await response.json();
@@ -878,7 +906,11 @@ $('btn-listen').addEventListener('click', () => {
   }
   speak(lastSpeechText || 'Bonjour ! Je suis Lumi.');
 });
-$('btn-test-voice').addEventListener('click', () => speak('Bonjour ! Je suis Lumi. Est-ce que tu entends ma voix ?'));
+$('btn-test-voice').addEventListener('click', () => {
+  const phrase = 'Bonjour ! Je suis Lumi. Est-ce que tu entends ma voix ?';
+  if (voiceMode === 'server') speakAudio(phrase).catch(() => {});
+  else speak(phrase);
+});
 
 // Decoupe le texte aux fins de phrases : iOS coupe le son sur les
 // textes longs, il faut plusieurs morceaux courts.

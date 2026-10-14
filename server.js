@@ -498,7 +498,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-14.1' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-14.2' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -623,7 +623,7 @@ app.post('/api/speech', async (req, res) => {
   if (++limit.count > 20) return res.status(429).json({ error: 'Trop de lectures. Réessaie dans une minute.' });
   speechRequests.set(id, limit);
   try {
-    const audio = await generateSpeech(text);
+    const audio = await generateSpeech(text, voice);
     if (req.body.format === 'url') return res.json({ url: retainSpeechAudio(id,audio) });
     res.type('audio/wav').send(audio);
   }

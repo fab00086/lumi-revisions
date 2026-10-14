@@ -13,7 +13,13 @@ const model = path.join(root, 'fr_FR-siwis-medium.onnx');
 const edgePython = path.join(root, 'venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 const edgeScript = path.join(here, 'scripts', 'edge_say.py');
 export const voiceEngine = process.env.VOICE_ENGINE === 'edge' ? 'edge' : 'piper';
-const edgeVoice = process.env.EDGE_VOICE || 'fr-FR-VivienneMultilingualNeural';
+export const EDGE_VOICES = {
+  vivienne: 'fr-FR-VivienneMultilingualNeural',
+  denise: 'fr-FR-DeniseNeural',
+  eloise: 'fr-FR-EloiseNeural',
+  sylvie: 'fr-CA-SylvieNeural',
+};
+const edgeVoice = process.env.EDGE_VOICE || EDGE_VOICES.vivienne;
 export const speechAvailable = () => voiceEngine === 'edge'
   ? existsSync(edgePython) && existsSync(edgeScript)
   : existsSync(binary) && existsSync(model) && existsSync(model + '.json');
@@ -49,9 +55,9 @@ function speechWorker() {
   return child;
 }
 process.once('exit', () => worker?.kill());
-function edgeSpeech(text, wav) {
+function edgeSpeech(text, wav, voiceName) {
   return new Promise((resolve, reject) => {
-    const child = spawn(edgePython, [edgeScript, '--voice', edgeVoice, '--text', String(text).replace(/\r?\n/g, ' '), '--out', wav], {
+    const child = spawn(edgePython, [edgeScript, '--voice', voiceName, '--text', String(text).replace(/\r?\n/g, ' '), '--out', wav], {
       windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'],
     });
     let details = '';
@@ -74,16 +80,17 @@ export function generateSpeechSample() {
   });
   return samplePromise;
 }
-export function generateSpeech(text) {
+export function generateSpeech(text, voice) {
   if (!speechAvailable()) return Promise.reject(Object.assign(Error('Voix en cours d’installation.'), { status: 503 }));
   if (waiting >= 4) return Promise.reject(Object.assign(Error('Voix occupée, réessaie dans un instant.'), { status: 429 }));
+  const voiceName = EDGE_VOICES[String(voice || '').trim().toLowerCase()] || edgeVoice;
   waiting++;
   const task = tail.then(async () => {
     const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'lumi-voice-'));
     const wav = path.join(folder, 'voice.wav');
     try {
       if (voiceEngine === 'edge') {
-        await edgeSpeech(text, wav);
+        await edgeSpeech(text, wav, voiceName);
       } else {
         await new Promise((resolve, reject) => {
           const child = speechWorker();
