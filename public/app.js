@@ -2764,8 +2764,8 @@ function configureAdminTest(enabled) {
 // Si l'app est protégée par un code d'accès (mode hébergé), on l'affiche
 // d'abord ; sinon on ouvre directement l'écran des profils.
 function readFamilyInvitation() {
-  // Le code arrive en #access= (lien principal). Certaines messageries jettent
-  // le # en ouvrant un lien : on accepte aussi ?access= (jamais jeté).
+  // Le code arrive en #access= (anciens liens) ou ?access= (liens actuels,
+  // jamais rognés par les messageries).
   let code = '';
   const hash = new URLSearchParams(location.hash.slice(1));
   const query = new URLSearchParams(String(location.search || ''));
@@ -2773,9 +2773,61 @@ function readFamilyInvitation() {
   else if (query.has('access')) code = query.get('access') || '';
   code = (code || '').trim().toUpperCase();
   if (!code) return '';
+  // Adresse complète gardée pour le guide « ouvre dans Safari/Chrome ».
+  try { window.lumiInvitationLink = (typeof location.href === 'string') ? location.href : ''; } catch { window.lumiInvitationLink = ''; }
   // Retirer immédiatement le code de l'adresse. Aucun code Admin accepté dans un lien.
   window.history.replaceState(null, '', location.pathname);
   return /^LUMI-(?:[0-9A-F]{4}-){5}[0-9A-F]{4}$/.test(code) ? code : '';
+}
+// iPhone : Lumi a besoin de Safari (voix, micro, installation) ; sur les
+// autres navigateurs iOS et dans les navigateurs internes des messageries
+// (souvent « ça ouvre Chrome et rien ne marche »), on guide la famille.
+function gateBrowserHint() {
+  if (typeof navigator === 'undefined') return '';
+  const ua = String(navigator.userAgent || '');
+  const platform = String(navigator.platform || '');
+  const touch = Number(navigator.maxTouchPoints || 0);
+  const iOS = /iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && touch > 1);
+  const android = /Android/.test(ua);
+  const standalone = navigator.standalone === true ||
+    (typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  if (standalone) return '';
+  const inApp = /FBAN|FBAV|FB_IAB|Instagram|Line\/|MicroMessenger|Snapchat|TikTok|LinkedInApp/i.test(ua);
+  const autreNavigateurIOS = /CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|Brave/i.test(ua);
+  if (iOS) {
+    const safari = /Safari\//.test(ua) && !autreNavigateurIOS && !inApp;
+    return safari ? '' : 'ios-other';
+  }
+  if (android) return inApp ? 'android-inapp' : '';
+  return '';
+}
+function showGateBrowserHint() {
+  const box = $('gate-browser-hint');
+  if (!box) return;
+  const hint = gateBrowserHint();
+  if (!hint) { box.classList.add('hidden'); return; }
+  const etapes = hint === 'ios-other'
+    ? '<li>Copie le lien avec le bouton ci-dessous (ou garde ton message).</li><li>Ouvre l\'application <strong>Safari</strong>.</li><li>Colle le lien dans la barre d\'adresse, puis valide.</li>'
+    : '<li>Touche ⋮ ou « Ouvrir dans… » dans le menu du navigateur.</li><li>Choisis <strong>Chrome</strong> (ou copie le lien et colle-le dans Chrome).</li>';
+  box.innerHTML = (hint === 'ios-other'
+      ? '<strong>📱 Sur iPhone, Lumi s\'utilise dans Safari.</strong>'
+      : '<strong>📱 Ouvre ce lien dans Chrome.</strong>')
+    + '<ol>' + etapes + '</ol>'
+    + '<button type="button" class="btn btn-primary" id="gate-copy-link">📋 Copier le lien</button>';
+  box.classList.remove('hidden');
+  $('gate-copy-link').onclick = async () => {
+    const url = (window.lumiInvitationLink || location.href || '');
+    try { await navigator.clipboard.writeText(url); toast('Lien copié. Colle-le dans la barre d\'adresse.', 6000); }
+    catch {
+      let field = $('gate-copy-link').nextElementSibling;
+      if (!field || !field.matches('[data-lumi-link]')) {
+        field = document.createElement('input'); field.readOnly = true; field.dataset.lumiLink = '';
+        field.className = 'lumi-link-field'; field.setAttribute('aria-label', 'Lien à copier');
+        $('gate-copy-link').after(field);
+      }
+      field.value = url; field.focus(); field.select(); field.setSelectionRange(0, url.length);
+    }
+  };
 }
 // Après la recharge de secours iOS (micro bloqué par Safari), Lumi rouvre
 // toute seule la leçon du profil en cours : l'enfant n'a plus qu'à retoucher
@@ -2801,12 +2853,14 @@ async function initApp() {
     $('screen-gate').classList.remove('hidden'); $('gate-code').value = invitation;
     $('gate-consent').checked = false;
     $('gate-error').textContent = 'Code rempli depuis ton invitation. Confirme être le parent, puis touche « Entrer ».';
+    showGateBrowserHint();
     $('gate-consent').focus(); return;
   }
   try {
     const g = await (await fetch('/api/gate')).json();
     if (g.locked && !g.open) {
       $('screen-gate').classList.remove('hidden');
+      showGateBrowserHint();
       $('gate-code').focus();
       return;
     }
