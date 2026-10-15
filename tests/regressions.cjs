@@ -58,6 +58,17 @@ test('classe : parse le JSON du mini-cours noye dans du markdown',()=>{
 test('instructions mathématiques : LaTeX conservé',()=>{
  const c=context();run(c,section(back,'function buildSystemPrompt(profile = {})','// ---------- Recherche web'));const prompt=c.buildSystemPrompt();assert.ok(prompt.includes('\\frac{3}{4}'));assert.ok(prompt.includes('\\times'));assert.ok(!prompt.includes('\f'));assert.ok(!prompt.includes('\t'));
 });
+test('mode client : Lumi ne parle jamais de son environnement ; l essai admin peut tout dire',()=>{
+ const c=context();run(c,section(back,'function buildSystemPrompt(profile = {})','// ---------- Recherche web'));
+ const client=c.buildSystemPrompt({name:'Manon',age:9});
+ assert.match(client,/fonctionnement interne/);
+ assert.match(client,/sources citees/);
+ // Espace admin/essai : consigne retiree, on peut tout tester.
+ const candide=c.buildSystemPrompt({name:'Manon',age:9,candide:true});
+ assert.ok(!candide.includes('fonctionnement interne'));
+ assert.match(candide,/Lumi/);
+});
+
 test('programme scolaire : le tuteur recoit les notions du bon niveau',()=>{
  const c=context({CURRICULUM:{CM1:{Maths:['les nombres décimaux','l\'aire du rectangle']}},AGE_LEVEL:{9:'CM1'}});
  run(c,section(back,'function profileLevel(profile','// ---------- Stockage des donnees des enfants ----------'));
