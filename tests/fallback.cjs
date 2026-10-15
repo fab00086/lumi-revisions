@@ -71,6 +71,14 @@ test('callOllama : timeout/reseau -> bascule ; sans secours configure -> erreur 
   assert.equal(appels.length, 1);
 });
 
+test('callOllama : une photo ne bascule JAMAIS sur le modele de secours (texte)', async () => {
+  const c = ctxAppel(repondre(429, ''));
+  vm.runInContext(section('const REPLY_TOKENS = 4096;', '// Bilan pedagogique'), c);
+  await assert.rejects(() => c.callOllama([{ role: 'user', content: 'lis mon cahier' }], { image: 'QUJD' }), /Le service IA est momentanément/);
+  assert.equal(appels.length, 1, 'une seule tentative : le modele vision');
+  assert.equal(appels[0].model, 'vision', 'le secours texte ne recoit jamais une image');
+});
+
 test('streamOllama : 503 avant le premier mot -> bascule sur le secours et diffusion', async () => {
   appels = [];
   const enc = new TextEncoder();

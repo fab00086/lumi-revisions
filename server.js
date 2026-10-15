@@ -687,7 +687,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-15.2' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-15.3' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -2032,7 +2032,9 @@ const REASONING_EFFORT = process.env.OLLAMA_REASONING_EFFORT || 'low';
 const FALLBACK_MODEL = String(process.env.OLLAMA_FALLBACK_MODEL ?? 'deepseek-v4.1-flash:cloud').trim();
 function ollamaChain(image) {
   const models = [image ? VISION_MODEL : MODEL];
-  if (FALLBACK_MODEL && !models.includes(FALLBACK_MODEL)) models.push(FALLBACK_MODEL);
+  // Jamais de repli pour les photos : le modele de secours (texte) ne voit
+  // pas l'image — il repondrait a l'aveugle ou refuserait la requete.
+  if (!image && FALLBACK_MODEL && !models.includes(FALLBACK_MODEL)) models.push(FALLBACK_MODEL);
   return models;
 }
 function ollamaSurcharge(e, status = 0) {
@@ -2125,7 +2127,8 @@ async function summarizeLesson(history, profile = {}) {
 async function streamOllama(messages, { image, maxTokens, onDelta } = {}) {
   const FB = (typeof FALLBACK_MODEL !== 'undefined' && FALLBACK_MODEL) ? FALLBACK_MODEL : '';
   const models = [image ? VISION_MODEL : MODEL];
-  if (FB && !models.includes(FB)) models.push(FB);
+  // Photos : jamais de repli (le modele texte ne voit pas l'image).
+  if (!image && FB && !models.includes(FB)) models.push(FB);
   const netFail = e => !!e && (e.name === 'AbortError' || e.name === 'TimeoutError' ||
     /fetch failed|network|ENOTFOUND|ECONNRESET|ECONNREFUSED|UND_ERR|aborted/i.test(String((e && e.cause && e.cause.code) || '') + ' ' + ((e && e.message) || '')));
   // Comme pour callOllama : la photo est jointe au dernier message utilisateur
