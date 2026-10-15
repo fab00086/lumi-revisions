@@ -97,7 +97,7 @@ test('invitation SMS : prépare le code, le lien et la confidentialité sans env
  const nodes={'issued-code':{value:'LUMI-TEST'},'copy-code':{}};
  let shared;const c=vm.createContext({URL,location:{href:'https://lumi.test/admin.html'},$:id=>nodes[id],navigator:{share:async v=>{shared=v;}},toast:()=>{}});
  vm.runInContext(script.slice(start,end),c);await c.shareFamilyInvitation();
- assert.equal(shared.url,undefined);assert.deepEqual(Object.keys(shared),['text']);assert.ok(shared.text.includes('https://lumi.test/#access=LUMI-TEST'));assert.ok(shared.text.includes('LUMI-TEST'));assert.ok(shared.text.includes('/confidentialite.html'));assert.ok(shared.text.includes('parent'));
+ assert.equal(shared.url,undefined);assert.deepEqual(Object.keys(shared),['text']);assert.ok(shared.text.includes('https://lumi.test/?access=LUMI-TEST'));assert.ok(shared.text.includes('LUMI-TEST'));assert.ok(shared.text.includes('/confidentialite.html'));assert.ok(shared.text.includes('parent'));
  let copied;c.navigator={clipboard:{writeText:async text=>{copied=text;}}};await c.shareFamilyInvitation();assert.equal(copied,shared.text);
  await nodes['copy-code'].onclick();assert.equal(copied,shared.text);
  nodes['issued-code'].value='';shared=null;await c.shareFamilyInvitation();assert.equal(shared,null);

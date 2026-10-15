@@ -91,8 +91,9 @@ $('create-form').onsubmit = async e => {
 function familyInvitationText() {
   const code = $('issued-code').value;
   if (!code) return '';
-  const link = new URL('/',location.href); link.hash = 'access='+encodeURIComponent(code);
-  return 'Ton code d’accès à Lumi : '+code+'\nOuvrir Lumi : '+link.href+'\nAppuie sur le lien : le code sera déjà rempli. Confirme être le parent, puis touche « Entrer ».\nConfidentialité : '+new URL('/confidentialite.html',location.href).href;
+  // Lien en ?access= : jamais rogné par les messageries (contrairement au #…).
+  const link = new URL('/', location.href); link.search = 'access=' + encodeURIComponent(code);
+  return 'Ton code d’accès à Lumi : '+code+'\nOuvrir Lumi : '+link.href+'\nLe lien ouvre Lumi avec le code déjà rempli : confirme être le parent, puis touche « Entrer ». Si le code n’apparaît pas, tape-le à la main (il commence par LUMI-).\nConfidentialité : '+new URL('/confidentialite.html',location.href).href;
 }
 $('copy-code').onclick = async () => {const text=familyInvitationText();if(!text)return;try {await navigator.clipboard.writeText(text);toast('Invitation copiée avec le code et le lien. Colle-la dans ton SMS.');}catch{$('issued-code').select();toast('Sélectionne et copie le code.');}};
 async function shareFamilyInvitation() {
