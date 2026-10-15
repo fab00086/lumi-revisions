@@ -486,7 +486,7 @@ async function send(text, imageBase64) {
     const bubble = addBubble('assistant', '');
     const reader = r.body.getReader();
     const dec = new TextDecoder();
-    let buf = '', full = '', sources = [], hadError = null, firstDelta = true;
+    let buf = '', full = '', sources = [], hadError = null, firstDelta = true, streamSpoken = 0;
     let userContent = clean || '[photo du cahier]', completed = false, userSaved = false;
     while (true) {
       const { done, value } = await reader.read();
@@ -511,6 +511,15 @@ async function send(text, imageBase64) {
           full += ev.text;
           bubble.innerHTML = renderMarkdown(full);
           const chat = $('chat'); chat.scrollTop = chat.scrollHeight;
+          // Voix du téléphone : démarrer dès la première phrase complète — le
+          // reste est ajouté à la file (jamais de coupure). Mode serveur et
+          // conversation : inchangés.
+          if (!streamSpoken && full.length >= 25
+              && (typeof voiceMode === 'undefined' || voiceMode !== 'server')
+              && (typeof liveMic === 'undefined' || !liveMic)) {
+            const fin = full.match(/^[\s\S]{20,150}?[.!?…](?=\s|$)/);
+            if (fin) { streamSpoken = fin[0].length; speak(fin[0]); }
+          }
         } else if (ev.type === 'error') {
           hadError = ev.error;
         } else if (ev.type === 'done') {
@@ -536,7 +545,13 @@ async function send(text, imageBase64) {
     if (!userSaved) messages.push({ role: 'user', content: userContent });
     messages.push({ role: 'assistant', content: full });
     // Préparer la voix sans attendre l'aller-retour de sauvegarde au cloud.
-    if (generation === chatGeneration) speak(full);
+    // Si la première phrase a déjà été lue pendant le flux, on AJOUTE le reste
+    // à la file au lieu de relire (ou couper) la voix.
+    if (generation === chatGeneration) {
+      if (streamSpoken > 0) {
+        if (streamSpoken < full.length) { if (typeof speakAppend === 'function') speakAppend(full.slice(streamSpoken)); else speak(full); }
+      } else speak(full);
+    }
     try {
       await saveChild(profile, messages);
     } catch (err) {
@@ -949,6 +964,38 @@ function stopSpeech() {
 // (et en mode discussion, le micro reprend tout de suite après)
 $('avatar').addEventListener('click', () => { stopSpeech(); if (typeof micLiveResume === 'function') micLiveResume(); });
 $('btn-stop').addEventListener('click', () => { stopSpeech(); if (typeof micLiveResume === 'function') micLiveResume(); });
+
+// Suite d'une réponse déjà en train d'être lue (flux en cours, voix du
+// téléphone) : on AJOUTE les phrases à la file du navigateur au lieu de
+// couper la voix. Si plus rien ne parle, lecture classique.
+function speakAppend(text) {
+  if (typeof voiceMode !== 'undefined' && voiceMode === 'server') return;
+  const rest = cleanForSpeech(text);
+  if (!rest || !('speechSynthesis' in window)) return;
+  if (!speechSynthesis.speaking && !speechSynthesis.pending) { speak(text); return; }
+  const gen = speakGen;
+  const voice = pickBestVoice();
+  const parts = splitForSpeech(rest);
+  const last = parts.length - 1;
+  parts.forEach((part, i) => {
+    const u = new SpeechSynthesisUtterance(part);
+    u.lang = voice?.lang || 'fr-FR';
+    u.rate = voiceRate || 1;
+    u.volume = 1;
+    if (voice) u.voice = voice;
+    u.onstart = () => { if (gen === speakGen) { $('avatar').classList.add('talking'); $('btn-stop').classList.remove('hidden'); } };
+    if (i === last) u.onend = () => {
+      if (gen !== speakGen) return;
+      if (speechSynthesis.speaking || speechSynthesis.pending) return; // il reste des phrases en file
+      $('avatar').classList.remove('talking');
+      $('btn-stop').classList.add('hidden');
+      setStatus("Je t'écoute 👂");
+      if (typeof micLiveResume === 'function') micLiveResume();
+    };
+    speechUtterances.push(u);
+    speechSynthesis.speak(u);
+  });
+}
 
 function speak(text) {
   lastSpeechText = cleanForSpeech(text);

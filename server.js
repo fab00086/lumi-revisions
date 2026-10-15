@@ -77,7 +77,10 @@ async function initProgrammes() {
       const ro = new DatabaseSync(dbPath, { readOnly: true });
       const cnt = ro.prepare('SELECT COUNT(*) AS c FROM notions').get().c;
       const saved = ro.prepare("SELECT value FROM meta WHERE key = 'json_stamp'").get();
-      if (cnt > 0 && saved && saved.value === stamp) { progDb = ro; return; }
+      if (cnt > 0 && saved && saved.value === stamp) {
+        console.log(`  📚 Programmes officiels charges : ${cnt} notions (data/programmes.db).`);
+        progDb = ro; return;
+      }
       ro.close();
     } catch { progDb = null; }
     // (Re)construction depuis le JSON, dans un dossier temporaire du systeme
@@ -687,7 +690,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-15.5' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-15.6' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -2335,7 +2338,10 @@ PHOTO DU CAHIER (tres important) :
 
     send({ type: 'start', sources });
     const replyParts = [];
-    await streamOllama(messages, { onDelta: (d) => { replyParts.push(d); send({ type: 'delta', text: d }); } });
+    const latT0 = Date.now();
+    let latFirst = 0;
+    await streamOllama(messages, { onDelta: (d) => { if (!latFirst) latFirst = Date.now(); replyParts.push(d); send({ type: 'delta', text: d }); } });
+    console.log(`  [latence] chat : 1er mot ${latFirst ? (latFirst - latT0) + ' ms' : 'aucun'}, total ${Date.now() - latT0} ms (${replyParts.length} morceaux)`);
     // Burn IA : prompt complet (systeme + historique + question) + reponse,
     // plus la lecture de la photo en amont. Enregistre dans la base d'usage.
     let tokensUsed = messageTokens(messages) + tokenEstimate(replyParts.join('')) + tokenEstimate(photoText);
