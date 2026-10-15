@@ -19,7 +19,9 @@ export const EDGE_VOICES = {
   eloise: 'fr-FR-EloiseNeural',
   sylvie: 'fr-CA-SylvieNeural',
 };
-const edgeVoice = process.env.EDGE_VOICE || EDGE_VOICES.vivienne;
+// Voix par defaut : denise (fr-FR standard), la plus rapide a froid sur
+// o2switch (1,3 s contre 7,0 s pour la voix multilingue vivienne ; mesure 15/10).
+const edgeVoice = process.env.EDGE_VOICE || EDGE_VOICES.denise;
 export const speechAvailable = () => voiceEngine === 'edge'
   ? existsSync(edgePython) && existsSync(edgeScript)
   : existsSync(binary) && existsSync(model) && existsSync(model + '.json');

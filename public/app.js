@@ -580,7 +580,10 @@ function serverVoiceFromPref() {
     const id = value.slice(7);
     if (LUMI_SERVER_VOICES.some(o => o.id === id)) return id;
   }
-  return 'vivienne';
+  // Denise par defaut : la plus rapide au demarrage (mesure o2switch 15/10 :
+  // vivienne 7,0 s a froid contre 1,3 s pour denise — la voix multilingue
+  // etait la cause du « temps de reponse trop long »).
+  return 'denise';
 }
 
 function frenchVoices() {
@@ -2318,7 +2321,13 @@ function formatDate(iso) {
 }
 
 $('btn-new').addEventListener('click', (e) => {
-  if (!currentProfile || archiving || chatLoading || activeChat) return;
+  if (!currentProfile || archiving) return;
+  // Jamais de bouton muet (app installée : après un passage en arrière-plan,
+  // une réponse pouvait rester « en cours » et le bouton semblait mort).
+  // Une réponse en cours est annulée au premier appui ; un chargement affiche
+  // un message au lieu d'ignorer le toucher.
+  if (activeChat) cancelChat();
+  else if (chatLoading) { toast('Lumi termine ce qu’elle fait… réessaie dans un instant 🙂', 4000); return; }
   // Confirme en 2 taps : archiver efface la leçon en cours, on ne déclenche pas ça par accident.
   const btn = (e && e.currentTarget) || $('btn-new');
   if (!btn.classList.contains('armed')) {
