@@ -2764,11 +2764,17 @@ function configureAdminTest(enabled) {
 // Si l'app est protégée par un code d'accès (mode hébergé), on l'affiche
 // d'abord ; sinon on ouvre directement l'écran des profils.
 function readFamilyInvitation() {
-  const params = new URLSearchParams(location.hash.slice(1));
-  if (!params.has('access')) return '';
-  const code = (params.get('access') || '').trim().toUpperCase();
+  // Le code arrive en #access= (lien principal). Certaines messageries jettent
+  // le # en ouvrant un lien : on accepte aussi ?access= (jamais jeté).
+  let code = '';
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const query = new URLSearchParams(String(location.search || ''));
+  if (hash.has('access')) code = hash.get('access') || '';
+  else if (query.has('access')) code = query.get('access') || '';
+  code = (code || '').trim().toUpperCase();
+  if (!code) return '';
   // Retirer immédiatement le code de l'adresse. Aucun code Admin accepté dans un lien.
-  window.history.replaceState(null, '', location.pathname + location.search);
+  window.history.replaceState(null, '', location.pathname);
   return /^LUMI-(?:[0-9A-F]{4}-){5}[0-9A-F]{4}$/.test(code) ? code : '';
 }
 // Après la recharge de secours iOS (micro bloqué par Safari), Lumi rouvre

@@ -120,6 +120,24 @@ test('lien famille : retire les secrets de l’adresse et refuse un code Admin o
  }
 });
 
+test('lien famille : ?access= marche aussi (les messageries qui jettent le #)',()=>{
+ const script=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');const start=script.indexOf('function readFamilyInvitation()'),end=script.indexOf('async function initApp()',start);
+ const code='LUMI-ABCD-1234-5678-90AB-CDEF-1234';
+ // Avec ?access= : code rempli et adresse nettoyée.
+ let cleaned;let c=vm.createContext({URLSearchParams,location:{hash:'',pathname:'/',search:'?access='+code},window:{history:{replaceState:(_s,_t,url)=>{cleaned=url;}}}});
+ vm.runInContext(script.slice(start,end),c);
+ assert.equal(c.readFamilyInvitation(),code);
+ assert.equal(cleaned,'/');
+ // Sans access= (ou p=1) : aucun code, rien n'est nettoyé ni dérangé.
+ for(const search of ['','?p=1']) {
+  cleaned=undefined;
+  c=vm.createContext({URLSearchParams,location:{hash:'',pathname:'/',search},window:{history:{replaceState:(_s,_t,url)=>{cleaned=url;}}}});
+  vm.runInContext(script.slice(start,end),c);
+  assert.equal(c.readFamilyInvitation(),'');
+  assert.equal(cleaned,undefined,'aucun remplacement sans code');
+ }
+});
+
 test('notifications : destinataire privé, aucune donnée enfant, une seule alerte par demande', async () => {
  const f=await fixture('test-admin',true);try {
    const body={name:'Nom privé',email:'parent@example.test',consent:true,to:'intrus@example.test'};
