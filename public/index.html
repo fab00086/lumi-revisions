@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Lumi">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=55">
   <link rel="stylesheet" href="/katex/katex.min.css">
   <script defer src="/katex/katex.min.js"></script>
 </head>
@@ -381,13 +381,15 @@
   </div>
 
   <script>
-    // Rend l'app installable sur l'ecran d'accueil (PWA)
+    // Rend l'app installable sur l'ecran d'accueil (PWA).
+    // updateViaCache:'none' force Safari/iOS a reverifier sw.js (sinon il le
+    // garde jusqu'a 24 h et l'app installee reste sur une ancienne version).
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {}));
     }
   </script>
-  <script src="app.js"></script>
-  <script src="update.js"></script>
+  <script src="app.js?v=55"></script>
+  <script src="update.js?v=55"></script>
 </body>
 </html>
 
