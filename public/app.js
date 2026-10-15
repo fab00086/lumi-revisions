@@ -1811,15 +1811,74 @@ $('btn-back').addEventListener('click', () => {
 });
 
 // ---------- Impression ----------
-$('btn-print').addEventListener('click', () => {
-  const name = currentProfile ? currentProfile.name : 'enfant';
-  const msgs = [...document.querySelectorAll('#chat .msg')].map(m => m.innerText).join('\n\n');
+// Fiche de révision : l'IA résume la leçon (notions, acquis, à retravailler)
+// puis on l'ouvre dans une page propre à imprimer/enregistrer en PDF — au lieu
+// de recracher la conversation brute de l'écran.
+function openFichePrint(fiche, name, level) {
+  const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const notions = (fiche.notions || []).map(n => `<li><strong>${esc(n.titre)}</strong> — ${esc(n.contenu)}</li>`).join('');
+  const methode = (fiche.methode || []).map(n => `<li><strong>${esc(n.titre)}</strong> — ${esc(n.contenu)}</li>`).join('');
+  const exemples = (fiche.exemples || []).map(x => `<li>${esc(x)}</li>`).join('');
+  const reussi = (fiche.reussi || []).map(x => `<li>${esc(x)}</li>`).join('');
+  const aReviser = (fiche.a_reviser || []).map(x => `<li>${esc(x)}</li>`).join('');
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche de révision — ${esc(name)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Georgia, "Times New Roman", serif; color: #1f2430; max-width: 720px; margin: 0 auto; padding: 40px 28px; line-height: 1.55; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .soustitre { color: #6b7280; font-size: 14px; margin: 0 0 22px; }
+  .resume { font-style: italic; background: #f3efff; border-left: 4px solid #6d5bd0; padding: 12px 14px; border-radius: 8px; margin: 0 0 22px; }
+  h2 { font-size: 17px; color: #4a3f8f; border-bottom: 2px solid #ece7fb; padding-bottom: 6px; margin: 24px 0 10px; }
+  ul { margin: 0; padding-left: 20px; }
+  li { margin: 6px 0; }
+  .reussi li { color: #1e7a3c; }
+  .areviser li { color: #b3541e; }
+  .astuce { background: #fff8e6; border-left: 4px solid #e0a82e; padding: 12px 14px; border-radius: 8px; margin-top: 22px; }
+  .pied { margin-top: 32px; font-size: 12px; color: #9ca3af; text-align: center; }
+  .noprint { text-align: center; margin-top: 26px; }
+  .noprint button { font-size: 15px; padding: 10px 18px; border-radius: 10px; border: none; background: #6d5bd0; color: #fff; cursor: pointer; }
+  @media print { .noprint { display: none; } body { padding: 0; } }
+</style></head>
+<body>
+  <h1>📄 ${esc(fiche.titre || 'Fiche de révision')}</h1>
+  <p class="soustitre">${esc(name)}${level ? ' · ' + esc(level) : ''} · Fiche générée par Lumi</p>
+  ${fiche.resume ? `<p class="resume">${esc(fiche.resume)}</p>` : ''}
+  ${notions ? `<h2>Les notions à retenir</h2><ul>${notions}</ul>` : ''}
+  ${methode ? `<h2>La méthode pas à pas</h2><ul>${methode}</ul>` : ''}
+  ${exemples ? `<h2>Exemples</h2><ul>${exemples}</ul>` : ''}
+  ${reussi ? `<h2>Bien compris ✓</h2><ul class="reussi">${reussi}</ul>` : ''}
+  ${aReviser ? `<h2>À retravailler</h2><ul class="areviser">${aReviser}</ul>` : ''}
+  ${fiche.astuce ? `<p class="astuce">💡 Astuce : ${esc(fiche.astuce)}</p>` : ''}
+  <p class="pied">Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
+  <div class="noprint"><button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button></div>
+</body></html>`;
   const w = window.open('', '_blank');
-  if (!w) { toast('Autorise les fenêtres pop-up pour imprimer.'); return; }
-  w.document.write(`<html><head><meta charset="utf-8"><title>Devoir — ${escapeHtml(name)}</title></head><body style="font-family:Georgia,serif;max-width:680px;margin:40px auto;padding:0 20px;color:#222"><h1>Session Lumi — ${escapeHtml(name)}</h1><hr><pre style="white-space:pre-wrap;font-family:inherit;font-size:15px;line-height:1.6">${msgs}</pre></body></html>`);
-  w.document.close();
-  w.focus();
-  setTimeout(() => w.print(), 300);
+  if (!w) { toast('Autorise les fenêtres pop-up pour imprimer la fiche.'); return; }
+  w.document.open(); w.document.write(html); w.document.close(); w.focus();
+  setTimeout(() => w.print(), 400);
+}
+
+$('btn-print').addEventListener('click', async () => {
+  if (!currentProfile) { toast("Ouvre une leçon d'abord."); return; }
+  if (!history.length) { toast('La leçon est encore vide : pose une question avant de faire la fiche.'); return; }
+  const name = currentProfile.name || 'enfant';
+  setStatus('Je prépare ta fiche de révision… 📄');
+  let fiche;
+  try {
+    const r = await fetch('/api/fiche', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: currentProfile, history })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Impossible de préparer la fiche.');
+    fiche = j.fiche;
+  } catch (e) {
+    setStatus("Je t'écoute 👂");
+    toast('⚠️ ' + (e.message || 'Impossible de préparer la fiche.'));
+    return;
+  }
+  setStatus("Je t'écoute 👂");
+  openFichePrint(fiche, name, currentProfile.level);
 });
 
 // ---------- Vidéos (lecteur intégré) ----------

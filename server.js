@@ -690,7 +690,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-15.11' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-15.12' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -2565,8 +2565,61 @@ app.get('/api/classroom', async (req, res) => {
     if (!sql) return res.status(404).json({ error: 'Classe introuvable.' });
     const row = sql.prepare('SELECT data FROM classrooms WHERE account_id=? AND id=?').get(r.account.id, id);
     if (!row) return res.status(404).json({ error: 'Classe introuvable.' });
-    res.json({ id, classroom: JSON.parse(row.data) });
+     res.json({ id, classroom: JSON.parse(row.data) });
   } catch (e) {
+    res.status(500).json({ error: friendlyError(e) });
+  }
+});
+
+// ---------- Fiche de révision (support PDF / impression) ----------
+// L'IA lit la conversation de la lecon et en tire une fiche structuree
+// (notions, ce qui est acquis, ce qui reste a travailler) — bien plus utile
+// qu'une simple impression de l'ecran.
+async function buildFiche(history, profile = {}) {
+  const msgs = (Array.isArray(history) ? history : [])
+    .filter(h => h && (h.role === 'user' || h.role === 'assistant'))
+    .slice(-40)
+    .map(h => (h.role === 'user' ? 'Enfant : ' : 'Lumi : ') + String(h.content || '').slice(0, 600));
+  if (msgs.length < 2) return null;
+  const age = profile.age ?? 10;
+  const r = await callOllama([
+    { role: 'system', content: `Tu es Lumi. Tu lis la conversation d'un enfant de ${age} ans avec son tuteur (elle peut commencer par la lecture d'une photo du devoir). Tu produis une FICHE DE REVISION COMPLETE sur le sujet travaille — complete meme si la conversation est courte, a partir de l'exercice ou de la photo. Reponds UNIQUEMENT par un objet JSON compact, sans texte autour, sans LaTeX : {"titre":"sujet court (max 50 caracteres)","resume":"une phrase : le sujet travaille","notions":[{"titre":"notion courte","contenu":"definition ou regle + un exemple"}],"methode":[{"titre":"etape courte","contenu":"une etape de la methode"}],"exemples":["1 a 3 exemples concrets courts"],"reussi":["ce que l'enfant a compris (max 3)"],"a_reviser":["points a retravailler (max 2)"],"astuce":"astuce de memorisation courte"}. Entre 4 et 7 notions, 2 a 4 etapes de methode. Tout en francais, mots adaptes a ${age} ans.` },
+    { role: 'user', content: msgs.join('\n').slice(0, 9000) }
+  ], { maxTokens: 1600 });
+  const raw = String(r.content || '');
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const strs = v => (Array.isArray(v) ? v : []).map(String).filter(Boolean).slice(0, 6);
+    const items = (arr, max) => (Array.isArray(arr) ? arr : []).slice(0, max)
+      .map(n => ({ titre: String((n && n.titre) || '').slice(0, 120), contenu: String((n && n.contenu) || '').slice(0, 400) }))
+      .filter(n => n.titre || n.contenu);
+    return {
+      titre: String(j.titre || '').slice(0, 60) || 'Fiche de révision',
+      resume: String(j.resume || '').slice(0, 300),
+      notions: items(j.notions, 7),
+      methode: items(j.methode, 4),
+      exemples: strs(j.exemples).slice(0, 3),
+      reussi: strs(j.reussi).slice(0, 3),
+      a_reviser: strs(j.a_reviser).slice(0, 2),
+      astuce: String(j.astuce || '').slice(0, 300)
+    };
+  } catch { return null; }
+}
+
+app.post('/api/fiche', async (req, res) => {
+  try {
+    const access = await reserveUsage(req, 'chat');
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const acc = access.account;
+    const { profile, history } = req.body || {};
+    const fiche = await buildFiche(history, profile || {});
+    if (!fiche) return res.status(502).json({ error: "Je n'ai pas réussi à préparer la fiche. Réessaie dans un instant. 📄" });
+    await countTokens(acc, tokenEstimate(JSON.stringify(history || '').slice(0, 9000)) + tokenEstimate(JSON.stringify(fiche)));
+    res.json({ fiche });
+  } catch (e) {
+    console.error('[fiche]', e);
     res.status(500).json({ error: friendlyError(e) });
   }
 });
