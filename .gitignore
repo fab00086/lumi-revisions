@@ -5,6 +5,7 @@ npm-debug.log*
 .DS_Store
 data/*
 !data/curriculum.json
+!data/programmes.json
 *.exe
 AUDIT-*.md
 AUDIT-*.html

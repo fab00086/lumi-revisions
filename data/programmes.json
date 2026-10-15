@@ -1,0 +1,803 @@
+{
+  "source": "Recension pedagogique des programmes officiels de l'Ecole — cycles 2, 3 et 4 (du CP a la 3e), d'apres les programmes en vigueur et leurs reperes de progression. Fichier source SANS secret, suivi dans Git : le serveur reconstruit data/programmes.db (SQLite) au demarrage si absent ou vide (sur o2switch comme en local, aucunPC requis). Edition : modifier ce fichier puis relancer Lumi. Sources de reference ouvertes aux familles : eduscol.education.fr (cycles 2/3/4), socle commun.",
+  "niveaux": [
+    {
+      "code": "CP",
+      "cycle": 2,
+      "matieres": [
+        { "code": "FR", "label": "Français", "notions": [
+          { "theme": "Langage oral", "notion": "Raconter une suite d'événements en phrases simples", "attendu": "S'exprimer de plus en plus clairement et dans le bon ordre dans un récit court." },
+          { "theme": "Langage oral", "notion": "Écouter et comprendre un texte lu à voix haute", "attendu": "Retenir les informations principales et répondre à des questions de compréhension." },
+          { "theme": "Lecture-écriture", "notion": "Correspondance lettre-son : consonnes et voyelles", "attendu": "Identifier la correspondance entre graphèmes et phonèmes pour décoder des mots réguliers." },
+          { "theme": "Lecture-écriture", "notion": "Les syllabes : compter, fusionner, segmenter", "attendu": "Manipuler les syllabes à l'oral, première étape du déchiffrage." },
+          { "theme": "Lecture-écriture", "notion": "Déchiffrer des mots réguliers et lire des phrases courtes", "attendu": "Lire à voix haute, avec la voix posée, de courts textes déjà travaillés." },
+          { "theme": "Lecture-écriture", "notion": "Écrire les lettres en cursive et les majuscules", "attendu": "Former les lettres proprement, tenir le porte-plume, soigner l'écriture." },
+          { "theme": "Lecture-écriture", "notion": "Copier et écrire des phrases simples", "attendu": "Produire une phrase simple correctement écrite et lisible." },
+          { "theme": "Orthographe", "notion": "La phrase : majuscule au début, point à la fin", "attendu": "Marquer les bornes de la phrase et en respecter l'ordre des mots." },
+          { "theme": "Orthographe", "notion": "Mémoriser et écrire les mots usuels (liste d'orthographe)", "attendu": "Écrire sans erreur les mots très courants de l'écrit." },
+          { "theme": "Étude de la langue", "notion": "Le nom et son déterminant, le verbe de la phrase", "attendu": "Repérer les groupes et les catégories premières (nom, verbe) dans une phrase simple." },
+          { "theme": "Vocabulaire", "notion": "Lexique du quotidien : école, famille, corps, animaux, plantes", "attendu": "Construire un premier vocabulaire organisé par thèmes." },
+          { "theme": "Écrits courts", "notion": "Dictée de mots et de petites phrases", "attendu": "Écrire sous dictée des mots et phrases construits avec les correspondances apprises." }
+        ] },
+        { "code": "MA", "label": "Mathématiques", "notions": [
+          { "theme": "Nombres et calcul", "notion": "Nombres jusqu'à 99 : lire, écrire, comparer, encadrer", "attendu": "Dénombrer, lire, écrire et comparer les nombres jusqu'à 99." },
+          { "theme": "Nombres et calcul", "notion": "Dizaines et unités", "attendu": "Comprendre que 10 unités font 1 dizaine et décomposer les nombres." },
+          { "theme": "Nombres et calcul", "notion": "Compléments à 10 et à 20, doubles et moitiés", "attendu": "Mémoriser les compléments à 10, les doubles et les moitiés usuels." },
+          { "theme": "Nombres et calcul", "notion": "Addition en ligne et calcul mental", "attendu": "Calculer en ligne des sommes simples et progresser en calcul mental." },
+          { "theme": "Nombres et calcul", "notion": "Addition posée en colonnes (sans retenue)", "attendu": "Poser et réussir une addition en alignant dizaines et unités." },
+          { "theme": "Nombres et calcul", "notion": "Multiplication par 2, 5 et 10 (premières tables)", "attendu": "Connaître les résultats des produits par 2, 5 et 10." },
+          { "theme": "Espace et géométrie", "notion": "Se repérer : dessus, dessous, gauche, droite, avant, après", "attendu": "Situer et décrire des positions dans l'espace avec le vocabulaire usuel." },
+          { "theme": "Espace et géométrie", "notion": "Quadrillage et déplacement sur une grille", "attendu": "Se repérer et coder des déplacements sur quadrillage." },
+          { "theme": "Espace et géométrie", "notion": "Figures usuelles : carré, rectangle, triangle, cercle, lignes", "attendu": "Reconnaître, nommer et décrire les figures géométriques usuelles." },
+          { "theme": "Grandeurs et mesures", "notion": "Longueur et masse : comparer et mesurer", "attendu": "Comparer, estimer et mesurer des longueurs et des masses avec des unités usuelles." },
+          { "theme": "Grandeurs et mesures", "notion": "La monnaie : euros et centimes", "attendu": "Utiliser la monnaie : lire les prix, faire des échanges simples." },
+          { "theme": "Grandeurs et mesures", "notion": "Lire l'heure : heures pleines et demies", "attendu": "Lire l'heure sur une horloge à heures pleines et à la demi-heure." },
+          { "theme": "Problèmes", "notion": "Problèmes simples : addition, complément, partage", "attendu": "Résoudre des problèmes simples du champ additif à partir d'énoncés courts." }
+        ] },
+        { "code": "QM", "label": "Questionner le monde", "notions": [
+          { "theme": "Le vivant", "notion": "Animaux et plantes : naissance, croissance, besoins", "attendu": "Observer et comparer le développement des êtres vivants et leurs besoins." },
+          { "theme": "Le vivant", "notion": "Le corps : les 5 sens et l'hygiène", "attendu": "Nommer les organes des sens et adopter les gestes d'hygiène." },
+          { "theme": "Matière et mouvement", "notion": "L'eau et ses états : eau, glace, vapeur", "attendu": "Observation des états de l'eau et de ses transformations courantes." },
+          { "theme": "Matière et mouvement", "notion": "Se déplacer, rouler, glisser : l'action de la force", "attendu": "Décrire comment pousser ou tirer modifie le mouvement d'un objet." },
+          { "theme": "Espace et temps", "notion": "La météo et les saisons", "attendu": "Relever et décrire la météo, organiser les saisons." },
+          { "theme": "Espace et temps", "notion": "Le temps qui passe : jours, semaines, mois, calendrier", "attendu": "Situer les événements dans le temps avec le calendrier." },
+          { "theme": "Espace et temps", "notion": "Le ciel : le jour, la nuit, le Soleil", "attendu": "Expliquer la succession du jour et de la nuit par la rotation de la Terre (initiation)." },
+          { "theme": "Espace et temps", "notion": "La maison, l'école, la ville et le pays", "attendu": "Situer son environnement proche et connaître les espaces qui l'entourent." },
+          { "theme": "Espace et temps", "notion": "Les paysages : mer, campagne, montagne, ville", "attendu": "Comparer des paysages simples et les nommer." },
+          { "theme": "Objets et numérique", "notion": "Utiliser une tablette ou un ordinateur", "attendu": "Utiliser les objets numériques de la classe avec sécurité et autonomie croissante." },
+          { "theme": "Objets et numérique", "notion": "Observer, imaginer, essayer, conclure : la démarche scientifique", "attendu": "Formuler une question, essayer une réponse et en parler en classe." }
+        ] },
+        { "code": "EMC", "label": "Enseignement moral et civique", "notions": [
+          { "theme": "Vivre ensemble", "notion": "Les règles de la classe et de l'école", "attendu": "Comprendre pourquoi une règle protège et la respecter." },
+          { "theme": "Vivre ensemble", "notion": "Civilité : saluer, remercier, demander poliment", "attendu": "Adopter les usages de la politesse dans les échanges." },
+          { "theme": "Citoyenneté", "notion": "Vivre ensemble : coopérer et s'entraider", "attendu": "Travailler avec les autres et accepter les différences." },
+          { "theme": "Respect de soi", "notion": "Le respect du corps et de l'intimité", "attendu": "Connaître les règles de base du respect de son corps et de celui des autres." },
+          { "theme": "Expression", "notion": "Écouter les autres et exprimer son avis calmement", "attendu": "Participer à un échange en laissant la parole aux autres." },
+          { "theme": "Repères républicains", "notion": "Repères de la République : drapeau, devise, Marseillaise", "attendu": "Reconnaître les symboles de la République française." }
+        ] },
+        { "code": "AP", "label": "Arts plastiques", "notions": [
+          { "theme": "Pratiques", "notion": "Dessiner et peindre pour exprimer une idée", "attendu": "Utiliser le geste, la forme et la couleur pour produire et exprimer." },
+          { "theme": "Pratiques", "notion": "Modeler et construire en volume", "attendu": "Assembler, modeler et transformer des matières." },
+          { "theme": "Pratiques", "notion": "Composer avec les formes et les couleurs", "attendu": "Organiser des formes et des couleurs dans une composition simple." },
+          { "theme": "Regard", "notion": "Observer et parler des œuvres visitées ou montrées", "attendu": "Décrire une image ou une œuvre avec ses mots." }
+        ] },
+        { "code": "MU", "label": "Éducation musicale", "notions": [
+          { "theme": "Chanter", "notion": "Chanter des comptines et chansons en ensemble", "attendu": "Chanter une comptine avec une juste intonation et l'ensemble de la classe." },
+          { "theme": "Écouter", "notion": "Écouter et reconnaître des musiques et des bruits", "attendu": "Comparer et décrire des musiques écoutées." },
+          { "theme": "Rythme", "notion": "Frapper et reproduire des rythmes simples", "attendu": "Reproduire une formule rythmique simple." }
+        ] },
+        { "code": "EPS", "label": "Éducation physique et sportive", "notions": [
+          { "theme": "Activités", "notion": "Courir, sauter, lancer", "attendu": "Adapter courir, sauter et lancer à son environnement." },
+          { "theme": "Activités", "notion": "Se déplacer et contrôler son corps (équilibre, escalade légère)", "attendu": "Se déplacer avec équilibre et contrôler sa motricité." },
+          { "theme": "Activités", "notion": "Rouler et glisser (initiation)", "attendu": "Découvrir des mouvements sur roues ou sur glisse dans un cadre sécurisé." },
+          { "theme": "Jeux", "notion": "Jouer et coopérer aux jeux collectifs", "attendu": "Coopérer, accepter les règles et faire de son mieux dans les jeux collectifs." },
+          { "theme": "Éfforts", "notion": "Respirer, se relâcher, gérer l'effort", "attendu": "Apprivoiser la respiration et la récupération après l'effort." }
+        ] }
+      ]
+    },
+    {
+      "code": "CE1",
+      "cycle": 2,
+      "matieres": [
+        { "code": "FR", "label": "Français", "notions": [
+          { "theme": "Lecture", "notion": "Lire des phrases et de courts textes avec fluidité", "attendu": "Lire à voix haute avec fluidité un texte du niveau attendu." },
+          { "theme": "Lecture", "notion": "Comprendre un texte : retrouver les informations explicites", "attendu": "Répondre à des questions sur un texte à partir des informations du texte." },
+          { "theme": "Écriture", "notion": "Écrire un petit récit ou une scène courte", "attendu": "Produire un court écrit cohérent et lisible." },
+          { "theme": "Écriture", "notion": "L'écriture cursive et le soin du cahier", "attendu": "Écrire de façon cursive et soignée." },
+          { "theme": "Orthographe", "notion": "Orthographe des mots usuels et dictée de mots", "attendu": "Écrire correctement les mots usuels mémorisés." },
+          { "theme": "Orthographe", "notion": "Le pluriel du nom et du verbe", "attendu": "Accorder au pluriel le nom et le verbe." },
+          { "theme": "Grammaire", "notion": "Le verbe au présent de l'indicatif", "attendu": "Conjuguer au présent les verbes usuels." },
+          { "theme": "Grammaire", "notion": "Le nom, le déterminant, l'adjectif", "attendu": "Identifier le nom, son déterminant et l'adjectif dans le groupe nominal." },
+          { "theme": "Grammaire", "notion": "La phrase types : déclarative, interrogative, exclamative", "attendu": "Reconnaître et produire les types de phrases." },
+          { "theme": "Orthographe grammaticale", "notion": "Homophones simples : et/est, son/sont", "attendu": "Distinguer et écrire correctement les homophones fréquents." },
+          { "theme": "Vocabulaire", "notion": "Lexique : mots de la même famille, ordres et sens", "attendu": "Regrouper les mots par famille et les organiser par champ." },
+          { "theme": "Oral", "notion": "Lire à voix haute avec intonation, raconter une histoire", "attendu": "Lire un texte et le raconter avec une voix adaptée." }
+        ] },
+        { "code": "MA", "label": "Mathématiques", "notions": [
+          { "theme": "Nombres et calcul", "notion": "Nombres jusqu'à 1000 : lire, écrire, comparer", "attendu": "Manipuler les nombres jusqu'à 1 000 (lecture, écriture, comparaison)." },
+          { "theme": "Nombres et calcul", "notion": "Addition posée en colonnes (avec retenue)", "attendu": "Poser et réussir une addition avec retenue." },
+          { "theme": "Nombres et calcul", "notion": "Soustraction posée en colonnes", "attendu": "Poser et réussir une soustraction simple." },
+          { "theme": "Nombres et calcul", "notion": "Tables de multiplication : 2, 5, 10 (et début des autres)", "attendu": "Connaître les tables étudiées et les utiliser pour calculer." },
+          { "theme": "Nombres et calcul", "notion": "Doubles, moitiés et compléments à 20", "attendu": "Mémoriser les compléments à 20, doubles et moitiés." },
+          { "theme": "Grandeurs et mesures", "notion": "La monnaie : euros et centimes", "attendu": "Utiliser la monnaie pour échanger et comparer des prix." },
+          { "theme": "Grandeurs et mesures", "notion": "Mesurer : mètres, litres, kilogrammes", "attendu": "Comparer et mesurer avec les unités usuelles (longueur, capacité, masse)." },
+          { "theme": "Grandeurs et mesures", "notion": "Le calendrier, la date et les durées", "attendu": "Lire un calendrier, écrire une date et estimer des durées." },
+          { "theme": "Espace et géométrie", "notion": "Quadrillage et repérage sur une grille", "attendu": "Se repérer sur un quadrillage et y coder des déplacements." },
+          { "theme": "Espace et géométrie", "notion": "Droites, angles droits et polygones", "attendu": "Reconnaître et tracer des droites, angles droits et polygones usuels." },
+          { "theme": "Espace et géométrie", "notion": "Partager : moitié et quart", "attendu": "Partager une quantité en moitiés et en quarts." },
+          { "theme": "Problèmes", "notion": "Problèmes à une étape (addition, soustraction, partage)", "attendu": "Résoudre et rédiger des problèmes simples du champ additif et multiplicatif." }
+        ] },
+        { "code": "QM", "label": "Questionner le monde", "notions": [
+          { "theme": "Le vivant", "notion": "Le vivant : naissance, croissance et besoins", "attendu": "Décrire le développement des êtres vivants et leurs besoins." },
+          { "theme": "Le vivant", "notion": "Les animaux et leurs habitats", "attendu": "Relier les animaux à leurs milieux de vie." },
+          { "theme": "Le vivant", "notion": "Les végétaux : graines, plantation, croissance", "attendu": "Observer la germination et la croissance des végétaux." },
+          { "theme": "Le vivant", "notion": "Le corps : squelette, digestion, hygiène et alimentation", "attendu": "Situer les grandes fonctions du corps et adopter une hygiène de vie." },
+          { "theme": "Matière et mouvement", "notion": "Les matériaux : naturels et artificiels", "attendu": "Comparer des matériaux et leurs usages." },
+          { "theme": "Matière et mouvement", "notion": "Les transports et les déplacements", "attendu": "Décrire des moyens de transport et la sécurité des déplacements." },
+          { "theme": "Espace et temps", "notion": "Ma ville ou mon village, ses métiers", "attendu": "Décrire son environnement et les métiers qui l'entourent." },
+          { "theme": "Espace et temps", "notion": "Se repérer dans le temps : avant, actuellement, après", "attendu": "Situer les événements dans le temps (ordre, durée)." },
+          { "theme": "Démarche", "notion": "Observer, questionner, expérimenter et conclure", "attendu": "Mener une petite enquête scientifique guidée." }
+        ] },
+        { "code": "EMC", "label": "Enseignement moral et civique", "notions": [
+          { "theme": "Vivre ensemble", "notion": "Égalité filles-garçons, respect des différences", "attendu": "Comprendre l'égalité entre les élèves et le respect des différences." },
+          { "theme": "Vivre ensemble", "notion": "Refuser les violences et les insultes", "attendu": "Identifier la violence et savoir demander de l'aide." },
+          { "theme": "Responsabilité", "notion": "Prendre soin des objets et des espaces partagés", "attendu": "Participer au rangement et à l'entretien des espaces communs." },
+          { "theme": "Citoyenneté", "notion": "Repères de la République : symboles et devise", "attendu": "Connaître les symboles de la République française." },
+          { "theme": "Écologie", "notion": "Respecter la nature et l'environnement", "attendu": "Adopter des gestes respectueux de l'environnement." }
+        ] },
+        { "code": "AP", "label": "Arts plastiques", "notions": [
+          { "theme": "Pratiques", "notion": "Dessiner, peindre, photographier pour exprimer", "attendu": "Diversifier les gestes et les techniques pour exprimer une intention." },
+          { "theme": "Pratiques", "notion": "Assembler et transformer des matières", "attendu": "Construire et transformer un volume avec des matières variées." },
+          { "theme": "Regard", "notion": "Décrire et comparer des œuvres", "attendu": "Décrire une image ou une œuvre et la mettre en relation." }
+        ] },
+        { "code": "MU", "label": "Éducation musicale", "notions": [
+          { "theme": "Chanter", "notion": "Chanter des chansons du répertoire en ensemble", "attendu": "Chanter en justesse et en rythme avec l'ensemble." },
+          { "theme": "Écouter", "notion": "Écouter, comparer et décrire des musiques", "attendu": "Distinguer des caractères de musiques et les décrire." },
+          { "theme": "Rythme", "notion": "Reproduire des formules rythmiques", "attendu": "Reproduire et inventer une formule rythmique simple." }
+        ] },
+        { "code": "EPS", "label": "Éducation physique et sportive", "notions": [
+          { "theme": "Activités", "notion": "Courir vite, sauter loin, lancer loin", "attendu": "Agir avec plus d'efficacité dans les gestes athlétiques." },
+          { "theme": "Activités", "notion": "Équilibre et escalade légère", "attendu": "Évoluer avec équilibre sur des parcours variés." },
+          { "theme": "Activités", "notion": "Rouler et glisser", "attendu": "Développer sa motricité sur roues ou glisse." },
+          { "theme": "Jeux", "notion": "Jouer aux jeux collectifs avec règles", "attendu": "Coopérer et respecter les règles des jeux collectifs." },
+          { "theme": "Échelle", "notion": "Nager (aquatisme, selon disponibilité)", "attendu": "S'immerger et se déplacer dans l'eau en sécurité." }
+        ] }
+      ]
+    },
+    {
+      "code": "CE2",
+      "cycle": 2,
+      "matieres": [
+        { "code": "FR", "label": "Français", "notions": [
+          { "theme": "Conjugaison", "notion": "Présent, futur, imparfait des verbes usuels", "attendu": "Conjuguer au présent, futur et imparfait les verbes usuels." },
+          { "theme": "Orthographe", "notion": "Accords sujet-verbe et adjectif-nom", "attendu": "Accorder correctement le verbe et l'adjectif avec le sujet ou le nom." },
+          { "theme": "Orthographe", "notion": "Homophones : sa/ça, ou/où, ce/cet/cette", "attendu": "Écrire correctement les homophones usuels." },
+          { "theme": "Orthographe", "notion": "Les accents et l'orthographe lexicale", "attendu": "Écrire avec accents corrects les mots usuels mémorisés." },
+          { "theme": "Écriture", "notion": "Rédiger un petit récit avec début et fin", "attendu": "Produire un récit court cohérent avec début et fin." },
+          { "theme": "Écriture", "notion": "Les paragraphes et les connecteurs simples", "attendu": "Organiser son texte en paragraphes reliés par des connecteurs." },
+          { "theme": "Lecture", "notion": "Compréhension : idée principale d'un paragraphe", "attendu": "Identifier l'idée principale et les informations essentielles." },
+          { "theme": "Lecture", "notion": "Lire des textes de genres différents (conte, documentaire)", "attendu": "Lire et comparer des textes de genres différents." },
+          { "theme": "Lecture", "notion": "Poésie et mémorisation", "attendu": "Mémoriser un poème et le réciter avec expression." },
+          { "theme": "Étude de la langue", "notion": "Le verbe et son sujet, le groupe nominal", "attendu": "Analyser les groupes de la phrase simple." },
+          { "theme": "Écriture", "notion": "Le brouillon et la réécriture", "attendu": "Utiliser un brouillon et corriger son texte." },
+          { "theme": "Oral", "notion": "Présenter un objet ou un livre à la classe", "attendu": "Présenter clairement un objet ou un livre à ses camarades." }
+        ] },
+        { "code": "MA", "label": "Mathématiques", "notions": [
+          { "theme": "Nombres et calcul", "notion": "Nombres jusqu'à 10 000", "attendu": "Lire, écrire, comparer et décomposer les nombres jusqu'à 10 000." },
+          { "theme": "Nombres et calcul", "notion": "Tables de multiplication de 2 à 9", "attendu": "Connaître les tables de multiplication de 2 à 9 par cœur." },
+          { "theme": "Nombres et calcul", "notion": "Multiplication posée (par un chiffre)", "attendu": "Effectuer une multiplication posée par un nombre à un chiffre." },
+          { "theme": "Nombres et calcul", "notion": "Division par partage avec reste", "attendu": "Effectuer une division simple avec reste." },
+          { "theme": "Nombres et calcul", "notion": "Nombres décimaux : découverte de la virgule", "attendu": "Comprendre la position de la virgule dans un nombre décimal." },
+          { "theme": "Nombres et calcul", "notion": "Fractions simples : moitié, quart, tiers", "attendu": "Comprendre et représenter les fractions simples." },
+          { "theme": "Grandeurs et mesures", "notion": "Le périmètre du carré et du rectangle", "attendu": "Calculer le périmètre de figures usuelles." },
+          { "theme": "Grandeurs et mesures", "notion": "Heures, minutes et durées", "attendu": "Lire l'heure à la minute et calculer des durées simples." },
+          { "theme": "Grandeurs et mesures", "notion": "Conversions simples de longueur et de masse", "attendu": "Convertir des unités simples de longueur et de masse." },
+          { "theme": "Problèmes", "notion": "Problèmes à une ou deux étapes", "attendu": "Résoudre des problèmes à une ou deux étapes et expliquer son choix." },
+          { "theme": "Espace et géométrie", "notion": "Reproduire une figure au compas ou à la règle", "attendu": "Reproduire une figure géométrique avec les instruments." },
+          { "theme": "Espace et géométrie", "notion": "L'axe de symétrie et les figures symétriques", "attendu": "Identifier l'axe de symétrie d'une figure et construire son symétrique." }
+        ] },
+        { "code": "HG", "label": "Histoire et géographie", "notions": [
+          { "theme": "Histoire", "notion": "La préhistoire : les premiers hommes", "attendu": "Situer la préhistoire et décrire la vie des premiers hommes." },
+          { "theme": "Histoire", "notion": "L'Égypte antique : les pharaons et le Nil", "attendu": "Décrire l'Égypte antique et ses monuments." },
+          { "theme": "Histoire", "notion": "La Gaule et les Romains", "attendu": "Décrire la Gaule romaine et les apports de la romanisation." },
+          { "theme": "Géographie", "notion": "Les continents et les océans", "attendu": "Situer les continents et les océans sur un globe." },
+          { "theme": "Géographie", "notion": "La France : villes et campagnes", "attendu": "Décrire la France : grandes régions, villes et campagnes." },
+          { "theme": "Éduc. aux médias", "notion": "Se repérer sur une carte de France", "attendu": "Situer sa commune et les grandes régions sur une carte." },
+          { "theme": "Éduc. aux médias", "notion": "Lire une carte simple (légende, échelle)", "attendu": "Comprendre une carte simple avec sa légende." },
+          { "theme": "Mémoire", "notion": "Monuments et fêtes : la mémoire du pays", "attendu": "Identifier les monuments et les fêtes qui portent la mémoire du pays." }
+        ] },
+        { "code": "ST", "label": "Sciences et technologie", "notions": [
+          { "theme": "Le vivant", "notion": "Le corps : digestion et squelette", "attendu": "Décrire les grands organes et les fonctions du corps étudiées." },
+          { "theme": "Le vivant", "notion": "Les plantes : germination et croissance", "attendu": "Suivre la croissance d'une plante et en décrire les conditions." },
+          { "theme": "Le vivant", "notion": "Animaux et chaînes alimentaires", "attendu": "Relier les êtres vivants par une chaîne alimentaire." },
+          { "theme": "Matière", "notion": "États de l'eau : gel, glace, vapeur", "attendu": "Décrire les changements d'état de l'eau." },
+          { "theme": "Matière", "notion": "L'air qui nous entoure", "attendu": "Constater la présence et le rôle de l'air." },
+          { "theme": "Planète Terre", "notion": "Volcans et tremblements de terre", "attendu": "Décrire des phénomènes géologiques spectaculaires." },
+          { "theme": "Technologie", "notion": "Produire et consommer : d'où viennent les objets", "attendu": "Suivre le parcours d'un objet de la matière première au produit fini." },
+          { "theme": "Technologie", "notion": "Observer avec une loupe ou un microscope", "attendu": "Utiliser des instruments d'observation et décrire ce qu'on voit." }
+        ] },
+        { "code": "EMC", "label": "Enseignement moral et civique", "notions": [
+          { "theme": "Vivre ensemble", "notion": "La démocratie dans la classe : votes et décisions partagées", "attendu": "Participer à une décision collective par le vote." },
+          { "theme": "Respect", "notion": "Respecter les autres dans la classe et à la récréation", "attendu": "Adopter un respect effectif des camarades et des adultes." },
+          { "theme": "Égalité", "notion": "Refuser la discrimination et les moqueries", "attendu": "Identifier et refuser les comportements discriminatoires." },
+          { "theme": "Sécurité", "notion": "Les numéros d'urgence et les gestes de secours", "attendu": "Connaître les numéros d'urgence et les gestes simples de premiers secours." },
+          { "theme": "Repères", "notion": "Les symboles de la République et du pays", "attendu": "Connaître les symboles et leur signification." }
+        ] },
+        { "code": "AP", "label": "Arts plastiques", "notions": [
+          { "theme": "Pratiques", "notion": "Produire avec plusieurs techniques (dessin, collage, photo)", "attendu": "Combiner plusieurs techniques pour créer." },
+          { "theme": "Pratiques", "notion": "Le dessin d'observation et le croquis", "attendu": "Observer objectivement et dessiner ce qu'on voit." },
+          { "theme": "Regard", "notion": "Œuvres et musées : décrire, interpréter", "attendu": "Décrire une œuvre et proposer une interprétation." }
+        ] },
+        { "code": "MU", "label": "Éducation musicale", "notions": [
+          { "theme": "Chanter", "notion": "Chanter en collectif avec expressivité", "attendu": "Chanter un répertoire varié avec expressivité." },
+          { "theme": "Écouter", "notion": "Comparer des musiques de styles différents", "attendu": "Comparer des musiques et repérer leurs caractères." },
+          { "theme": "Rythme", "notion": "Inventer des rythmes et utiliser la percussion", "attendu": "Créer une formule rythmique et la jouer." }
+        ] },
+        { "code": "EPS", "label": "Éducation physique et sportive", "notions": [
+          { "theme": "Activités", "notion": "Athlétisme : courir, sauter, lancer avec précision", "attendu": "Progresser dans les gestes athlétiques mesurés." },
+          { "theme": "Activités", "notion": "Gymnastique : rouler, sauter, tenir", "attendu": "Réussir des éléments simples de gymnastique en sécurité." },
+          { "theme": "Activités", "notion": "Natation / aquatisme", "attendu": "Progresser dans les apprentissages aquatiques (selon disponibilité)." },
+          { "theme": "Jeux", "notion": "Jeux collectifs : stratégie et coopération", "attendu": "Jouer collectivement avec un projet commun et respecter les rôles." },
+          { "theme": "Activités", "notion": "Danses et expressions collectives", "attendu": "Participer à une danse collective ou à une expression corporelle." }
+        ] }
+      ]
+    },
+    {
+      "code": "CM1",
+      "cycle": 3,
+      "matieres": [
+        { "code": "FR", "label": "Français", "notions": [
+          { "theme": "Conjugaison", "notion": "Imparfait, passé simple et futur des verbes courants", "attendu": "Conjuguer les verbes usuels à l'imparfait, au passé simple et au futur." },
+          { "theme": "Conjugaison", "notion": "Avoir et être : présent, passé et futur", "attendu": "Connaître les temps usuels des verbes avoir et être." },
+          { "theme": "Orthographe", "notion": "Les accords dans le groupe nominal", "attendu": "Accorder le nom, adjectif et déterminant dans le groupe nominal." },
+          { "theme": "Grammaire", "notion": "Groupe sujet et groupe verbe", "attendu": "Identifier les groupes de la phrase et leur fonction." },
+          { "theme": "Grammaire", "notion": "Les natures : nom, verbe, adjectif, pronom", "attendu": "Classer les mots par nature et les reconnaître." },
+          { "theme": "Orthographe", "notion": "Homophones : a/à, la/là, on/on n'", "attendu": "Écrire correctement les homophones fréquents." },
+          { "theme": "Orthographe", "notion": "Ponctuation et phrases simples et complexes", "attendu": "Utiliser la ponctuation et reconnaître phrase simple et phrase complexe." },
+          { "theme": "Écriture", "notion": "Écrire un récit avec description", "attendu": "Produire un récit comportant une description cohérente." },
+          { "theme": "Écriture", "notion": "Les figures de style premières : la comparaison", "attendu": "Reconnaître et employer une comparaison." },
+          { "theme": "Lecture", "notion": "Comprendre un texte long par parties", "attendu": "Lire et comprendre un texte long en le découpant en parties." },
+          { "theme": "Vocabulaire", "notion": "Préfixes, suffixes et familles de mots", "attendu": "Former et décomposer des mots avec préfixes et suffixes." },
+          { "theme": "Orthographe", "notion": "Dictée préparée et dictée flash", "attendu": "Réussir diverses formes de dictée au niveau attendu." },
+          { "theme": "Oral", "notion": "Présenter un livre ou un document", "attendu": "Présenter à l'oral un livre ou un document avec clarté." }
+        ] },
+        { "code": "MA", "label": "Mathématiques", "notions": [
+          { "theme": "Nombres", "notion": "Nombres décimaux : lire, comparer, placer sur la droite", "attendu": "Utiliser les nombres décimaux jusqu'au millième." },
+          { "theme": "Nombres", "notion": "Fractions : équivalentes, comparaison", "attendu": "Comparer et manipuler les fractions simples." },
+          { "theme": "Calcul", "notion": "Addition et soustraction de décimaux", "attendu": "Poser et réussir des opérations sur les décimaux." },
+          { "theme": "Calcul", "notion": "Multiplication posée à deux chiffres", "attendu": "Multiplier par un nombre à deux chiffres." },
+          { "theme": "Calcul", "notion": "Division : quotient décimal", "attendu": "Calculer le quotient décimal d'une division simple." },
+          { "theme": "Espace et géométrie", "notion": "Angles : mesure avec le rapporteur", "attendu": "Mesurer et tracer des angles avec le rapporteur." },
+          { "theme": "Espace et géométrie", "notion": "Droites parallèles et perpendiculaires", "attendu": "Reconnaître et tracer droites parallèles et perpendiculaires." },
+          { "theme": "Espace et géométrie", "notion": "Aire des rectangles et des triangles", "attendu": "Calculer l'aire de rectangles et de triangles." },
+          { "theme": "Espace et géométrie", "notion": "Symétrie axiale : figures symétriques", "attendu": "Construire le symétrique d'une figure par rapport à un axe." },
+          { "theme": "Organisation", "notion": "Tableaux, graphiques et pourcentages simples", "attendu": "Lire et produire des tableaux, graphiques et pourcentages simples." },
+          { "theme": "Problèmes", "notion": "Problèmes à plusieurs étapes", "attendu": "Résoudre des problèmes complexes en plusieurs étapes." }
+        ] },
+        { "code": "HG", "label": "Histoire-Géographie", "notions": [
+          { "theme": "Histoire", "notion": "Les premiers hommes et la préhistoire", "attendu": "Situer les grandes étapes de la préhistoire." },
+          { "theme": "Histoire", "notion": "L'Égypte et la Mésopotamie : les premières civilisations", "attendu": "Décrire les premières civilisations et leurs écritures." },
+          { "theme": "Histoire", "notion": "La Grèce antique : Athènes, démocratie, mythes", "attendu": "Décrire la Grèce antique et ses idées." },
+          { "theme": "Histoire", "notion": "Rome : de la République à l'Empire", "attendu": "Situer la Rome antique et son empire." },
+          { "theme": "Histoire", "notion": "Les Francs et Charlemagne", "attendu": "Décrire le royaume franc et l'empire de Charlemagne." },
+          { "theme": "Géographie", "notion": "La France : reliefs, fleuves et climats", "attendu": "Décrire la France physique et ses climats." },
+          { "theme": "Géographie", "notion": "Les communes et les villages de France", "attendu": "Comprendre l'organisation du territoire français." },
+          { "theme": "Compétences", "notion": "Se repérer : méridiens, parallèles, échelle", "attendu": "Utiliser latitude, longitude et échelles sur une carte." },
+          { "theme": "Compétences", "notion": "Lire et légender une carte", "attendu": "Compléter et lire une carte avec sa légende." }
+        ] },
+        { "code": "ST", "label": "Sciences et technologie", "notions": [
+          { "theme": "Mouvement", "notion": "Le mouvement et la vitesse", "attendu": "Décrire et comparer des mouvements et des vitesses." },
+          { "theme": "Électricité", "notion": "Circuits électriques simples", "attendu": "Réaliser un circuit fermé et expliquer ses composants." },
+          { "theme": "Technologie", "notion": "Les machines simples (levier, poulie)", "attendu": "Comprendre le principe des machines simples." },
+          { "theme": "Le vivant", "notion": "Respiration et circulation du sang", "attendu": "Décrire la respiration et la circulation." },
+          { "theme": "Le vivant", "notion": "Chaînes alimentaires et écosystèmes", "attendu": "Construire une chaîne alimentaire et décrire un écosystème." },
+          { "theme": "Matière", "notion": "Mélanges et changements d'état", "attendu": "Réaliser des mélanges et décrire les changements d'état." },
+          { "theme": "Ciel", "notion": "Le ciel et la Terre : le cycle du jour", "attendu": "Expliquer le jour et la nuit par la rotation de la Terre." },
+          { "theme": "Énergie", "notion": "L'énergie : sources et gaspillage", "attendu": "Identifier les sources d'énergie et les usages raisonnés." }
+        ] },
+        { "code": "EMC", "label": "Enseignement moral et civique", "notions": [
+          { "theme": "Citoyenneté", "notion": "Les institutions de la République : l'école, la mairie", "attendu": "Comprendre l'organisation locale et le rôle des institutions." },
+          { "theme": "Liberté", "notion": "La liberté d'expression et ses limites", "attendu": "Exercer sa liberté d'expression avec respect." },
+          { "theme": "Égalité", "notion": "L'égalité et la lutte contre les discriminations", "attendu": "Comprendre le principe d'égalité et s'opposer aux discriminations." },
+          { "theme": "Sécurité", "notion": "Gestes de premiers secours et prévention", "attendu": "Connaître des gestes de secours et la prévention des risques." },
+          { "theme": "Numérique", "notion": "Les données personnelles et la vie privée", "attendu": "Protéger ses informations personnelles sur Internet." }
+        ] },
+        { "code": "LVA", "label": "Anglais", "notions": [
+          { "theme": "Oral", "notion": "Se présenter et parler de sa famille", "attendu": "Présenter ses proches avec des phrases simples." },
+          { "theme": "Oral", "notion": "Les couleurs, les nombres et les jours", "attendu": "Utiliser couleurs, nombres et jours dans des échanges courts." },
+          { "theme": "Oral", "notion": "Classroom English : les mots de la classe", "attendu": "Comprendre les consignes et le vocabulaire de la classe." },
+          { "theme": "Oral", "notion": "Poser et répondre à des questions simples", "attendu": "Poser une question et en recevoir une." },
+          { "theme": "Écoute", "notion": "Comprendre des consignes et des dialogues courts", "attendu": "Écouter et comprendre des dialogues courts." },
+          { "theme": "Culture", "notion": "Les fêtes britanniques et américaines", "attendu": "Connaître des fêtes anglophones et leurs traditions." }
+        ] },
+        { "code": "AP", "label": "Arts plastiques", "notions": [
+          { "theme": "Pratiques", "notion": "Créer avec des techniques mixtes", "attendu": "Associer des techniques et des matières pour créer." },
+          { "theme": "Pratiques", "notion": "Le croquis, la perspective simple", "attendu": "Représenter de façon réaliste avec des techniques simples." },
+          { "theme": "Regard", "notion": "Analyser des œuvres du patrimoine", "attendu": "Comparer des œuvres et en dégager les caractères." }
+        ] },
+        { "code": "MU", "label": "Éducation musicale", "notions": [
+          { "theme": "Chanter", "notion": "Chant polyphonique ou à deux voix simples", "attendu": "Chanter à deux voix ou avec des nuances." },
+          { "theme": "Écouter", "notion": "Repérer les instruments et les familles de l'orchestre", "attendu": "Identifier les instruments et les familles sonores." },
+          { "theme": "Création", "notion": "Créer une courte séquence musicale", "attendu": "Composer une petite séquence rythmique ou mélodique." }
+        ] },
+        { "code": "EPS", "label": "Éducation physique et sportive", "notions": [
+          { "theme": "Activités", "notion": "Athlétisme : performance mesurée", "attendu": "S'entraîner pour progresser en courir, sauter, lancer." },
+          { "theme": "Activités", "notion": "Natation (selon disponibilité)", "attendu": "Développer les habiletés aquatiques essentielles." },
+          { "theme": "Jeux", "notion": "Jeux collectifs : rôle et coopération", "attendu": "Assumer un rôle dans un jeu collectif et coopérer." },
+          { "theme": "Activités", "notion": "Gymnastique et acrobaties", "attendu": "Réaliser des éléments gymniques en sécurité." },
+          { "theme": "Expression", "notion": "Danse et art du cirque (initiation)", "attendu": "Participer à une production collective artistique." }
+        ] }
+      ]
+    },
+    {
+      "code": "CM2",
+      "cycle": 3,
+      "matieres": [
+        { "code": "FR", "label": "Français", "notions": [
+          { "theme": "Conjugaison", "notion": "Imparfait et passé simple à toutes les personnes", "attendu": "Conjuguer les verbes d'usage courant à l'imparfait et au passé simple." },
+          { "theme": "Conjugaison", "notion": "Temps composés : passé composé, plus-que-parfait, futur antérieur", "attendu": "Reconnaître et employer les temps composés usuels." },
+          { "theme": "Grammaire", "notion": "Adjectifs possessifs et démonstratifs", "attendu": "Employer correctement les déterminants possessifs et démonstratifs." },
+          { "theme": "Grammaire", "notion": "Voix active et voix passive", "attendu": "Transformer une phrase de la voix active à la voix passive." },
+          { "theme": "Orthographe", "notion": "Homophones : et/est, ce/ces, s'est/c'est", "attendu": "Écrire correctement les homophones usuels de l'écrit." },
+          { "theme": "Orthographe", "notion": "Mots invariables et accords particuliers", "attendu": "Maîtriser les mots invariables usuels." },
+          { "theme": "Écriture", "notion": "Écrire des récits longs (conte, aventure)", "attendu": "Produire un récit structuré et varié." },
+          { "theme": "Écriture", "notion": "Rédiger un dialogue", "attendu": "Inscrire un dialogue correctement ponctué dans un récit." },
+          { "theme": "Écriture", "notion": "Les connecteurs logiques : d'abord, ensuite, enfin", "attendu": "Organiser un texte avec des connecteurs logiques." },
+          { "theme": "Lecture", "notion": "Comprendre un texte long : inférences et thèmes", "attendu": "Déduire des informations implicites et situer un thème." },
+          { "theme": "Vocabulaire", "notion": "Champ lexical, synonymes et antonymes", "attendu": "Enrichir son lexique avec des champs et des relations de sens." },
+          { "theme": "Oral", "notion": "Exposer et débattre à l'oral", "attendu": "Présenter et défendre une idée à l'oral." }
+        ] },
+        { "code": "MA", "label": "Mathématiques", "notions": [
+          { "theme": "Nombres", "notion": "Décimaux : addition, soustraction, multiplication", "attendu": "Effectuer les opérations sur les nombres décimaux." },
+          { "theme": "Nombres", "notion": "Fractions : addition et multiplication", "attendu": "Opérer sur les fractions simples et comprendre leur sens." },
+          { "theme": "Calcul", "notion": "Multiplier et diviser par 10, 100, 1000", "attendu": "Calculer rapidement avec les puissances de dix." },
+          { "theme": "Proportionnalité", "notion": "Tableaux de proportionnalité et pourcentages", "attendu": "Résoudre des problèmes de proportionnalité et de pourcentages." },
+          { "theme": "Espace et géométrie", "notion": "Aires et périmètres : triangle, disque", "attendu": "Calculer des aires et périmètres de figures usuelles." },
+          { "theme": "Espace et géométrie", "notion": "Volumes : cube et pavé droit", "attendu": "Calculer le volume des solides usuels." },
+          { "theme": "Espace et géométrie", "notion": "Constructions : angles, figures droites", "attendu": "Construire une figure avec les instruments et les angles connus." },
+          { "theme": "Espace et géométrie", "notion": "Symétrie et translation", "attendu": "Utiliser la symétrie et la translation pour déplacer des figures." },
+          { "theme": "Espace et géométrie", "notion": "Échelles et plans", "attendu": "Utiliser une échelle pour lire et produire des plans." },
+          { "theme": "Organisation", "notion": "Moyennes simples", "attendu": "Calculer et interpréter une moyenne." },
+          { "theme": "Problèmes", "notion": "Problèmes de conversion et problèmes complexes", "attendu": "Résoudre des problèmes nécessitant conversions et plusieurs étapes." }
+        ] },
+        { "code": "HG", "label": "Histoire-Géographie", "notions": [
+          { "theme": "Histoire", "notion": "La Révolution française : 1789 et les idées nouvelles", "attendu": "Raconter la Révolution française et ses principes." },
+          { "theme": "Histoire", "notion": "Napoléon et l'Empire", "attendu": "Décrire l'épopée napoléonienne et ses conséquences." },
+          { "theme": "Histoire", "notion": "Le XIXe siècle : la révolution industrielle", "attendu": "Décrire la révolution industrielle et ses transformations." },
+          { "theme": "Histoire", "notion": "La Troisième République : l'école, le droit de vote", "attendu": "Comprendre les grandes lois et la démocratie française." },
+          { "theme": "Histoire", "notion": "Les deux guerres mondiales vues par les objets et les sources", "attendu": "Approcher les deux guerres mondiales par des sources." },
+          { "theme": "Géographie", "notion": "L'Europe : pays, capitales et drapeaux", "attendu": "Situer les pays et capitales européennes." },
+          { "theme": "Géographie", "notion": "La France : zones, climats, paysages", "attendu": "Comparer les zones et paysages français." },
+          { "theme": "Compétences", "notion": "Les cartes : légende, orientation, échelle", "attendu": "Lire une carte et produire une légende ordonnée." },
+          { "theme": "Géographie", "notion": "Les flux et les routes du commerce", "attendu": "Décrire les échanges mondiaux et leurs routes." }
+        ] },
+        { "code": "ST", "label": "Sciences et technologie", "notions": [
+          { "theme": "Ciel", "notion": "Le système solaire : planètes et distances", "attendu": "Situer les planètes et comprendre les distances astronomiques." },
+          { "theme": "Ciel", "notion": "La gravité et les mouvements dans le ciel", "attendu": "Comprendre la gravité et les mouvements des astres." },
+          { "theme": "Électricité", "notion": "Électricité : circuits et conducteurs", "attendu": "Comprendre le principe du circuit et distinguer conducteur et isolant." },
+          { "theme": "Énergie", "notion": "Sources d'énergie : renouvelables et fossiles", "attendu": "Comparer les sources d'énergie et leurs impacts." },
+          { "theme": "Le vivant", "notion": "La reproduction des êtres vivants", "attendu": "Décrire la reproduction sexuée et le cycle de vie." },
+          { "theme": "Le vivant", "notion": "Puberté et changements du corps", "attendu": "Décrire les transformations de la puberté avec vocabulaire adapté." },
+          { "theme": "Méthode", "notion": "Méthode scientifique : question, expérience, conclusion", "attendu": "Conduire une expérience et en rédiger la conclusion." },
+          { "theme": "Écologie", "notion": "Pollution et développement durable", "attendu": "Analyser les pollutions et les gestes durables." }
+        ] },
+        { "code": "EMC", "label": "Enseignement moral et civique", "notions": [
+          { "theme": "Institutions", "notion": "Les institutions de la République française", "attendu": "Comprendre les grands rôles du président, du Parlement et des lois." },
+          { "theme": "Liberté", "notion": "La laïcité et le respect des croyances", "attendu": "Comprendre la laïcité et le respect des convictions." },
+          { "theme": "Égalité", "notion": "Lutte contre les discriminations et les stéréotypes", "attendu": "Identifier et combattre les stéréotypes." },
+          { "theme": "Numérique", "notion": "Identité numérique et respect des autres en ligne", "attendu": "Protéger son identité numérique et respecter les autres sur Internet." },
+          { "theme": "Participation", "notion": "Participer à la vie du collège et de la classe", "attendu": "Participer à des projets et des votes dans la classe." }
+        ] },
+        { "code": "LVA", "label": "Anglais", "notions": [
+          { "theme": "Grammaire", "notion": "Présent simple et présent continu", "attendu": "Utiliser les deux présents pour décrire des actions." },
+          { "theme": "Oral", "notion": "Poser des questions aux mots interrogatifs (wh-)", "attendu": "Poser des questions variées avec les mots interrogatifs." },
+          { "theme": "Oral", "notion": "Décrire une journée et sa routine", "attendu": "Décrire une journée en anglais avec horaires." },
+          { "theme": "Vocabulaire", "notion": "Les aliments et la santé", "attendu": "Parler des aliments et de la santé en anglais." },
+          { "theme": "Expression", "notion": "Exprimer ses goûts : like, love, hate", "attendu": "Exprimer ses préférences en anglais." },
+          { "theme": "Écrit", "notion": "Lire un texte court et répondre aux questions", "attendu": "Comprendre un texte court et y répondre." },
+          { "theme": "Écrit", "notion": "Rédiger une lettre simple à un correspondant", "attendu": "Écrire une lettre simple en anglais." }
+        ] },
+        { "code": "AP", "label": "Arts plastiques", "notions": [
+          { "theme": "Pratiques", "notion": "Créer une œuvre 2D ou 3D à partir d'une intention", "attendu": "Concevoir et conduire un projet plastique." },
+          { "theme": "Pratiques", "notion": "Portrait, paysage et composition", "attendu": "Composer un portrait ou un paysage avec intention." },
+          { "theme": "Regard", "notion": "Œuvres et musées : analyse et comparaison", "attendu": "Analyser une œuvre avec le vocabulaire approprié." }
+        ] },
+        { "code": "MU", "label": "Éducation musicale", "notions": [
+          { "theme": "Chanter", "notion": "Chant polyphonique et interprétation", "attendu": "Chanter à plusieurs voix avec interprétation." },
+          { "theme": "Écouter", "notion": "Reconnaître les grandes périodes musicales", "attendu": "Relier des musiques à leurs époques." },
+          { "theme": "Création", "notion": "Composer une séquence et l'enregistrer", "attendu": "Créer et produire une courte séquence musicale." }
+        ] },
+        { "code": "EPS", "label": "Éducation physique et sportive", "notions": [
+          { "theme": "Activités", "notion": "Athlétisme : performance et progression", "attendu": "Progresser au fil des leçons en athlétisme." },
+          { "theme": "Activités", "notion": "Natation : nage et endurance", "attendu": "Nager une distance continue (selon disponibilité)." },
+          { "theme": "Jeux", "notion": "Jeux collectifs et sports d'équipe (hand, basket)", "attendu": "Pratiquer un sport collectif avec des rôles précis." },
+          { "theme": "Activités", "notion": "Gymnastique : enchaînements", "attendu": "Réaliser un enchaînement gymnique complet." },
+          { "theme": "Expression", "notion": "Danse et création artistique", "attendu": "Participer à une expression artistique collective." }
+        ] }
+      ]
+    },
+    {
+      "code": "6e",
+      "cycle": 3,
+      "matieres": [
+        { "code": "FR", "label": "Français", "notions": [
+          { "theme": "Lecture", "notion": "Lire et comprendre un texte long (récit, documentaire)", "attendu": "Lire de façon autonome et comprendre un texte long." },
+          { "theme": "Lecture", "notion": "Récit d'aventure : structure et personnages", "attendu": "Analyser la structure d'un récit d'aventure." },
+          { "theme": "Lecture", "notion": "Bande dessinée et lecture d'images", "attendu": "Lire un récit en images et une bande dessinée." },
+          { "theme": "Écriture", "notion": "Écrire un récit à la 1re ou à la 3e personne", "attendu": "Produire un récit cohérent avec un point de vue stable." },
+          { "theme": "Écriture", "notion": "Résumé et description", "attendu": "Résumer un texte et écrire une description précise." },
+          { "theme": "Grammaire", "notion": "Analyse grammaticale : sujet, attribut, complément", "attendu": "Analyser les fonctions principales de la phrase." },
+          { "theme": "Grammaire", "notion": "Discours direct et indirect", "attendu": "Transformer le discours direct en discours indirect." },
+          { "theme": "Orthographe", "notion": "Accord du participe passé avec être", "attendu": "Accorder le participe passé avec être." },
+          { "theme": "Vocabulaire", "notion": "Préfixes, suffixes et radicaux", "attendu": "Décomposer et former des mots à partir de radicaux." },
+          { "theme": "Oral", "notion": "Dire et mémoriser un texte à voix haute", "attendu": "Mémoriser et réciter avec expression." }
+        ] },
+        { "code": "MA", "label": "Mathématiques", "notions": [
+          { "theme": "Nombres", "notion": "Nombres décimaux : opérations", "attendu": "Effectuer les quatre opérations sur les décimaux." },
+          { "theme": "Nombres", "notion": "Fractions : simplifier, comparer, additionner", "attendu": "Simplifier, comparer et additionner des fractions." },
+          { "theme": "Nombres", "notion": "Division euclidienne et quotient", "attendu": "Effectuer la division euclidienne et comprendre le quotient." },
+          { "theme": "Calcul", "notion": "Proportionnalité : tableaux et pourcentages", "attendu": "Utiliser le tableau de proportionnalité et les pourcentages." },
+          { "theme": "Espace et géométrie", "notion": "Symétrie axiale et centrale", "attendu": "Construire symétriques d'axe et de centre." },
+          { "theme": "Espace et géométrie", "notion": "Périmètres et aires des figures usuelles", "attendu": "Calculer périmètres et aires." },
+          { "theme": "Espace et géométrie", "notion": "Droite, demi-droite et segment : notations", "attendu": "Utiliser les notations géométriques correctes." },
+          { "theme": "Espace et géométrie", "notion": "Le cercle et les constructions au compas", "attendu": "Construire des figures avec compas et règles." },
+          { "theme": "Repérage", "notion": "Repérage sur la droite graduée et dans le plan", "attendu": "Se repérer sur une droite graduée et dans un plan quadrillé." },
+          { "theme": "Organisation", "notion": "Organiser son raisonnement et son calcul", "attendu": "Rédiger une solution en expliquant les étapes." }
+        ] },
+        { "code": "HG", "label": "Histoire-Géographie", "notions": [
+          { "theme": "Histoire", "notion": "La longue histoire de l'humanité : migrations et écriture", "attendu": "Situer l'invention de l'écriture et les grandes migrations humaines." },
+          { "theme": "Histoire", "notion": "Les premières civilisations : Mésopotamie, Égypte", "attendu": "Décrire les premières civilisations et leurs institutions." },
+          { "theme": "Histoire", "notion": "Récits fondateurs et citoyenneté dans la Méditerranée antique", "attendu": "Comparer des récits fondateurs et comprendre la citoyenneté antique." },
+          { "theme": "Histoire", "notion": "L'empreinte des mondes antiques : Grèce et Rome", "attendu": "Situer les apports de la Grèce et de la Rome antique." },
+          { "theme": "Histoire", "notion": "L'empreinte de l'Église dans la France médiévale", "attendu": "Décrire le rôle de l'Église au Moyen Âge." },
+          { "theme": "Géographie", "notion": "Habiter une métropole", "attendu": "Décrire la vie dans une grande métropole mondiale." },
+          { "theme": "Géographie", "notion": "Habiter les littoraux et les espaces de faible densité", "attendu": "Comparer les zones habitées selon leur densité." },
+          { "theme": "Géographie", "notion": "Les populations du monde et leurs inégalités", "attendu": "Repérer les grandes zones de peuplement." },
+          { "theme": "Compétences", "notion": "Lire des cartes à échelles différentes", "attendu": "Passer d'une carte à l'autre et choisir l'échelle utile." }
+        ] },
+        { "code": "EMC", "label": "Enseignement moral et civique", "notions": [
+          { "theme": "Identité", "notion": "L'adolescence : changer de corps et d'identité", "attendu": "Comprendre les transformations et la construction de soi." },
+          { "theme": "Liberté", "notion": "La liberté d'expression : droit et responsabilité", "attendu": "Exercer sa parole en respectant les autres." },
+          { "theme": "Égalité", "notion": "Refuser les discriminations et l'exclusion", "attendu": "Comprendre et s'opposer aux discriminations." },
+          { "theme": "Numérique", "notion": "Identité numérique et traces en ligne", "attendu": "Gérer sa présence en ligne et ses traces." },
+          { "theme": "Institutions", "notion": "Les institutions de la République (sensibilisation)", "attendu": "Connaître les grandes institutions et leur rôle." },
+          { "theme": "Participation", "notion": "Participer à la vie collective du collège", "attendu": "Prendre part aux projets et aux décisions collectives." }
+        ] },
+        { "code": "SVT", "label": "Sciences de la vie et de la Terre", "notions": [
+          { "theme": "Le vivant", "notion": "La cellule : unité du vivant", "attendu": "Observer une cellule et comprendre sa rôle d'unité." },
+          { "theme": "Le vivant", "notion": "Organisation et classification des êtres vivants", "attendu": "Classer les êtres vivants par critères simples." },
+          { "theme": "Le vivant", "notion": "Relations entre organismes et milieu", "attendu": "Décrire les relations entre un être vivant et son milieu." },
+          { "theme": "Écologie", "notion": "Champ et réseau trophiques", "attendu": "Construire un réseau trophique dans un écosystème simple." },
+          { "theme": "Environnement", "notion": "L'eau : ressource et cycle", "attendu": "Décrire le cycle de l'eau et son usage." }
+        ] },
+        { "code": "PC", "label": "Physique-Chimie", "notions": [
+          { "theme": "Matière", "notion": "L'eau : mélange et états", "attendu": "Décrire des mélanges et les états de l'eau." },
+          { "theme": "Matière", "notion": "Les changements d'état : fusion, vaporisation", "attendu": "Expliquer les changements d'état et les représenter." },
+          { "theme": "Électricité", "notion": "Le circuit électrique simple", "attendu": "Réaliser un circuit fermé et identifier ses composants." },
+          { "theme": "Électricité", "notion": "Conducteurs et isolants", "attendu": "Distinguer conducteur et isolant et en donner des exemples." },
+          { "theme": "Optique", "notion": "La lumière : sources et propagation", "attendu": "Décrire la propagation rectiligne et distinguer source et objet." },
+          { "theme": "Optique", "notion": "Ombres et miroirs", "attendu": "Construire une ombre et une image simple." }
+        ] },
+        { "code": "TE", "label": "Technologie", "notions": [
+          { "theme": "Informatique", "notion": "L'ordinateur : matériel, système, fichiers", "attendu": "Décrire le matériel et organiser ses fichiers." },
+          { "theme": "Informatique", "notion": "Données : organiser, trier, chercher", "attendu": "Utiliser un tableur pour organiser et trier des données." },
+          { "theme": "Objets", "notion": "Machines et objets techniques : comment ça marche", "attendu": "Décrire le fonctionnement d'un objet technique simple." },
+          { "theme": "Numérique", "notion": "Énergie et objets connectés", "attendu": "Comparer des objets selon leur consommation et leur connectivité." }
+        ] },
+        { "code": "LVA", "label": "Anglais", "notions": [
+          { "theme": "Oral", "notion": "Réviser le présent et les questions", "attendu": "Converser au présent et poser des questions." },
+          { "theme": "Oral", "notion": "Parler de son école et de son emploi du temps", "attendu": "Décrire son école et ses horaires en anglais." },
+          { "theme": "Vocabulaire", "notion": "La famille et la maison", "attendu": "Décrire sa famille et sa maison avec le vocabulaire adapté." },
+          { "theme": "Écrit", "notion": "Rédiger une carte postale simple", "attendu": "Écrire une carte postale correcte et courte." },
+          { "theme": "Culture", "notion": "Découvrir le monde anglophone", "attendu": "Situer quelques pays anglophones et leurs repères." }
+        ] },
+        { "code": "ESP", "label": "Espagnol (initiation)", "notions": [
+          { "theme": "Oral", "notion": "Se présenter et saluer en espagnol", "attendu": "Présenter et saluer en espagnol de façon simple." },
+          { "theme": "Vocabulaire", "notion": "Les couleurs, la famille, les nombres", "attendu": "Utiliser couleurs, famille, nombres dans une phrase simple." },
+          { "theme": "Oral", "notion": "Poser des questions simples", "attendu": "Poser des questions simples en espagnol." },
+          { "theme": "Culture", "notion": "Découvrir l'Espagne et le monde hispanophone", "attendu": "Situer l'Espagne et quelques pays hispanophones." }
+        ] },
+        { "code": "AP", "label": "Arts plastiques", "notions": [
+          { "theme": "Pratiques", "notion": "Créer à partir d'une problématique (image, objet, espace)", "attendu": "Conduire un projet plastique avec une intention annoncée." },
+          { "theme": "Pratiques", "notion": "Le dessin et la perspective", "attendu": "Représenter en volume par la perspective simple." },
+          { "theme": "Regard", "notion": "Analyser des œuvres et les situer dans leur époque", "attendu": "Relier une œuvre à son contexte." }
+        ] },
+        { "code": "MU", "label": "Éducation musicale", "notions": [
+          { "theme": "Chanter", "notion": "Chanter à deux voix et avec interprétation", "attendu": "Chanter à deux voix avec justesse." },
+          { "theme": "Écouter", "notion": "Repérer les grandes périodes et les genres musicaux", "attendu": "Situer une musique dans une époque ou un genre." },
+          { "theme": "Création", "notion": "Créer une séquence musicale avec des outils numériques", "attendu": "Composer en utilisant un outil de création musicale." }
+        ] },
+        { "code": "EPS", "label": "Éducation physique et sportive", "notions": [
+          { "theme": "Activités", "notion": "Athlétisme et courses", "attendu": "Progresser en performance et endurance." },
+          { "theme": "Activités", "notion": "Natation (selon disponibilité)", "attendu": "Nager en sécurité sur une distance connue." },
+          { "theme": "Jeux", "notion": "Sports collectifs : rôles et tactique", "attendu": "Jouer un match avec des rôles et un projet tactique simple." },
+          { "theme": "Activités", "notion": "Gymnastique et escalade légère", "attendu": "Réussir des éléments gymniques et s'ancrer en sécurité." },
+          { "theme": "Expression", "notion": "Danse ou cirque (initiation)", "attendu": "Participer à une création artistique physique." }
+        ] }
+      ]
+    },
+    {
+      "code": "5e",
+      "cycle": 4,
+      "matieres": [
+        { "code": "FR", "label": "Français", "notions": [
+          { "theme": "Lecture", "notion": "Récit et personnage : le caractériser", "attendu": "Analyser un personnage et son évolution." },
+          { "theme": "Lecture", "notion": "Le théâtre : textes, dialogues, didascalies", "attendu": "Lire une scène de théâtre et comprendre ses codes." },
+          { "theme": "Lecture", "notion": "Sens propre et sens figuré", "attendu": "Distinguer sens propre et figuré et utiliser les images." },
+          { "theme": "Grammaire", "notion": "Les subordonnées relatives", "attendu": "Identifier et employer une relative avec son pronom." },
+          { "theme": "Grammaire", "notion": "La construction des compléments", "attendu": "Reconnaître et classer les compléments de la phrase." },
+          { "theme": "Voix narratives", "notion": "Analyser un récit par les voix narratives", "attendu": "Distinguer narrateur et point de vue." },
+          { "theme": "Écriture", "notion": "Écrire une scène de théâtre", "attendu": "Produire une scène conforme aux codes du théâtre." },
+          { "theme": "Écriture", "notion": "Argumenter : thèse et arguments", "attendu": "Construire un paragraphe argumenté simple." },
+          { "theme": "Vocabulaire", "notion": "Étymologie et lexique du récit", "attendu": "Comprendre les mots par leur étymologie et leur emploi." },
+          { "theme": "Oral", "notion": "Dire un texte et débattre", "attendu": "Réciter et participer à un débat." }
+        ] },
+        { "code": "MA", "label": "Mathématiques", "notions": [
+          { "theme": "Nombres", "notion": "Nombres relatifs et écritures fractionnaires", "attendu": "Opérer sur les relatifs et les fractions." },
+          { "theme": "Calcul", "notion": "Calcul littéral : développer et réduire", "attendu": "Développer et réduire des expressions simples." },
+          { "theme": "Espace et géométrie", "notion": "Le théorème de Pythagore et sa réciproque", "attendu": "Utiliser Pythagore pour calculer et vérifier." },
+          { "theme": "Proportionnalité", "notion": "Échelles, pourcentages et vitesses", "attendu": "Appliquer proportionnalité, échelles et vitesses." },
+          { "theme": "Organisation", "notion": "Statistiques : moyenne et diagrammes", "attendu": "Lire et produire des statistiques avec moyenne." },
+          { "theme": "Espace et géométrie", "notion": "Volumes : prisme et cylindre", "attendu": "Calculer les volumes de prisme et de cylindre." },
+          { "theme": "Espace et géométrie", "notion": "Symétrie centrale et translations", "attendu": "Utiliser symétrie centrale et translation pour transformer des figures." },
+          { "theme": "Calcul", "notion": "Égalités remarquables simples", "attendu": "Utiliser les identités remarquables simples (a+b)² et (a-b)²." },
+          { "theme": "Problèmes", "notion": "Problèmes de vitesse et de proportionnalité", "attendu": "Résoudre des problèmes de vitesse et de proportionnalité." }
+        ] },
+        { "code": "HG", "label": "Histoire-Géographie", "notions": [
+          { "theme": "Histoire", "notion": "Le monde musulman médiéval", "attendu": "Décrire l'expansion et la civilisation de l'Islam médiéval." },
+          { "theme": "Histoire", "notion": "Byzance et l'Europe de l'Est", "attendu": "Situer Byzance et son empire." },
+          { "theme": "Histoire", "notion": "La chrétienté, l'Église et les croisades", "attendu": "Décrire la chrétienté médiévale et les croisades." },
+          { "theme": "Histoire", "notion": "Les royaumes et la féodalité en Europe de l'Ouest", "attendu": "Comprendre la société féodale et ses relations." },
+          { "theme": "Histoire", "notion": "La Renaissance et les grandes découvertes", "attendu": "Décrire la Renaissance et les explorations." },
+          { "theme": "Histoire", "notion": "Les guerres de religion en France", "attendu": "Situer les guerres de religion et l'édit de Nantes." },
+          { "theme": "Géographie", "notion": "Habiter les littoraux et les zones touristiques", "attendu": "Décrire la vie en littoral et ses tensions." },
+          { "theme": "Géographie", "notion": "Les ressources et les risques naturels", "attendu": "Relier ressources, risques et sociétés." },
+          { "theme": "Géographie", "notion": "La France : espaces urbains et ruraux", "attendu": "Comparer espaces urbains et ruraux français." }
+        ] },
+        { "code": "EMC", "label": "Enseignement moral et civique", "notions": [
+          { "theme": "Citoyenneté", "notion": "Droits de l'enfant et protection", "attendu": "Connaître les droits de l'enfant et savoir demander de l'aide." },
+          { "theme": "Liberté", "notion": "La liberté d'expression et ses limites légales", "attendu": "Comprendre les limites de la liberté d'expression." },
+          { "theme": "Égalité", "notion": "L'égalité femme-homme et le respect", "attendu": "Promouvoir l'égalité et le respect entre élèves." },
+          { "theme": "Numérique", "notion": "Cybersécurité et harcèlement en ligne", "attendu": "Prévenir le cyberharcèlement et protéger ses données." },
+          { "theme": "Institutions", "notion": "Les institutions de la République et les élections", "attendu": "Comprendre les élections et les institutions." }
+        ] },
+        { "code": "SVT", "label": "Sciences de la vie et de la Terre", "notions": [
+          { "theme": "Le vivant", "notion": "Respiration et circulation du sang", "attendu": "Expliquer les échanges respiratoires et la circulation." },
+          { "theme": "Le vivant", "notion": "Digestion et nutrition", "attendu": "Décrire la digestion et les besoins alimentaires." },
+          { "theme": "Le vivant", "notion": "La reproduction humaine et la puberté", "attendu": "Comprendre la puberté et la reproduction avec sobriété." },
+          { "theme": "Écologie", "notion": "Écosystèmes et chaînes alimentaires", "attendu": "Analyser un écosystème et ses équilibres." }
+        ] },
+        { "code": "PC", "label": "Physique-Chimie", "notions": [
+          { "theme": "Matière", "notion": "L'eau : solvant et dissolution", "attendu": "Décrire les solutions et la dissolution." },
+          { "theme": "Matière", "notion": "Molécules et atomes", "attendu": "Comprendre la structure moléculaire des composés simples." },
+          { "theme": "Électricité", "notion": "Circuits en série et en dérivation", "attendu": "Réaliser et analyser circuits série et dérivation." },
+          { "theme": "Électricité", "notion": "La tension et le volt", "attendu": "Mesurer une tension avec un voltmètre." },
+          { "theme": "Optique", "notion": "Lentilles et verres", "attendu": "Comprendre la focalisation par une lentille." },
+          { "theme": "Acoustique", "notion": "La propagation du son", "attendu": "Expliquer la propagation et la perception du son." }
+        ] },
+        { "code": "TE", "label": "Technologie", "notions": [
+          { "theme": "Design", "notion": "Concevoir et prototyper un objet", "attendu": "Conduire un cycle de design simple avec prototype." },
+          { "theme": "Programmation", "notion": "Algorithmes et programmation graphique", "attendu": "Écrire un algorithme simple et le programmer." },
+          { "theme": "Numérique", "notion": "Les objets connectés et leurs usages", "attendu": "Analyser un objet connecté et ses données." },
+          { "theme": "Énergie", "notion": "Les énergies et leurs transformations", "attendu": "Suivre une chaîne d'énergie dans un objet." }
+        ] },
+        { "code": "LVA", "label": "Anglais", "notions": [
+          { "theme": "Grammaire", "notion": "Prétérit simple et narration au passé", "attendu": "Raconter un événement passé au prétérit." },
+          { "theme": "Grammaire", "notion": "Les quantités : some, much, many", "attendu": "Utiliser les quantités avec le vocabulaire adapté." },
+          { "theme": "Oral", "notion": "Exprimer la possession", "attendu": "Exprimer la possession de façon correcte." },
+          { "theme": "Oral", "notion": "Décrire des personnes et des lieux", "attendu": "Décrire des lieux et des personnes avec précision." },
+          { "theme": "Écrit", "notion": "Écrire une histoire courte", "attendu": "Rédiger une courte histoire passée en anglais." }
+        ] },
+        { "code": "ESP", "label": "Espagnol", "notions": [
+          { "theme": "Oral", "notion": "Se présenter et décrire son entourage", "attendu": "Présenter sa vie et ses proches en espagnol." },
+          { "theme": "Vocabulaire", "notion": "Les couleurs, la famille, les nombres jusqu'à 100", "attendu": "Utiliser couleurs, famille et nombres dans des échanges." },
+          { "theme": "Oral", "notion": "Poser et répondre à des questions simples", "attendu": "Enchaîner question et réponse de façon claire." },
+          { "theme": "Écrit", "notion": "Rédiger une fiche d'identité", "attendu": "Rédiger une fiche d'identité correcte." },
+          { "theme": "Culture", "notion": "Découvrir les pays hispanophones", "attendu": "Situer les principaux pays hispanophones." }
+        ] },
+        { "code": "AP", "label": "Arts plastiques", "notions": [
+          { "theme": "Pratiques", "notion": "Créer avec un choix contraint (matière, geste, format)", "attendu": "S'exprimer dans un cadre contraint et l'assumer." },
+          { "theme": "Pratiques", "notion": "Espace, volume et installation", "attendu": "Construire une installation ou une réalisation en volume." },
+          { "theme": "Regard", "notion": "Analyser une œuvre et son contexte artistique", "attendu": "Rattacher une œuvre à un mouvement ou une époque." }
+        ] },
+        { "code": "MU", "label": "Éducation musicale", "notions": [
+          { "theme": "Chanter", "notion": "Chant polyphonique et interprétation avancée", "attendu": "Chanter à plusieurs voix avec nuances." },
+          { "theme": "Écouter", "notion": "Comparer des musiques du monde", "attendu": "Comparer des musiques de cultures diverses." },
+          { "theme": "Création", "notion": "Créer et produire avec un outil numérique", "attendu": "Produire une création musicale numérique." }
+        ] },
+        { "code": "EPS", "label": "Éducation physique et sportive", "notions": [
+          { "theme": "Activités", "notion": "Athlétisme : courses et sauts", "attendu": "Progresser mesurément en athlétisme." },
+          { "theme": "Activités", "notion": "Natation et nage sportive", "attendu": "Nager durablement en sécurité." },
+          { "theme": "Jeux", "notion": "Sports collectifs : tactique et rôles", "attendu": "Participer à un match avec un rôle précis." },
+          { "theme": "Activités", "notion": "Gymnastique et acrosport", "attendu": "Réaliser et enchaîner des figures en groupe." },
+          { "theme": "Expression", "notion": "Danse et expression corporelle", "attendu": "Produire une chorégraphie collective courte." }
+        ] }
+      ]
+    },
+    {
+      "code": "4e",
+      "cycle": 4,
+      "matieres": [
+        { "code": "FR", "label": "Français", "notions": [
+          { "theme": "Lecture", "notion": "L'essai et l'article : comprendre un point de vue", "attendu": "Relever thèse et arguments d'un essai ou d'un article." },
+          { "theme": "Argumentation", "notion": "Thèse, arguments, exemples", "attendu": "Construire une argumentation structurée avec exemples." },
+          { "theme": "Grammaire", "notion": "Les subordonnées conjonctives", "attendu": "Identifier et employer les subordonnées conjonctives." },
+          { "theme": "Grammaire", "notion": "Les voix et les modes : conditionnel, subjonctif", "attendu": "Utiliser conditionnel et subjonctif dans des phrases correctes." },
+          { "theme": "Grammaire", "notion": "La phrase complexe : coordonnées et propositions", "attendu": "Analyser et produire des phrases complexes." },
+          { "theme": "Lecture", "notion": "Le théâtre du XVIIe siècle et ses codes", "attendu": "Lire une œuvre théâtrale et ses conventions." },
+          { "theme": "Écriture", "notion": "Écrire un article ou un essai argumenté", "attendu": "Produire un écrit argumenté structuré." },
+          { "theme": "Vocabulaire", "notion": "Champs lexicaux et polysémie", "attendu": "Organiser le lexique par champ et comprendre la polysémie." },
+          { "theme": "Lecture", "notion": "Lecture cursive et carnets de lecture", "attendu": "Lire une œuvre longue et tenir un carnet de lecture." },
+          { "theme": "Oral", "notion": "Débattre à l'oral d'une question", "attendu": "Débattre en respectant les règles du débat." }
+        ] },
+        { "code": "MA", "label": "Mathématiques", "notions": [
+          { "theme": "Nombres", "notion": "Nombres rationnels : opérations et comparaison", "attendu": "Opérer sur les rationnels et les comparer." },
+          { "theme": "Calcul", "notion": "Calcul littéral : factorisation et équations simples", "attendu": "Factoriser une expression et résoudre une équation simple." },
+          { "theme": "Espace et géométrie", "notion": "Pythagore dans les problèmes", "attendu": "Utiliser Pythagore pour résoudre des problèmes de distance." },
+          { "theme": "Espace et géométrie", "notion": "Le théorème de Thalès et sa réciproque", "attendu": "Utiliser Thalès dans les configurations simples." },
+          { "theme": "Proportionnalité", "notion": "Coefficients et pourcentages de variation", "attendu": "Utiliser coefficient et pourcentages dans des problèmes." },
+          { "theme": "Organisation", "notion": "Statistiques : moyenne, médiane, étendue", "attendu": "Calculer moyenne, médiane et étendue d'une série." },
+          { "theme": "Espace et géométrie", "notion": "Aires et volumes : pyramide et cône", "attendu": "Calculer aires et volumes des solides étudiés." },
+          { "theme": "Espace et géométrie", "notion": "Translations et vecteurs", "attendu": "Construire une translation par vecteur." },
+          { "theme": "Espace et géométrie", "notion": "Angles inscrits et tangentes", "attendu": "Utiliser les propriétés des angles inscrits et des tangentes." },
+          { "theme": "Problèmes", "notion": "Problèmes de vitesse et de pourcentage", "attendu": "Résoudre des problèmes mixtes de vitesse et de pourcentage." }
+        ] },
+        { "code": "HG", "label": "Histoire-Géographie", "notions": [
+          { "theme": "Histoire", "notion": "L'Europe des empires et des royaumes (XVIe-XVIIIe)", "attendu": "Situer l'Europe des empires et ses tensions." },
+          { "theme": "Histoire", "notion": "Les Lumières et les idées nouvelles", "attendu": "Comprendre les idées des Lumières et leurs héritages." },
+          { "theme": "Histoire", "notion": "La Révolution française et l'Empire", "attendu": "Expliquer les grandes étapes de la Révolution et de l'Empire." },
+          { "theme": "Histoire", "notion": "Le XIXe siècle : révolutions industrielles", "attendu": "Décrire la révolution industrielle et ses enjeux." },
+          { "theme": "Histoire", "notion": "La colonisation et les empires coloniaux", "attendu": "Analyser la colonisation et ses justifications." },
+          { "theme": "Géographie", "notion": "Les villes et l'urbanisation", "attendu": "Analyser l'urbanisation et ses effets." },
+          { "theme": "Géographie", "notion": "La mondialisation : échanges et entreprises", "attendu": "Comprendre la mondialisation par exemples concrets." },
+          { "theme": "Géographie", "notion": "Les migrations et les conflits", "attendu": "Expliquer les migrations contemporaines et leurs causes." },
+          { "theme": "Compétences", "notion": "Analyser des documents et cartes complexes", "attendu": "Analyser un document ou une carte et en tirer des informations." }
+        ] },
+        { "code": "EMC", "label": "Enseignement moral et civique", "notions": [
+          { "theme": "Liberté", "notion": "La liberté de conscience et la laïcité", "attendu": "Comprendre la liberté de conscience et la laïcité." },
+          { "theme": "Démocratie", "notion": "Les élections et la démocratie en France", "attendu": "Comprendre le vote et les élections." },
+          { "theme": "Égalité", "notion": "L'égalité des droits et la lutte contre les discriminations", "attendu": "Comprendre l'égalité des droits et s'opposer aux discriminations." },
+          { "theme": "Numérique", "notion": "Les traces numériques et la protection des données", "attendu": "Gérer ses données et son identité en ligne." },
+          { "theme": "Engagement", "notion": "S'engager : associations, projets collectifs", "attendu": "Participer à un projet ou une association." }
+        ] },
+        { "code": "SVT", "label": "Sciences de la vie et de la Terre", "notions": [
+          { "theme": "Le vivant", "notion": "La reproduction et l'hérédité", "attendu": "Comprendre la reproduction sexuée et la transmission des caractères." },
+          { "theme": "Le vivant", "notion": "Les écosystèmes anthropisés", "attendu": "Analyser un écosystème et son impact humain." },
+          { "theme": "Santé", "notion": "L'immunité et les défenses du corps", "attendu": "Décrire le système immunitaire et le rôle des vaccins." },
+          { "theme": "Terre", "notion": "La tectonique des plaques", "attendu": "Expliquer la tectonique des plaques et ses conséquences." },
+          { "theme": "Terre", "notion": "Les roches et le cycle géologique", "attendu": "Classer les roches et comprendre leur cycle." }
+        ] },
+        { "code": "PC", "label": "Physique-Chimie", "notions": [
+          { "theme": "Optique", "notion": "La lumière : lentilles et focalisation", "attendu": "Utiliser lentilles et miroirs pour comprendre la focalisation." },
+          { "theme": "Électricité", "notion": "Les lois de l'électricité : unicité et additivité", "attendu": "Utiliser les lois des circuits en série et en dérivation." },
+          { "theme": "Électricité", "notion": "La résistance et ses lois", "attendu": "Comprendre le rôle de la résistance dans un circuit." },
+          { "theme": "Chimie", "notion": "La réaction chimique et son équation", "attendu": "Écrire et équilibrer une réaction simple." },
+          { "theme": "Chimie", "notion": "Les métaux et leur réactivité", "attendu": "Comparer la réactivité des métaux courants." },
+          { "theme": "Chimie", "notion": "Acides et bases : le pH", "attendu": "Mesurer le pH d'une solution et le classer." },
+          { "theme": "Matière", "notion": "Atomes, ions et molécules", "attendu": "Distinguer atome, ion et molécule par leurs modèles." }
+        ] },
+        { "code": "TE", "label": "Technologie", "notions": [
+          { "theme": "Design", "notion": "Cycle de conception d'un objet technique", "attendu": "Conduire un cycle complet de conception." },
+          { "theme": "Programmation", "notion": "Algorithme et programmation (Scratch ou Python)", "attendu": "Écrire et tester un programme simple avec boucles et conditions." },
+          { "theme": "Objets", "notion": "Capteurs et automatisation", "attendu": "Utiliser un capteur pour automatiser un comportement." },
+          { "theme": "Numérique", "notion": "Données et tableur : analyser des données", "attendu": "Traiter des données avec un tableur et des formules." },
+          { "theme": "Numérique", "notion": "Les objets connectés et l'IoT", "attendu": "Comprendre la connectivité et les usages des objets." }
+        ] },
+        { "code": "LVA", "label": "Anglais", "notions": [
+          { "theme": "Grammaire", "notion": "Le present perfect et l'expérience", "attendu": "Utiliser le present perfect pour parler d'expériences." },
+          { "theme": "Oral", "notion": "Exprimer une opinion et débattre", "attendu": "Défendre une opinion en anglais de façon argumentée." },
+          { "theme": "Vocabulaire", "notion": "Le vocabulaire des médias et de la technologie", "attendu": "Employer le lexique des médias et du numérique." },
+          { "theme": "Écrit", "notion": "Rédiger un article ou un avis motivé", "attendu": "Écrire un article clair avec un avis motivé." },
+          { "theme": "Culture", "notion": "Les mondes anglophones : diversité et repères", "attendu": "Situer plusieurs mondes anglophones et leurs repères." }
+        ] },
+        { "code": "ESP", "label": "Espagnol", "notions": [
+          { "theme": "Grammaire", "notion": "Le passé composé (pretérito perfecto)", "attendu": "Utiliser le passé composé en espagnol." },
+          { "theme": "Oral", "notion": "Décrire des souvenirs et des événements passés", "attendu": "Raconter un souvenir en espagnol." },
+          { "theme": "Oral", "notion": "Exprimer des goûts et des projets", "attendu": "Exprimer goûts et projets de façon claire." },
+          { "theme": "Vocabulaire", "notion": "La ville et les déplacements", "attendu": "Utiliser le vocabulaire urbain et les directions." },
+          { "theme": "Écrit", "notion": "Rédiger une lettre informelle", "attendu": "Écrire une lettre informelle correcte." }
+        ] },
+        { "code": "AP", "label": "Arts plastiques", "notions": [
+          { "theme": "Pratiques", "notion": "Créer et détourner : l'image et son sens", "attendu": "Détourner une image pour en changer le sens." },
+          { "theme": "Pratiques", "notion": "La série et la variation", "attendu": "Produire une série et la justifier." },
+          { "theme": "Regard", "notion": "Œuvres et mouvements : analyse critiquée", "attendu": "Analyser et critiquer une œuvre avec le vocabulaire approprié." }
+        ] },
+        { "code": "MU", "label": "Éducation musicale", "notions": [
+          { "theme": "Chanter", "notion": "Chant à plusieurs voix et expression", "attendu": "Interpréter un chant à plusieurs voix." },
+          { "theme": "Écouter", "notion": "Musiques et cinéma : repérage des fonctions", "attendu": "Relier une musique à son rôle dans un film." },
+          { "theme": "Création", "notion": "Produire une création musicale numérique", "attendu": "Créer et enregistrer une pièce musicale." }
+        ] },
+        { "code": "EPS", "label": "Éducation physique et sportive", "notions": [
+          { "theme": "Activités", "notion": "Athlétisme et endurance", "attendu": "Progresser en endurance et en performance." },
+          { "theme": "Activités", "notion": "Natation : techniques et endurance", "attendu": "Nager de façon efficace et régulière." },
+          { "theme": "Jeux", "notion": "Sports collectifs : tactique et projet de jeu", "attendu": "Contribuer à un projet de jeu collectif." },
+          { "theme": "Activités", "notion": "Gymnastique et acrosport", "attendu": "Réaliser des pyramides et des enchaînements." },
+          { "theme": "Expression", "notion": "Danse et production artistique", "attendu": "Créer et présenter une chorégraphie." }
+        ] }
+      ]
+    },
+    {
+      "code": "3e",
+      "cycle": 4,
+      "matieres": [
+        { "code": "FR", "label": "Français", "notions": [
+          { "theme": "Oral", "notion": "Le débat et l'argumentation orale", "attendu": "Débattre à l'oral avec des arguments construits." },
+          { "theme": "Lecture", "notion": "Écrire une prise de position argumentée", "attendu": "Rédiger une prise de position claire et structurée." },
+          { "theme": "Figures de style", "notion": "Métaphore, métonymie, hyperbole", "attendu": "Reconnaître et employer les figures de style avancées." },
+          { "theme": "Versification", "notion": "Alexandrins, rimes et strophes", "attendu": "Analyser un poème et sa versification." },
+          { "theme": "Narration", "notion": "Les voix narratives et la focalisation", "attendu": "Analyser le point de vue d'un récit." },
+          { "theme": "Vocabulaire", "notion": "Connotation et registres de langue", "attendu": "Employer connotation et registres adaptés au contexte." },
+          { "theme": "Lecture", "notion": "L'essai, la lettre ouverte et la pétition", "attendu": "Lire et comprendre un texte d'opinion." },
+          { "theme": "Lecture", "notion": "Lire des œuvres complètes et débattre", "attendu": "Lire une œuvre intégrale et en parler en classe." },
+          { "theme": "Écriture", "notion": "Préparer l'oral et le brevet : méthodologie", "attendu": "Conduire un exposé ou une analyse argumentée de façon méthodique." },
+          { "theme": "Oral", "notion": "Dire un texte avec expression et clarté", "attendu": "Réciter et lire à voix haute avec maîtrise." }
+        ] },
+        { "code": "MA", "label": "Mathématiques", "notions": [
+          { "theme": "Nombres", "notion": "Racines carrées et simplification", "attendu": "Calculer et simplifier des racines carrées." },
+          { "theme": "Calcul", "notion": "Équations et inéquations simples", "attendu": "Résoudre des équations et inéquations simples." },
+          { "theme": "Espace et géométrie", "notion": "Le théorème de Thalès et sa réciproque", "attendu": "Utiliser Thalès dans des configurations complexes." },
+          { "theme": "Espace et géométrie", "notion": "La trigonométrie et les rapports", "attendu": "Utiliser cosinus, sinus et tangente dans le triangle rectangle." },
+          { "theme": "Fonctions", "notion": "Fonctions linéaires et affines", "attendu": "Définir et représenter fonctions linéaires et affines." },
+          { "theme": "Fonctions", "notion": "Représentation graphique et coefficient", "attendu": "Lire et tracer une droite dans le plan représentant une fonction." },
+          { "theme": "Organisation", "notion": "Statistiques : moyenne, médiane, quartiles", "attendu": "Analyser une série statistique complète." },
+          { "theme": "Probabilités", "notion": "Probabilités et arbres simples", "attendu": "Calculer une probabilité simple et utiliser un arbre." },
+          { "theme": "Espace et géométrie", "notion": "Volumes : pyramide, cône, sphère", "attendu": "Calculer les volumes des solides étudiés." },
+          { "theme": "Espace et géométrie", "notion": "Vecteurs et translation", "attendu": "Utiliser les vecteurs pour décrire et construire des translations." },
+          { "theme": "Problèmes", "notion": "Préparer le brevet : méthodologie et raisonnement", "attendu": "Rédiger une solution complète et rigoureuse." }
+        ] },
+        { "code": "HG", "label": "Histoire-Géographie", "notions": [
+          { "theme": "Histoire", "notion": "La révolution industrielle au XIXe siècle", "attendu": "Décrire la révolution industrielle et ses conséquences." },
+          { "theme": "Histoire", "notion": "Les conquêtes et la colonisation", "attendu": "Analyser la colonisation et ses conséquences." },
+          { "theme": "Histoire", "notion": "La Première Guerre mondiale", "attendu": "Comprendre la guerre totale et ses conséquences." },
+          { "theme": "Histoire", "notion": "L'entre-deux-guerres : crises et extrémismes", "attendu": "Expliquer les crises et la montée des extrémismes." },
+          { "theme": "Histoire", "notion": "La Seconde Guerre mondiale et la Shoah", "attendu": "Analyser la guerre et la Shoah avec rigueur et respect." },
+          { "theme": "Histoire", "notion": "La France depuis 1945 : Ve République et société", "attendu": "Décrire la France d'après-guerre et ses institutions." },
+          { "theme": "Géographie", "notion": "La mondialisation : circulations, réseaux, acteurs", "attendu": "Expliquer les flux mondiaux et leurs acteurs." },
+          { "theme": "Géographie", "notion": "Les inégalités et le développement durable", "attendu": "Analyser les inégalités de développement et les enjeux durables." },
+          { "theme": "Géographie", "notion": "L'Union européenne et la France", "attendu": "Situer la France dans l'Union européenne et ses politiques." },
+          { "theme": "Compétences", "notion": "Étude de documents : préparation du brevet", "attendu": "Analyser un ensemble de documents et présenter une synthèse." }
+        ] },
+        { "code": "EMC", "label": "Enseignement moral et civique", "notions": [
+          { "theme": "Liberté", "notion": "La liberté et ses limites : presse, opinion, respect", "attendu": "Exercer sa liberté en respectant les limites légales." },
+          { "theme": "Démocratie", "notion": "Les grandes institutions et la loi en France", "attendu": "Comprendre les institutions et le processus législatif." },
+          { "theme": "Égalité", "notion": "L'égalité et la lutte contre les discriminations", "attendu": "S'engager contre les discriminations et l'injustice." },
+          { "theme": "Laïcité", "notion": "La laïcité et les grandes croyances", "attendu": "Comprendre la laïcité et le respect des convictions." },
+          { "theme": "Numérique", "notion": "Les données personnelles, l'éthique et l'IA", "attendu": "Comprendre les enjeux éthiques de l'IA et des données." },
+          { "theme": "Engagement", "notion": "S'engager : associations, service national universel", "attendu": "Découvrir les formes d'engagement et de citoyenneté active." }
+        ] },
+        { "code": "SVT", "label": "Sciences de la vie et de la Terre", "notions": [
+          { "theme": "Le vivant", "notion": "La génétique et les chromosomes", "attendu": "Comprendre la transmission héréditaire et le rôle des chromosomes." },
+          { "theme": "Le vivant", "notion": "L'évolution des espèces et les fossiles", "attendu": "Expliquer l'évolution et les preuves fossiles." },
+          { "theme": "Immunité", "notion": "L'immunité : vaccins, antibiotiques, allergies", "attendu": "Comprendre le système immunitaire et ses réponses." },
+          { "theme": "Santé", "notion": "Les comportements à risque et la santé", "attendu": "Identifier et réduire les comportements à risque." }
+        ] },
+        { "code": "PC", "label": "Physique-Chimie", "notions": [
+          { "theme": "Signaux", "notion": "Les signaux : son et lumière", "attendu": "Décrire les signaux et leurs propriétés." },
+          { "theme": "Mouvement", "notion": "La vitesse et les mouvements", "attendu": "Calculer une vitesse et décrire un mouvement." },
+          { "theme": "Électricité", "notion": "Circuits et puissance électrique", "attendu": "Calculer une puissance et comprendre un circuit domestique." },
+          { "theme": "Chimie", "notion": "Les réactions chimiques et les équations", "attendu": "Écrire une réaction et respecter la conservation." },
+          { "theme": "Chimie", "notion": "Les ions et les solutions", "attendu": "Reconnaître la présence d'ions dans une solution." },
+          { "theme": "Chimie", "notion": "Les matériaux et la chimie durable", "attendu": "Choisir des matériaux et comprendre la chimie durable." }
+        ] },
+        { "code": "TE", "label": "Technologie", "notions": [
+          { "theme": "Programmation", "notion": "Algorithmes et pseudocode", "attendu": "Écrire un algorithme clair et l'organiser en pseudocode." },
+          { "theme": "Programmation", "notion": "Python : scripts et interactions", "attendu": "Écrire et exécuter un script Python simple." },
+          { "theme": "Objets", "notion": "Projets : capteurs et automatisation", "attendu": "Conduire un projet automatisé avec capteurs." },
+          { "theme": "Numérique", "notion": "Les données personnelles et l'éthique numérique", "attendu": "Protéger ses données et analyser le coût énergétique du numérique." },
+          { "theme": "Numérique", "notion": "Les réseaux et les infrastructures", "attendu": "Comprendre les réseaux et leurs infrastructures de base." }
+        ] },
+        { "code": "LVA", "label": "Anglais", "notions": [
+          { "theme": "Grammaire", "notion": "Present perfect et prétérit ensemble", "attendu": "Choisir entre present perfect et prétérit selon le contexte." },
+          { "theme": "Grammaire", "notion": "Les modaux : must, might, could", "attendu": "Utiliser les modaux pour exprimer obligation et probabilité." },
+          { "theme": "Écrit", "notion": "Rédiger un essai et un avis argumenté", "attendu": "Rédiger un essay structuré avec des arguments." },
+          { "theme": "Vocabulaire", "notion": "Le vocabulaire des réseaux et des médias", "attendu": "Employer le lexique des réseaux et des médias courants." },
+          { "theme": "Oral", "notion": "Préparer une présentation orale", "attendu": "Organiser et présenter une courte présentation orale." }
+        ] },
+        { "code": "ESP", "label": "Espagnol", "notions": [
+          { "theme": "Grammaire", "notion": "Pretérito indefinido et narration au passé", "attendu": "Raconter un événement passé avec le pretérito indefinido." },
+          { "theme": "Grammaire", "notion": "Les propositions conditionnelles simples", "attendu": "Construire des phrases conditionnelles simples." },
+          { "theme": "Oral", "notion": "Exprimer son opinion et débattre", "attendu": "Défendre une opinion en espagnol avec des arguments." },
+          { "theme": "Vocabulaire", "notion": "Les médias et les technologies", "attendu": "Utiliser le lexique des médias et du numérique." },
+          { "theme": "Écrit", "notion": "Préparer l'oral du brevet en espagnol", "attendu": "Organiser un exposé court et clair en espagnol." }
+        ] },
+        { "code": "AP", "label": "Arts plastiques", "notions": [
+          { "theme": "Pratiques", "notion": "Création et référents : l'œuvre et son contexte", "attendu": "Créer en s'appuyant sur des référents artistiques." },
+          { "theme": "Pratiques", "notion": "L'espace, l'installation et le public", "attendu": "Concevoir une installation destinée au public." },
+          { "theme": "Regard", "notion": "Analyser et commenter une œuvre (oral du brevet)", "attendu": "Analyser une œuvre et la commenter avec précision." }
+        ] },
+        { "code": "MU", "label": "Éducation musicale", "notions": [
+          { "theme": "Chanter", "notion": "Interprétation polyphonique avancée", "attendu": "Interpréter un chant polyphonique avec nuance." },
+          { "theme": "Écouter", "notion": "Musiques du XXe-XXIe siècle et leurs codes", "attendu": "Relier une musique contemporaine à ses codes." },
+          { "theme": "Création", "notion": "Créer et produire une œuvre musicale numérique", "attendu": "Concevoir et produire une œuvre musicale." }
+        ] },
+        { "code": "EPS", "label": "Éducation physique et sportive", "notions": [
+          { "theme": "Activités", "notion": "Athlétisme et endurance", "attendu": "Progresser en performance mesurée." },
+          { "theme": "Activités", "notion": "Natation : performance et sécurité", "attendu": "Nager avec endurance et efficacité." },
+          { "theme": "Jeux", "notion": "Sports collectifs : tactique avancée", "attendu": "Participer à un projet de jeu élaboré." },
+          { "theme": "Activités", "notion": "Gymnastique et acrosport", "attendu": "Réaliser et présenter un enchaînement complet." },
+          { "theme": "Expression", "notion": "Danse et création artistique collective", "attendu": "Produire et présenter une chorégraphie collective." }
+        ] }
+      ]
+    }
+  ]
+}

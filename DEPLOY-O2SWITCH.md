@@ -11,6 +11,53 @@
 - Redirection HTTP → HTTPS dans .htaccess, compatible avec X-Forwarded-Proto.
 - Sauvegarde initiale de .htaccess : /home/daje4208/lumi-domain-htaccess-before-https.txt, hors racine publique.
 
+## Base SQL des programmes officiels (15/10/2026)
+
+- Source éditable : `data/programmes.json` — toutes les notions et attendus
+  officiels, du CP à la 3e, toutes matières (9 niveaux, 568 notions), suivi dans Git.
+- Au démarrage, le serveur ouvre `data/programmes.db` (SQLite) **en lecture
+  seule** ; si le fichier manque, est vide, ou si le JSON a changé (tampon
+  taille+mtime stocké en base), il est reconstruit dans un dossier temporaire
+  système puis installé dans `data/` : rien à faire sur o2switch (Node 24 a
+  `node:sqlite` intégré), la base « vit » sur l'hébergement, aucun PC requis.
+- C'est cette base qui nourrit le tuteur (bloc PROGRAMME SCOLAIRE du niveau),
+  les thèmes de quiz au hasard, les mini-classes (notions qui matchent le
+  sujet + attendus) et l'écran parent via `/api/curriculum`.
+- Repli automatique sur l'ancien `data/curriculum.json` (aujourd'hui
+  redondant, réservé aux environnements sans `node:sqlite`).
+- Édition : modifier `data/programmes.json` → commit → `git push o2switch main`
+  → le redémarrage Passenger reconstruit la base.
+
+## Sources affichées en permanence (15/10/2026)
+
+- Chaque réponse du tuteur embarque désormais la source « Programme officiel
+  de l'Éducation nationale — cycle N (…) » (lien eduscol) en tête du bloc
+  📚 Sources affiché à l'enfant ; la recherche web s'ajoute quand elle est
+  demandée.
+- Les interros (quiz) et les mini-classes renvoient une `source` affichée en
+  pied de modal (récapitulatif et étapes).
+
+## IA de secours en cas de surcharge (15/10/2026)
+
+- `OLLAMA_FALLBACK_MODEL` (défaut `deepseek-v4.1-flash:cloud`) : si le modèle
+  principal renvoie 429 (surcharge), 5xx, timeout ou une erreur réseau, les
+  appels texte (normal et streaming) réessaient une fois sur ce modèle avant
+  d'afficher une erreur à l'enfant. Vide = pas de secours. Les 400/401/404 ne
+  basculent pas. La photo (vision) reste sur le modèle principal.
+- Journal : `[IA] glm-… renvoie 503 (surcharge) -> bascule IA de secours …`.
+
+## Gate : compteur de tentatives par client (correctif 15/10/2026)
+
+- Bug constaté : « le code ne s'ouvre pas sur lumirevision.com » — derrière le
+  proxy Passenger/Apache, `req.ip` était l'IP du proxy pour TOUT LE MONDE, donc
+  la limite de 20 tentatives de code / 15 min était un compteur global
+  toutes familles confondues : de vraies familles recevaient « Trop de
+  tentatives » avec le bon code.
+- Correctif : `app.set('trust proxy', 1)` inconditionnel (l'IP réelle du
+  client remplace l'IP du proxy ; les en-têtes forgés par un client ne passent
+  pas, seul le dernier saut est de confiance). En local sans proxy : aucun
+  changement.
+
 ## Voix française de lecture
 
 Le binaire Piper 2023 exige GLIBC 2.29, alors que le serveur a GLIBC 2.28.

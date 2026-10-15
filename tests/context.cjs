@@ -46,6 +46,7 @@ test('photo : transcription jointe au tuteur et retournée pour sauvegarde', asy
   const events = [];
   const c = vm.createContext({console, ENV:{}, app:{post(route,fn){handler=fn;}}, PHOTO_TOKENS:4096,
     reserveUsage:async()=>({account:{id:'test'}}), resolveAccount:async()=>({account:{id:'test'}}), accountPut:async()=>{}, buildSystemPrompt:()=> 'Tuteur', lessonHistory:h=>h,
+    profileLevel: () => 'CM1',
     callOllama:async(messages,options)=>{visionCall={messages,options};return {content:'Exercice 9 : comparer 7/8 et 5/6.'};},
     streamOllama:async(messages,options)=>{tutorMessages=messages;options.onDelta('Quel dénominateur commun ?');},
     searchWeb:async()=>{throw Error('recherche non demandée');}, Buffer});

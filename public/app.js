@@ -1883,7 +1883,7 @@ $('btn-settings-close').addEventListener('click', () => $('settings-modal').clas
 
 // ---------- Interro (quiz) ----------
 let quizGeneration = 0, quizBusy = false;
-let quizData = null, quizIdx = 0, quizScore = 0, quizTopicUsed = '';
+let quizData = null, quizIdx = 0, quizScore = 0, quizTopicUsed = '', quizSource = null;
 
 $('btn-quiz').addEventListener('click', () => {
   $('quiz-topic-row').classList.remove('hidden');
@@ -1921,7 +1921,7 @@ async function startQuiz() {
       $('quiz-topic-row').classList.remove('hidden');
       return;
     }
-    quizData = j.quiz; quizIdx = 0; quizScore = 0;
+    quizData = j.quiz; quizSource = j.source || null; quizIdx = 0; quizScore = 0;
     renderQuizQuestion();
   } catch {
     if (generation !== quizGeneration) return;
@@ -2009,6 +2009,7 @@ function renderClassroomStep() {
         + (answered ? `<p class="hint">${answered.ok ? '✅ Bravo ! ' : '❌ La bonne réponse était : ' + escapeHtml(q.options[q.answer]) + '. '}${escapeHtml(q.explication || '')}</p>` : '')
       : '')
     + '</div>'
+    + (classData.source ? `<p class="source-ligne">📚 Source : <a href="${escapeHtml(classData.source.url)}" target="_blank" rel="noopener">${escapeHtml(classData.source.title)}</a></p>` : '')
     + '<div class="classroom-nav">'
     + `<button type="button" class="btn" id="cl-prev"${classIdx === 0 ? ' disabled' : ''}>◀ Précédent</button>`
     + '<button type="button" class="btn" id="cl-voice" title="Écouter">🔊 Écouter</button>'
@@ -2038,7 +2039,9 @@ function renderClassroomRecap() {
   room.innerHTML =
     `<div class="classroom-slide"><h3>🎉 Classe terminée : ${escapeHtml(classData.classroom.titre)}</h3>`
     + (total ? `<p><strong>${score} / ${total}</strong> bonnes réponses</p>` : '<p>Bonne découverte 🏫</p>')
-    + '<p class="hint">Tu peux la refaire ou en demander une autre 🏫</p></div>'
+    + '<p class="hint">Tu peux la refaire ou en demander une autre 🏫</p>'
+    + (classData.source ? `<p class="source-ligne">📚 Source : <a href="${escapeHtml(classData.source.url)}" target="_blank" rel="noopener">${escapeHtml(classData.source.title)}</a></p>` : '')
+    + '</div>'
     + '<div class="classroom-nav">'
     + '<button type="button" class="btn" id="cl-restart">↺ Recommencer</button>'
     + (canSave ? '<button type="button" class="btn btn-primary" id="cl-save">🎯 Enregistrer comme interro</button>' : '<button type="button" class="btn btn-primary" id="cl-done">✨ C\'est fini</button>')
@@ -2113,7 +2116,7 @@ function finishQuiz() {
   $('quiz-progress').textContent = `Score final : ${quizScore} / ${quizData.length}`;
   const stars = '⭐'.repeat(Math.max(1, Math.round((quizScore / quizData.length) * 5)));
   const n = currentProfile ? currentProfile.name : '';
-  area.innerHTML = `<div class="quiz-final"><div class="quiz-stars">${stars}</div><p><strong>${quizScore} / ${quizData.length}</strong></p><p>${quizScore === quizData.length ? `Parfait ${escapeHtml(n)} ! Tu maîtrises ce sujet ! 🎉` : quizScore >= quizData.length / 2 ? 'Bien joué ! Réessaie pour faire encore mieux 💪' : 'Courage ! Révise un peu avec Lumi puis retente l\'interro 😊'}</p></div>`;
+  area.innerHTML = `<div class="quiz-final"><div class="quiz-stars">${stars}</div><p><strong>${quizScore} / ${quizData.length}</strong></p><p>${quizScore === quizData.length ? `Parfait ${escapeHtml(n)} ! Tu maîtrises ce sujet ! 🎉` : quizScore >= quizData.length / 2 ? 'Bien joué ! Réessaie pour faire encore mieux 💪' : 'Courage ! Révise un peu avec Lumi puis retente l\'interro 😊'}</p>${quizSource ? `<p class="source-ligne">📚 Source : <a href="${escapeHtml(quizSource.url)}" target="_blank" rel="noopener">${escapeHtml(quizSource.title)}</a></p>` : ''}</div>`;
   const again = document.createElement('button');
   again.className = 'btn btn-primary';
   again.textContent = '🔄 Autre interro';

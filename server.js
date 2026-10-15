@@ -37,6 +37,189 @@ const AGE_LEVEL = { 6: 'CP', 7: 'CE1', 8: 'CE2', 9: 'CM1', 10: 'CM2', 11: '6e', 
 // Niveau d'un profil : celui choisi dans l'espace parent, sinon deduit de l'age.
 function profileLevel(profile = {}) { return (profile && profile.level) || AGE_LEVEL[profile && profile.age] || ''; }
 
+// ---------- Programmes officiels (base SQL data/programmes.db) ----------
+// Toutes les notions et attendus officiels du programme de l'Ecole, du CP a la
+// 3e, toutes matieres. La source editee est data/programmes.json (commitee) ;
+// la base SQLite est reconstruite au demarrage si absente : elle vit donc sur
+// o2switch commme partout, sans dependance au PC. Si la base est indisponible
+// (vieux Node, vm de tests), repli sur l'ancien curriculum.json.
+// NB : aucune constante top-level ne touche fs/path (sections evaluees dans
+// les tests vm) ; tout est calcule au moment des appels.
+let progDb = null;
+
+function programmesSchema(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS niveaux (code TEXT PRIMARY KEY, cycle INTEGER, ordre INTEGER);
+    CREATE TABLE IF NOT EXISTS matieres (niveau TEXT, code TEXT, label TEXT, PRIMARY KEY (niveau, code));
+    CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+    CREATE TABLE IF NOT EXISTS notions (
+      id INTEGER PRIMARY KEY, niveau TEXT NOT NULL, matiere TEXT NOT NULL,
+      theme TEXT DEFAULT '', notion TEXT NOT NULL, attendu TEXT DEFAULT '', ordre INTEGER DEFAULT 0);
+    CREATE INDEX IF NOT EXISTS idx_notions_niveau ON notions(niveau);
+  `);
+}
+
+async function initProgrammes() {
+  try {
+    // node:sqlite : API native (Node 22.3+). getBuiltinModule marche aussi
+    // dans les contextes vm des tests, ou le dynamic import est refuse.
+    let DatabaseSync = null;
+    try { if (typeof process !== 'undefined' && typeof process.getBuiltinModule === 'function') DatabaseSync = process.getBuiltinModule('node:sqlite').DatabaseSync; } catch {}
+    if (!DatabaseSync) { const m = await import('node:sqlite'); DatabaseSync = m.DatabaseSync; }
+    const jsonPath = path.join(__dirname, 'data', 'programmes.json');
+    if (!fs.existsSync(jsonPath)) { console.warn('programmes : data/programmes.json absent -> repli curriculum.json'); return; }
+    const dbPath = path.join(__dirname, 'data', 'programmes.db');
+    let stamp = '';
+    try { const st = fs.statSync(jsonPath); stamp = st.size + ':' + st.mtimeMs; } catch {}
+    // La base est TOUJOURS ouverte en lecture seule a l'execution : aucun
+    // journal SQLite en ecriture (fragile sur certains disques montes, ex. NTFS).
+    try {
+      const ro = new DatabaseSync(dbPath, { readOnly: true });
+      const cnt = ro.prepare('SELECT COUNT(*) AS c FROM notions').get().c;
+      const saved = ro.prepare("SELECT value FROM meta WHERE key = 'json_stamp'").get();
+      if (cnt > 0 && saved && saved.value === stamp) { progDb = ro; return; }
+      ro.close();
+    } catch { progDb = null; }
+    // (Re)construction depuis le JSON, dans un dossier temporaire du systeme
+    // (ecriture SQLite fiable), puis installation dans data/ : un crash au
+    // milieu ne laisse jamais une base a moitie vide, et l'echange de fichier
+    // ne passe pas par le journal SQLite du disque cible.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lumi-prog-'));
+    const tmpDb = path.join(tmpDir, 'programmes.db');
+    const db = new DatabaseSync(tmpDb);
+    programmesSchema(db);
+    db.prepare("INSERT INTO meta (key, value) VALUES ('json_stamp', ?)").run(stamp);
+    const insNiv = db.prepare('INSERT INTO niveaux (code, cycle, ordre) VALUES (?,?,?)');
+    const insMat = db.prepare('INSERT INTO matieres (niveau, code, label) VALUES (?,?,?)');
+    const insNot = db.prepare('INSERT INTO notions (niveau, matiere, theme, notion, attendu, ordre) VALUES (?,?,?,?,?,?)');
+    const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+    let total = 0;
+    (data.niveaux || []).forEach((niv, i) => {
+      if (!niv || !niv.code) return;
+      insNiv.run(String(niv.code), Number(niv.cycle) || 0, i + 1);
+      (niv.matieres || []).forEach(mat => {
+        if (!mat || !mat.code || !Array.isArray(mat.notions)) return;
+        insMat.run(String(niv.code), String(mat.code), String(mat.label || mat.code));
+        (mat.notions || []).forEach((nt, k) => {
+          if (!nt || !nt.notion) return;
+          insNot.run(String(niv.code), String(mat.code), String(nt.theme || ''), String(nt.notion), String(nt.attendu || ''), k + 1);
+          total++;
+        });
+      });
+    });
+    db.close();
+    try { fs.renameSync(tmpDb, dbPath); } // meme disque : renommage atomique
+    catch { fs.writeFileSync(dbPath, fs.readFileSync(tmpDb)); } // NTFS etc. : ecriture classique du fichier fini
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    progDb = new DatabaseSync(dbPath, { readOnly: true });
+    console.log(`  📚 Programmes officiels (CP -> 3e) installes dans la base SQL : ${total} notions (data/programmes.db).`);
+  } catch (e) {
+    progDb = null;
+    console.warn('programmes : base SQL indisponible, repli curriculum.json :', e.message);
+  }
+}
+
+// Liste des niveaux disponibles (codes, dans l'ordre CP -> 3e).
+function programmeNiveaux() {
+  if (progDb) {
+    try { return progDb.prepare('SELECT code FROM niveaux ORDER BY ordre').all().map(r => r.code); }
+    catch {}
+  }
+  return typeof CURRICULUM !== 'undefined' ? Object.keys(CURRICULUM) : [];
+}
+
+// Toutes les notions d'un niveau : [{matiere (code), matiereLabel, theme, notion, attendu}]
+function programmeNiveau(level) {
+  const lvl = String(level || '').trim();
+  if (!lvl) return [];
+  if (progDb) {
+    try {
+      return progDb.prepare(`
+        SELECT n.niveau, n.matiere, m.label AS matiereLabel, n.theme, n.notion, n.attendu
+        FROM notions n LEFT JOIN matieres m ON m.niveau = n.niveau AND m.code = n.matiere
+        WHERE n.niveau = ? ORDER BY n.id`).all(lvl);
+    } catch {}
+  }
+  const src = typeof CURRICULUM !== 'undefined' ? (CURRICULUM[lvl] || {}) : {};
+  return Object.entries(src).flatMap(([mat, arr]) => (Array.isArray(arr) ? arr : []).map(n => ({
+    niveau: lvl, matiere: mat, matiereLabel: mat, theme: '', notion: String(n), attendu: ''
+  })));
+}
+
+// Recherche par mots-cles (sans accents) dans theme + notion + attendu.
+function programmeCherche(level, query, max = 8) {
+  const rows = programmeNiveau(level);
+  const words = String(query || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(w => w.length >= 3);
+  if (!rows.length || !words.length) return [];
+  const seen = new Set();
+  const out = [];
+  rows
+    .map(r => {
+      const hay = String(r.theme + ' ' + r.notion + ' ' + r.attendu).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ');
+      return { r, score: words.reduce((n, w) => n + (hay.includes(w) ? 1 : 0), 0) };
+    })
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .forEach(x => {
+      const k = String(x.r.notion);
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(x.r);
+    });
+  return out.slice(0, max);
+}
+
+// Notion au hasard dans le programme du niveau (pour les themes de quiz).
+function programmeAleatoire(level) {
+  const rows = programmeNiveau(level);
+  return rows.length ? rows[Math.floor(Math.random() * rows.length)] : null;
+}
+
+// Une seule ligne compacte par matiere, pour le prompt du tuteur.
+function programmeInjection(level) {
+  const rows = programmeNiveau(level);
+  if (!rows.length) return '';
+  const byMat = new Map();
+  rows.forEach(r => {
+    const k = r.matiereLabel || r.matiere;
+    if (!byMat.has(k)) byMat.set(k, []);
+    byMat.get(k).push(r.notion);
+  });
+  let line = [...byMat.entries()].map(([mat, arr]) => mat + ' : ' + arr.slice(0, 18).join(', ')).join(' / ');
+  if (line.length > 2400) line = line.slice(0, 2400);
+  return line;
+}
+
+// Bloc programme pour les mini-classes : notions MATCHANT le sujet (avec
+// attendus officiels), sinon la vue generale du niveau.
+function programmePourClasse(level, topic) {
+  const lvl = String(level || '').trim();
+  if (!lvl) return '';
+  const match = programmeCherche(lvl, topic, 8);
+  if (match.length) {
+    return `Notions du programme officiel (${lvl}) en lien avec le sujet :\n` +
+      match.map(r => '- ' + (r.matiereLabel || r.matiere) + ' : ' + r.notion + (r.attendu ? ' — attendu : ' + r.attendu : '')).join('\n');
+  }
+  const inj = programmeInjection(lvl);
+  return inj ? `Programme officiel (${lvl}) a respecter :\n` + inj : '';
+}
+
+// La source affichee en permanence dans Lumi : le programme officiel
+// (eduscol) du niveau de l'enfant. Ces liens s'ouvrent dans un navigateur
+// ; le site officiel refuse seulement les robots, pas les familles.
+const PROGRAMME_CYCLE_OF = { CP: 2, CE1: 2, CE2: 2, CM1: 3, CM2: 3, '6e': 3, '5e': 4, '4e': 4, '3e': 4 };
+const EDUSCOL_CYCLE = { 2: '1539/programmes-de-cycle-2', 3: '1540/programmes-de-cycle-3', 4: '1541/programmes-de-cycle-4' };
+function programmeSource(level) {
+  const c = PROGRAMME_CYCLE_OF[String(level || '').trim()];
+  if (!c || !EDUSCOL_CYCLE[c]) return null;
+  const classes = c === 2 ? 'CP, CE1, CE2' : c === 3 ? 'CM1, CM2, 6e' : '5e, 4e, 3e';
+  return {
+    title: `Programme officiel de l'Éducation nationale — cycle ${c} (${classes})`,
+    url: 'https://eduscol.education.fr/' + EDUSCOL_CYCLE[c]
+  };
+}
+
 // ---------- Stockage des donnees des enfants ----------
 // En local : fichier JSON (data/lumi-data.json).
 // En ligne (Render etc.) : le disque est efface a chaque mise a jour, on
@@ -319,8 +502,14 @@ async function getOrCreateCert() {
 }
 
 const app = express();
-// Render termine HTTPS devant un proxy ; les accès directs locaux restent sans confiance.
-if (process.env.RENDER) app.set('trust proxy', 1);
+// Derriere un proxy (o2switch/Passenger, Render, Apache...), req.ip sinon =
+// l'IP du proxy pour TOUT LE MONDE : le compteur de tentatives du code famille
+// devenait un compteur global toutes familles confondues -> au 21e essai de
+// n'importe qui, "Trop de tentatives" meme avec le BON code (l'app semblait
+// ne jamais s'ouvrir avec le code et l'adresse). 1 = on fait confiance au
+// dernier saut : le proxy remet l'IP reelle du client, des en-tetes forge
+// par le client ne passent pas. Sans proxy (local), aucun changement.
+app.set('trust proxy', 1);
 app.use('/api', (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -483,7 +672,7 @@ function allowLoginAttempt(req, res, prefix = 'login', max = 20) {
   const key = prefix + ':' + (req.ip || req.socket?.remoteAddress || 'unknown');
   const now = Date.now(), prev = loginAttempts.get(key);
   const item = !prev || prev.until < now ? { count: 0, until: now + 900000 } : prev;
-  if (++item.count > max) { res.status(429).json({ error: 'Trop de tentatives. Réessaie dans quinze minutes.' }); return false; }
+  if (++item.count > max) { res.status(429).json({ error: 'Trop de tentatives. Réessaie dans quinze minutes.' }); console.warn('[gate] limite de tentatives atteinte pour', res.req?.ip || req.ip || 'ip inconnue', '(prefix', prefix + ')'); return false; }
   if (loginAttempts.size > 5000) loginAttempts.clear();
   loginAttempts.set(key, item);
   return true;
@@ -498,7 +687,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-14.2' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-15.1' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -1750,14 +1939,20 @@ Methode par matiere :
 - Histoire / geo / sciences : explique simplement, puis pose des questions pour verifier la comprehension.
 - Autres devoirs : guide la methode, ne fais jamais le travail a la place de l'enfant.`;
 
-  // Programme officiel (data/curriculum.json) : une courte ligne par matiere,
-  // pour que le tuteur situe ses questions dans le programme du niveau.
+  // Programmes officiels (base SQL data/programmes.db) : notions du niveau
+  // par matiere, pour que le tuteur situe ses questions dans le programme.
   let post = '';
-  if (typeof CURRICULUM !== 'undefined' && typeof AGE_LEVEL !== 'undefined') {
+  if (typeof AGE_LEVEL !== 'undefined') {
     const level = profileLevel(profile);
-    const prog = level && CURRICULUM[level];
-    if (prog) {
-      const line = Object.entries(prog).map(([mat, arr]) => mat + ' : ' + arr.slice(0, 14).join(', ')).join(' / ');
+    let line = '';
+    if (level && typeof programmeInjection === 'function') {
+      try { line = programmeInjection(level); } catch {}
+    }
+    // Repli (vm de tests, base absente) : l'ancien curriculum.json.
+    if (!line && typeof CURRICULUM !== 'undefined' && level && CURRICULUM[level]) {
+      line = Object.entries(CURRICULUM[level]).map(([mat, arr]) => mat + ' : ' + (Array.isArray(arr) ? arr : []).slice(0, 14).join(', ')).join(' / ');
+    }
+    if (line) {
       post = `\n\nPROGRAMME SCOLAIRE (${level}) — notions de l'annee. Sers-toi de cette liste pour situer l'exercice et choisir des exemples du bon niveau ; ne la recite pas tel quel, et ne parle du programme que si c'est utile :`;
       post += '\n' + line;
     }
@@ -1829,34 +2024,69 @@ const PHOTO_TOKENS = 4096;
 // vraie reponse arrivait vide ou coupee. "low" = reflexion minimale,
 // reponse complete en francais, ~3 fois moins de tokens consommes.
 const REASONING_EFFORT = process.env.OLLAMA_REASONING_EFFORT || 'low';
+// IA de secours (surcharge du modele) : si le modele principal renvoie une
+// surcharge (429), une erreur serveur (5xx) ou est injoignable (timeout,
+// reseau), on retente UNE fois avec un second modele avant d'afficher une
+// erreur a l'enfant. Seuil configuré via OLLAMA_FALLBACK_MODEL ('' = aucun
+// secours). Un 400/401/404 ne bascule pas : avec un autre modele, pareil.
+const FALLBACK_MODEL = String(process.env.OLLAMA_FALLBACK_MODEL ?? 'deepseek-v4.1-flash:cloud').trim();
+function ollamaChain(image) {
+  const models = [image ? VISION_MODEL : MODEL];
+  if (FALLBACK_MODEL && !models.includes(FALLBACK_MODEL)) models.push(FALLBACK_MODEL);
+  return models;
+}
+function ollamaSurcharge(e, status = 0) {
+  if (status) return status >= 500 || status === 408 || status === 429;
+  const code = String((e && e.cause && e.cause.code) || '');
+  return !!e && (e.name === 'AbortError' || e.name === 'TimeoutError' ||
+    /fetch failed|network|ENOTFOUND|ECONNRESET|ECONNREFUSED|UND_ERR|aborted/i.test(code + ' ' + ((e && e.message) || '')));
+}
 async function callOllama(messages, { image, maxTokens } = {}) {
   // Les photos demandent un peu plus de marge (lecture du cahier), le texte reste court.
-  const body = { model: image ? VISION_MODEL : MODEL, messages, temperature: 0.4, reasoning_effort: REASONING_EFFORT, max_tokens: maxTokens || (image ? PHOTO_TOKENS : REPLY_TOKENS) };
-  if (image) {
-    const last = messages[messages.length - 1];
-    if (last && last.role === 'user') {
-      last.content = [
-        { type: 'text', text: last.content },
-        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}` } }
-      ];
+  const models = ollamaChain(image);
+  for (let i = 0; i < models.length; i++) {
+    const secours = i > 0;
+    const body = { model: models[i], messages, temperature: 0.4, max_tokens: maxTokens || (image ? PHOTO_TOKENS : REPLY_TOKENS) };
+    if (secours) delete body.reasoning_effort; // le repli n'est pas forcement un modele "raisonneur"
+    else body.reasoning_effort = REASONING_EFFORT;
+    if (image) {
+      const last = messages[messages.length - 1];
+      if (last && last.role === 'user' && typeof last.content === 'string') {
+        last.content = [
+          { type: 'text', text: last.content },
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}` } }
+        ];
+      }
     }
+    let r;
+    try {
+      r = await fetch(`${BASE_URL}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(120000)
+      });
+    } catch (e) {
+      if (!secours && ollamaSurcharge(e)) { console.warn(`[IA] ${models[i]} injoignable (${e.name || e.code || e.message}) -> bascule IA de secours ${models[i + 1]}`); continue; }
+      throw e;
+    }
+    if (!r.ok && !secours && ollamaSurcharge(null, r.status)) {
+      const t = await r.text().catch(() => '');
+      console.warn(`[IA] ${models[i]} renvoie ${r.status}${/overload|surcharg|capacit|busy/i.test(t) ? ' (surcharge)' : ''} -> bascule IA de secours ${models[i + 1]}`);
+      continue;
+    }
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`Ollama ${r.status}: ${t.slice(0, 300)}`);
+    }
+    const j = await r.json();
+    const m = j.choices?.[0]?.message || {};
+    // Les modeles "raisonneurs" mettent parfois tout dans reasoning
+    // (content vide quand le budget de tokens est epuise a reflechir).
+    if (j.choices?.[0]?.finish_reason === 'length') throw new Error('Réponse interrompue : réessaie avec une question plus courte.');
+    return { content: m.content || '', reasoning: m.reasoning || '' };
   }
-  const r = await fetch(`${BASE_URL}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120000)
-  });
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error(`Ollama ${r.status}: ${t.slice(0, 300)}`);
-  }
-  const j = await r.json();
-  const m = j.choices?.[0]?.message || {};
-  // Les modeles "raisonneurs" mettent parfois tout dans reasoning
-  // (content vide quand le budget de tokens est epuise a reflechir).
-  if (j.choices?.[0]?.finish_reason === 'length') throw new Error('Réponse interrompue : réessaie avec une question plus courte.');
-  return { content: m.content || '', reasoning: m.reasoning || '' };
+  throw new Error('Le service IA est momentanément indisponible. Réessaie dans un instant.');
 }
 
 // Bilan pedagogique pour les parents : a l'archivage d'une lecon, l'IA lit
@@ -1888,59 +2118,83 @@ async function summarizeLesson(history, profile = {}) {
   } catch { return null; }
 }
 
-// Appel Ollama en streaming : pousse chaque morceau de texte a onDelta
+// Appel Ollama en streaming : pousse chaque morceau de texte a onDelta.
+// IA de secours : comme callOllama, une surcharge/panne du modele principal
+// (429, 5xx, timeout, reseau) est re tentee UNE fois sur le modele de secours,
+// tant qu'aucun mot n'a encore ete diffuse a l'enfant.
 async function streamOllama(messages, { image, maxTokens, onDelta } = {}) {
+  const FB = (typeof FALLBACK_MODEL !== 'undefined' && FALLBACK_MODEL) ? FALLBACK_MODEL : '';
+  const models = [image ? VISION_MODEL : MODEL];
+  if (FB && !models.includes(FB)) models.push(FB);
+  const netFail = e => !!e && (e.name === 'AbortError' || e.name === 'TimeoutError' ||
+    /fetch failed|network|ENOTFOUND|ECONNRESET|ECONNREFUSED|UND_ERR|aborted/i.test(String((e && e.cause && e.cause.code) || '') + ' ' + ((e && e.message) || '')));
   // Comme pour callOllama : la photo est jointe au dernier message utilisateur
-  if (image) {
-    const last = messages[messages.length - 1];
-    if (last && last.role === 'user') {
-      last.content = [
-        { type: 'text', text: last.content },
-        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}` } }
-      ];
+  for (let i = 0; i < models.length; i++) {
+    const secours = i > 0;
+    const body = { model: models[i], messages, temperature: 0.4, max_tokens: maxTokens || (image ? PHOTO_TOKENS : REPLY_TOKENS), stream: true };
+    if (secours) delete body.reasoning_effort;
+    else body.reasoning_effort = REASONING_EFFORT;
+    if (image) {
+      const last = messages[messages.length - 1];
+      if (last && last.role === 'user' && typeof last.content === 'string') {
+        last.content = [
+          { type: 'text', text: last.content },
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}` } }
+        ];
+      }
     }
+    let r;
+    try {
+      r = await fetch(`${BASE_URL}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(120000)
+      });
+    } catch (e) {
+      if (!secours && netFail(e)) { console.warn(`[IA] ${models[i]} injoignable (${e.name || e.code || e.message}) -> bascule IA de secours ${models[i + 1]}`); continue; }
+      throw e;
+    }
+    if (!r.ok && !secours && (r.status >= 500 || r.status === 408 || r.status === 429)) {
+      console.warn(`[IA] ${models[i]} renvoie ${r.status} -> bascule IA de secours ${models[i + 1]}`);
+      continue;
+    }
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`Ollama ${r.status}: ${t.slice(0, 300)}`);
+    }
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '', full = '', truncated = false;
+    const consumeLine = (line) => {
+      const t = line.trim();
+      if (!t.startsWith('data:')) return;
+      const data = t.slice(5).trim();
+      if (!data || data === '[DONE]') return;
+      let j;
+      try { j = JSON.parse(data); }
+      catch { throw new Error('La réponse de Lumi a été interrompue. Réessaie.'); }
+      if (j.error) throw new Error('Le service IA est momentanément indisponible. Réessaie dans un instant.');
+      if (j.choices?.[0]?.finish_reason === 'length') truncated = true;
+      const d = j.choices?.[0]?.delta?.content || '';
+      if (d) { full += d; if (onDelta) onDelta(d, full); }
+      // Le raisonnement interne reste privé.
+    };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) consumeLine(line);
+    }
+    buf += dec.decode();
+    if (buf.trim()) consumeLine(buf);
+    if (truncated) throw new Error('Réponse interrompue : réessaie avec une question plus courte.');
+    if (!full.trim()) throw new Error('Le modèle n’a pas fourni de réponse. Réessaie.');
+    return full;
   }
-  const body = { model: image ? VISION_MODEL : MODEL, messages, temperature: 0.4, reasoning_effort: REASONING_EFFORT, max_tokens: maxTokens || (image ? PHOTO_TOKENS : REPLY_TOKENS), stream: true };
-  const r = await fetch(`${BASE_URL}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120000)
-  });
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error(`Ollama ${r.status}: ${t.slice(0, 300)}`);
-  }
-  const reader = r.body.getReader();
-  const dec = new TextDecoder();
-  let buf = '', full = '', truncated = false;
-  const consumeLine = (line) => {
-    const t = line.trim();
-    if (!t.startsWith('data:')) return;
-    const data = t.slice(5).trim();
-    if (!data || data === '[DONE]') return;
-    let j;
-    try { j = JSON.parse(data); }
-    catch { throw new Error('La réponse de Lumi a été interrompue. Réessaie.'); }
-    if (j.error) throw new Error('Le service IA est momentanément indisponible. Réessaie dans un instant.');
-    if (j.choices?.[0]?.finish_reason === 'length') truncated = true;
-    const d = j.choices?.[0]?.delta?.content || '';
-    if (d) { full += d; if (onDelta) onDelta(d, full); }
-    // Le raisonnement interne reste privé.
-  };
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const lines = buf.split('\n');
-    buf = lines.pop();
-    for (const line of lines) consumeLine(line);
-  }
-  buf += dec.decode();
-  if (buf.trim()) consumeLine(buf);
-  if (truncated) throw new Error('Réponse interrompue : réessaie avec une question plus courte.');
-  if (!full.trim()) throw new Error('Le modèle n’a pas fourni de réponse. Réessaie.');
-  return full;
+  throw new Error('Le service IA est momentanément indisponible. Réessaie dans un instant.');
 }
 
 // Photo envoyée par le front (audit B6) : base64 brut, ou data URL image.
@@ -2049,17 +2303,22 @@ PHOTO DU CAHIER (tres important) :
 - Puis guide avec des questions, comme d'habitude : jamais la reponse finale.
 - Photo illisible, floue, ou pas un exercice ? Dis-le gentiment et demande une nouvelle photo.` : '');
 
-    // On cherche des sources si la question le justifie
+    // Source affichee TOUJOURS : chaque reponse s'appuie sur le programme
+    // officiel du niveau (base SQL), indique en tete des sources. La recherche
+    // web s'ajoute quand la question le justifie.
     let sources = [];
+    const progSrc = (typeof programmeSource === 'function' && typeof profileLevel === 'function')
+      ? programmeSource(profileLevel(profile || {})) : null;
+    if (progSrc) sources.push(progSrc);
     const shouldSearch = /\b(sources?|cherche|recherche|internet|web)\b/i.test(text);
     if (shouldSearch) {
       send({ type: 'status', text: 'Je cherche des sources… 🔎' });
-      sources = await searchWeb(text || 'devoir scolaire');
+      sources = sources.concat(await searchWeb(text || 'devoir scolaire'));
     }
 
     let sourceBlock = '';
     if (sources.length) {
-      sourceBlock = "\n\nVoici des sources fiables trouvees sur le web. Tu PEUX t'en servir pour repondre. Si tu les utilises, cite-les (titre + lien) :\n" +
+      sourceBlock = "\n\nSources fiables disponibles. Tu peux t'en servir pour repondre. Si tu en utilises une, cite-la (titre + lien) :\n" +
         sources.map((s, i) => `${i + 1}. ${s.title} — ${s.url}${s.snippet ? ' (' + s.snippet + ')' : ''}`).join('\n');
     }
 
@@ -2113,7 +2372,29 @@ function parseQuiz(raw, count) {
     }));
 }
 
-app.get('/api/curriculum', (req, res) => res.json(CURRICULUM));
+app.get('/api/curriculum', async (req, res) => {
+  // Programmes officiels (base SQL si dispo, sinon l'ancien JSON) :
+  // {niveau: {matiere: [notions...]}} — lise par l'espace parent front.
+  try {
+    const levels = typeof programmeNiveaux === 'function'
+      ? programmeNiveaux()
+      : (typeof CURRICULUM !== 'undefined' ? Object.keys(CURRICULUM) : []);
+    const out = {};
+    for (const lvl of levels) {
+      const rows = typeof programmeNiveau === 'function' ? (programmeNiveau(lvl) || []) : [];
+      const byMat = {};
+      rows.forEach(r => {
+        const m = r.matiereLabel || r.matiere;
+        (byMat[m] = byMat[m] || []).push(r.notion);
+      });
+      out[lvl] = byMat;
+    }
+    res.json(Object.keys(out).length ? out : (typeof CURRICULUM !== 'undefined' ? CURRICULUM : {}));
+  } catch (e) {
+    console.error('[curriculum]', e);
+    res.json(typeof CURRICULUM !== 'undefined' ? CURRICULUM : {});
+  }
+});
 
 app.post('/api/quiz', async (req, res) => {
   try {
@@ -2122,9 +2403,14 @@ app.post('/api/quiz', async (req, res) => {
     const acc = access.account;
     const { topic, profile, count = 5 } = req.body || {};
     const age = (profile && profile.age) || 10;
-    // Sans theme donne : une notion au hasard dans le programme du niveau de l'enfant.
+    // Sans theme donne : une notion au hasard dans le programme officiel du
+    // niveau de l'enfant (base SQL des programmes, CP -> 3e).
     const lvl = profileLevel(profile || {});
     let cleanTopic = String(topic || '').trim();
+    let pique = null;
+    if (!cleanTopic && lvl && typeof programmeAleatoire === 'function') pique = programmeAleatoire(lvl);
+    if (pique) cleanTopic = pique.notion;
+    // Repli (vm de tests, programmes absents) : l'ancien curriculum.json.
     if (!cleanTopic && lvl && typeof CURRICULUM !== 'undefined') {
       const pool = Object.values(CURRICULUM[lvl] || {}).flat();
       if (pool.length) cleanTopic = pool[Math.floor(Math.random() * pool.length)];
@@ -2132,7 +2418,7 @@ app.post('/api/quiz', async (req, res) => {
     if (!cleanTopic) cleanTopic = 'les leçons récentes';
     // Prompt volontairement COURT : les modeles "raisonneurs" depensent
     // leur budget de tokens sur un long prompt et renvoient un JSON vide/tronque.
-    const sys = `Tu generes un quiz pour un enfant de ${age} ans${lvl ? ' en classe de ' + lvl : ''} (reste conforme au programme de ce niveau). Reponds UNIQUEMENT avec un tableau JSON (pas de texte autour, pas de markdown). Chaque element : {"question": "...", "options": ["...", "...", "...", "..."], "answer": INDEX_bonne_option_0_a_3, "explication": "une courte phrase"}. Questions en francais, simples et adaptees a ${age} ans. Les mauvaises options sont plausibles. L'index de la bonne reponse varie.`;
+    const sys = `Tu generes un quiz pour un enfant de ${age} ans${lvl ? ' en classe de ' + lvl : ''} (reste conforme au programme de ce niveau). Reponds UNIQUEMENT avec un tableau JSON (pas de texte autour, pas de markdown). Chaque element : {"question": "...", "options": ["...", "...", "...", "..."], "answer": INDEX_bonne_option_0_a_3, "explication": "une courte phrase"}. Questions en francais, simples et adaptees a ${age} ans. Les mauvaises options sont plausibles. L'index de la bonne reponse varie.` + (pique && pique.attendu ? ' Attendu officiel de la notion : ' + pique.attendu : '');
     const msgs = [
       { role: 'system', content: sys },
       { role: 'user', content: `Genere ${count} questions a choix multiple sur : ${cleanTopic}` }
@@ -2143,7 +2429,8 @@ app.post('/api/quiz', async (req, res) => {
       // On essaie le contenu, puis le raisonnement (content peut etre vide).
       for (const raw of [msg.content, msg.reasoning]) {
         const quiz = parseQuiz(raw, count);
-        if (quiz.length >= 2) return res.json({ quiz });
+        // Source affichee TOUJOURS : le quiz respecte le programme officiel du niveau.
+        if (quiz.length >= 2) return res.json({ quiz, source: typeof programmeSource === 'function' ? programmeSource(lvl) : null });
       }
     }
     res.json({ quiz: [] });
@@ -2205,13 +2492,21 @@ app.post('/api/classroom', async (req, res) => {
       level: String((profile && profile.level) || '')
     };
     const lvl = p.level || profileLevel(p);
-    const notions = lvl && CURRICULUM[lvl]
-      ? Object.entries(CURRICULUM[lvl]).map(([m, a]) => m + ' : ' + a.join(', ')).join('\n')
-      : '';
+    // Programmes officiels (base SQL) : notions MATCHANT le sujet avec
+    // attendus, sinon la vue generale du niveau.
+    let notions = '';
+    if (lvl && typeof programmePourClasse === 'function') {
+      try { notions = programmePourClasse(lvl, cleanTopic); } catch {}
+    }
+    // Repli (vm de tests, programmes absents) : l'ancien curriculum.json.
+    if (!notions && lvl && typeof CURRICULUM !== 'undefined' && CURRICULUM[lvl]) {
+      notions = 'Programme officiel (' + lvl + ') a respecter :\n' +
+        Object.entries(CURRICULUM[lvl]).map(([m, a]) => m + ' : ' + a.join(', ')).join('\n');
+    }
     // Prompt volontairement COURT (comme le quiz) : les modeles raisonnnent
     // longtemps sinon, et le JSON arrive tronque.
     let sys = `Tu es Lumi, professeur bienveillant pour un enfant de ${p.age} ans${lvl ? ' de classe ' + lvl : ''}. Genere une MINI-CLASSE sur le sujet demande. Reponds UNIQUEMENT avec un objet JSON (rien autour, pas de markdown). Format EXACT : {"titre":"...","etapes":[{"titre":"...","contenu":"3 a 6 phrases simples, une notion par etape, un exemple concret, ton chaleureux","question":{"question":"petite question de controle","options":["a","b","c","d"],"answer":INDEX_bonne_0_a_3,"explication":"une phrase"}}]}. Entre 4 et 6 etapes. L'enfant ne sait rien du sujet : demarre par le plus simple. Les mauvaises options sont plausibles et l'index answer varie d'une etape a l'autre. Le contenu est du MARKDOWN tres simple (gras **...**, listes -, maths en $...$). Tu EXPLIQUES la notion : jamais une correction toute faite.`;
-    if (notions) sys += '\n\nProgramme ' + lvl + ' a respecter :\n' + notions;
+    if (notions) sys += '\n\n' + notions;
     const msgs = [
       { role: 'system', content: sys },
       { role: 'user', content: 'Mini-classe sur : ' + cleanTopic }
@@ -2230,7 +2525,7 @@ app.post('/api/classroom', async (req, res) => {
                 .run(acc.id || 'local', String(childId || '').slice(0, 100) || '', id, JSON.stringify(cls), new Date().toISOString());
             } catch (e) { console.warn('Classe non sauvegardee :', e.message); }
           }
-          return res.json({ id, classroom: cls });
+          return res.json({ id, classroom: cls, source: typeof programmeSource === 'function' ? programmeSource(lvl) : null });
         }
       }
     }
@@ -2627,6 +2922,7 @@ app.post('/api/child', storedRoute(async (req, res) => {
 // ---------- Demarrage ----------
 (async () => {
   await initStore();
+  await initProgrammes(); // base SQL des programmes officiels (CP -> 3e) : reconstruite si absente
   await loadMailSettings();
   loadPronoteConf();
   notifyAccessRequests().catch(() => console.warn('Notification de demande : reprise différée.'));
