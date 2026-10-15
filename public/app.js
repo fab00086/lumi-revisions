@@ -580,10 +580,10 @@ function serverVoiceFromPref() {
     const id = value.slice(7);
     if (LUMI_SERVER_VOICES.some(o => o.id === id)) return id;
   }
-  // Denise par defaut : la plus rapide au demarrage (mesure o2switch 15/10 :
-  // vivienne 7,0 s a froid contre 1,3 s pour denise — la voix multilingue
-  // etait la cause du « temps de reponse trop long »).
-  return 'denise';
+  // Vivienne par defaut (voix de la famille). Le « temps long » observe le
+  // 15/10 venait du premier appel a froid apres redemarrage (python relance a
+  // chaque synthese), pas de cette voix : elle mesure 1,27 s a chaud.
+  return 'vivienne';
 }
 
 function frenchVoices() {
