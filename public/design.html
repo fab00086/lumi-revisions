@@ -39,6 +39,9 @@
   #fiche-sheet .qa { border: 1px dashed #d8d2f0; border-radius: 10px; padding: 7px 12px; margin: 5px 0; }
   #fiche-sheet .qa .question { margin: 0; font-weight: bold; }
   #fiche-sheet .qa .reponse { margin: 3px 0 0; color: #1e7a3c; font-style: italic; }
+  #fiche-sheet .consigne { font-style: italic; color: #6b7280; margin: 0 0 6px; font-size: 13px; }
+  #fiche-sheet .corrige { background: #f2fbf4; border: 1px solid #bfe3c9; border-radius: 10px; padding: 8px 12px; }
+  #fiche-sheet .corrige p { margin: 3px 0; color: #1e7a3c; }
   #fiche-sheet .bilan { display: flex; gap: 12px; flex-wrap: wrap; }
   #fiche-sheet .bilan > div { flex: 1; min-width: 200px; border-radius: 10px; border: 1px solid; padding: 9px 12px; }
   #fiche-sheet .bilan h3 { font-size: 13.5px; margin: 0 0 5px; }
@@ -194,9 +197,9 @@
         <p class="correction">✓ Je fais 8 x 10 = 80, j'enlève 8 : 80 - 8 = 72. Donc 9 x 8 = 72.</p>
       </div>
       <h2>🧠 Quiz : tu sais le faire ?</h2>
-      <div class="qa"><p class="question">1. Combien font 7 x 9 ?</p><p class="reponse">Réponse : 63</p></div>
-      <div class="qa"><p class="question">2. Combien font 4 x 8 ?</p><p class="reponse">Réponse : 32</p></div>
-      <div class="qa"><p class="question">3. Si 6 x 7 = 42, combien font 6 x 8 ?</p><p class="reponse">Réponse : 48</p></div>
+      <div class="qa"><p class="question">1. Combien font 7 x 9 ?</p></div>
+      <div class="qa"><p class="question">2. Combien font 4 x 8 ?</p></div>
+      <div class="qa"><p class="question">3. Si 6 x 7 = 42, combien font 6 x 8 ?</p></div>
       <h2>📊 Mon bilan</h2>
       <div class="bilan">
         <div class="reussi">
@@ -209,6 +212,9 @@
         </div>
       </div>
       <p class="astuce">💡 Astuce : pour la table de 9, les chiffres du résultat s'additionnent toujours à 9 (6 + 3 = 9).</p>
+      <h2>✅ Corrigé du quiz</h2>
+      <p class="consigne">Réponds d'abord sur la fiche (sans regarder !), puis vérifie ici :</p>
+      <div class="corrige"><p><strong>1.</strong> 63</p><p><strong>2.</strong> 32</p><p><strong>3.</strong> 48</p></div>
       <p class="pied">Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
     </div>
     <div class="fiche-actions">

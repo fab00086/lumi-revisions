@@ -102,7 +102,9 @@ test('fiche : la page imprimée rend notions, étapes numérotées, exemples cor
   assert.ok(page.includes('<span class="num">1</span>'), 'étapes numérotées');
   assert.ok(page.includes('même dénominateur'), 'méthode affichée');
   assert.ok(page.includes('Comparer 2/3 et 3/4') && page.includes('2/3 = 8/12 donc 2/3 &lt; 3/4'), 'exemples corrigés affichés');
-  assert.ok(page.includes('Dénominateur de 3/5 ?') && page.includes('Réponse : 5'), 'quiz affiché');
+  assert.ok(page.includes('Dénominateur de 3/5 ?'), 'question du quiz affichée');
+  assert.ok(!page.includes('Réponse : 5'), 'la réponse ne colle pas à la question (on peut se tester à blanc)');
+  assert.ok(page.includes('Corrigé du quiz') && page.includes('<strong>1.</strong> 5'), 'corrigé séparé en fin de fiche');
   assert.ok(page.includes('Bien compris') && page.includes('À retravailler'), 'bilan affiché');
   assert.ok(page.includes('Imprimer / Enregistrer en PDF'), 'bouton d\'impression présent');
 });

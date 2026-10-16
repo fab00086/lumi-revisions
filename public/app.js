@@ -1842,7 +1842,10 @@ function openFichePrint(fiche, name, level, presetWindow) {
     const correction = typeof x === 'string' ? '' : (x && x.correction) || '';
     return `<div class="exo"><p class="enonce">${esc(enonce)}</p>${correction ? `<p class="correction">✓ ${esc(correction)}</p>` : ''}</div>`;
   }).join('');
-  const quiz = (fiche.quiz || []).map((q, i) => `<div class="qa"><p class="question">${i + 1}. ${esc(q.question)}</p>${q.reponse ? `<p class="reponse">Réponse : ${esc(q.reponse)}</p>` : ''}</div>`).join('');
+  // Quiz : les questions SANS les reponses (l'enfant se teste d'abord) ;
+  // les reponses partent dans un « Corrigé » separe a la toute fin.
+  const quiz = (fiche.quiz || []).map((q, i) => `<div class="qa"><p class="question">${i + 1}. ${esc(q.question)}</p></div>`).join('');
+  const corrige = (fiche.quiz || []).map((q, i) => q.reponse ? `<p><strong>${i + 1}.</strong> ${esc(q.reponse)}</p>` : '').filter(Boolean).join('');
   const reussi = (fiche.reussi || []).map(x => `<li>${esc(x)}</li>`).join('');
   const aReviser = (fiche.a_reviser || []).map(x => `<li>${esc(x)}</li>`).join('');
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche de révision — ${esc(name)}</title>
@@ -1868,6 +1871,9 @@ function openFichePrint(fiche, name, level, presetWindow) {
   .qa { border: 1px dashed #d8d2f0; border-radius: 10px; padding: 7px 12px; margin: 5px 0; }
   .qa .question { margin: 0; font-weight: bold; }
   .qa .reponse { margin: 3px 0 0; color: #1e7a3c; font-style: italic; }
+  .consigne { font-style: italic; color: #6b7280; margin: 0 0 6px; font-size: 13px; }
+  .corrige { background: #f2fbf4; border: 1px solid #bfe3c9; border-radius: 10px; padding: 8px 12px; }
+  .corrige p { margin: 3px 0; color: #1e7a3c; }
   .bilan { display: flex; gap: 12px; }
   .bilan > div { flex: 1; border-radius: 10px; border: 1px solid; padding: 9px 12px; }
   .bilan h3 { font-size: 13.5px; margin: 0 0 5px; }
@@ -1914,7 +1920,8 @@ function openFichePrint(fiche, name, level, presetWindow) {
   ${quiz ? `<h2>🧠 Quiz : tu sais le faire ?</h2>${quiz}` : ''}
   ${reussi || aReviser ? `<h2>🌱 Où en es-tu ?</h2><div class="bilan">${reussi ? `<div class="reussi"><h3>✓ Bien compris</h3><ul>${reussi}</ul></div>` : ''}${aReviser ? `<div class="areviser"><h3>↻ À retravailler</h3><ul>${aReviser}</ul></div>` : ''}</div>` : ''}
   ${fiche.astuce ? `<p class="astuce">💡 Astuce : ${esc(fiche.astuce)}</p>` : ''}
-  <p class="pied">Relis les notions, puis cache les réponses du quiz pour te tester. 💪<br>Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
+  ${corrige ? `<h2>✅ Corrigé du quiz</h2><p class="consigne">Réponds d'abord sur la fiche (sans regarder !), puis vérifie ici :</p><div class="corrige">${corrige}</div>` : ''}
+  <p class="pied">Relis les notions, réponds au quiz sans regarder, puis vérifie avec le corrigé. 💪<br>Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
 </div>
   <div class="noprint">
     <button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
@@ -1995,6 +2002,75 @@ $('btn-fiche-go').addEventListener('click', async () => {
   setStatus("Je t'écoute 👂");
   openFichePrint(fiche, name, currentProfile.level, ficheWin);
 });
+
+// ---------- Aide : comment utiliser Lumi ----------
+// Questions courantes : réponses instantanées (pré-écrites, voix de Lumi,
+// zéro appel IA, marchent même hors ligne). Question libre : Lumi répond via
+// /api/aide (elle connaît toutes les fonctions et paramètres de l'app).
+const HELP_QA = [
+  { q: '📲 Installer Lumi sur le téléphone', a: 'Android : menu Chrome → « Installer l\'application » (ou le bouton 📲 dans les Paramètres). iPhone : ouvre Lumi dans Safari → bouton Partager → « Sur l\'écran d\'accueil ».\nAide iPhone : ⚙️ Paramètres & Partage → « Aide iPhone » pour le micro.' },
+  { q: '📷 Aider Lumi avec une photo du cahier', a: 'Dans une leçon, touche 📷, prends l\'exercice bien droit et lisible, puis envoie. Je lis l\'énoncé et je t\'aide à trouver la solution étape par étape — je ne donne jamais la réponse toute faite !' },
+  { q: '📄 Créer la Fiche de révision (PDF)', a: 'Dans la leçon : ☰ Outils → « Fiche ». Coche ce qui doit y figurer : Révision, Quiz, Apprentissage (le cours pas à pas), Exemples corrigés, Astuce. Touche « Créer ma fiche », puis « 🖨️ Imprimer » (ou « 📤 Partager » pour l\'enregistrer en PDF). Chaque partie démarre sur une nouvelle page.' },
+  { q: '🎯 Faire une interro (Quiz)', a: '☰ Outils → « Quiz » : écris un sujet — ou laisse vide pour un thème du programme de ton niveau — puis « C\'est parti ! ». Réponds aux questions ; je t\'explique à chaque fois et le score arrive à la fin.' },
+  { q: '🏫 C\'est quoi la Classe ?', a: '☰ Outils → « Classe » : je prépare un petit cours étape par étape sur le sujet de ton choix, avec une question de contrôle à chaque étape. Idéal pour découvrir un sujet avant de faire les devoirs.' },
+  { q: '🔊 Changer la voix de Lumi', a: '⚙️ Réglages → « Voix de Lumi » : choisis Vivienne, Denise, Éloïse ou Sylvie (voix de Lumi), ou une voix de ton téléphone. La vitesse se règle juste en dessous. Pendant que je parle : 🔊 pour réécouter, ✋ pour me couper.' },
+  { q: '🆕 Commencer une nouvelle leçon', a: 'Touche « 🆕 Leçon », puis appuie une seconde fois sur « Terminer ? » pour confirmer. Ta leçon en cours est archivée dans 📊 Progrès (rien n\'est perdu !) et une nouvelle leçon commence, toute propre.' },
+  { q: '📊 Voir les progrès', a: '📊 Progrès : tu y trouves les leçons terminées et les interros, avec le bilan « bien compris / à retravailler ». Touche une leçon pour relire toute la conversation.' },
+  { q: '🔗 Donner l\'accès à un autre appareil', a: 'Chaque famille a son code (LUMI-…). Le responsable ouvre l\'espace de gestion → « Copier l\'invitation » : le message contient le lien, le code se remplit tout seul. Pour un nouveau téléphone de la même famille : même code + la case « parent ».' },
+  { q: '🔄 Mettre Lumi à jour', a: 'Les mises à jour s\'installent toutes seules — au plus tard à la prochaine ouverture, dès que tu es sur l\'écran des profils. En secours : ⚙️ Réglages → « 🔄 Mettre à jour Lumi ».' },
+  { q: '🕵️ Ce que Lumi ne fait jamais', a: 'Je ne donne JAMAIS la réponse finale (je guide par questions), je ne parle jamais de mon fonctionnement interne, et tes données servent uniquement à accompagner les apprentissages : pas de publicité, pas de revente, rien d\'autre.' }
+];
+function showHelpAnswer(text) {
+  const box = $('help-result');
+  box.innerHTML = '';
+  const p = document.createElement('p');
+  p.className = 'help-a';
+  p.textContent = text;
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'btn'; b.textContent = '🔊 Écouter';
+  b.addEventListener('click', () => speak(text));
+  box.appendChild(p); box.appendChild(b);
+  box.scrollIntoView({ block: 'nearest' });
+}
+function renderHelpQuestions() {
+  const box = $('help-questions');
+  box.innerHTML = '';
+  HELP_QA.forEach(item => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'help-q';
+    b.textContent = item.q;
+    b.addEventListener('click', () => showHelpAnswer(item.a));
+    box.appendChild(b);
+  });
+}
+async function askHelp() {
+  const q = $('help-input').value.trim();
+  if (!q) { showHelpAnswer('Écris ta question sur l\'application juste au-dessus 🙂'); return; }
+  $('help-input').value = '';
+  const box = $('help-result');
+  box.innerHTML = '<p class="hint">Lumi réfléchit… ⏳</p>';
+  try {
+    const r = await fetch('/api/aide', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Pas de réponse, réessaie.');
+    showHelpAnswer(String(j.reponse || '').trim() || 'Je n\'ai pas de réponse, réessaie 🙂');
+  } catch (e) {
+    box.innerHTML = '';
+    showHelpAnswer('⚠️ ' + (e.message || 'Impossible de répondre, réessaie.'));
+  }
+}
+function openHelp() {
+  $('help-modal').classList.remove('hidden');
+  renderHelpQuestions();
+}
+$('btn-help').addEventListener('click', openHelp);
+$('btn-help-settings').addEventListener('click', () => { $('settings-modal').classList.add('hidden'); openHelp(); });
+$('btn-help-close').addEventListener('click', () => $('help-modal').classList.add('hidden'));
+$('btn-help-ask').addEventListener('click', askHelp);
+$('help-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') askHelp(); });
 
 // ---------- Vidéos (lecteur intégré) ----------
 function lastTopic() {

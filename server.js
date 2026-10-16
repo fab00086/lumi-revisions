@@ -693,7 +693,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-16.4' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-16.5' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -2672,6 +2672,52 @@ app.post('/api/fiche', async (req, res) => {
     res.json({ fiche });
   } catch (e) {
     console.error('[fiche]', e);
+    res.status(500).json({ error: friendlyError(e) });
+  }
+});
+
+// ---------- Aide : Lumi explique comment utiliser l'application ----------
+// Questions libres uniquement : les questions courantes ont des reponses
+// pre-ecrites cote client (instantanees, sans cout). Ici, Lumi recoit tout ce
+// qu'elle doit savoir de l'app (fonctions, parametres, limites) et repond
+// dans son style, sans jamais reveler de details techniques internes.
+function aideSystemPrompt() {
+  return `Tu es Lumi, le tuteur de l'application "Lumi Révisions". On te pose une question sur COMMENT UTILISER l'application. Reponds en francais, chaleureux et TRES bref (2 a 4 phrases), en tutoyant.
+
+CE QUE TU SAIS DE L'APPLICATION :
+- Connexion : chaque famille a un code "LUMI-..." a saisir sur l'ecran d'acces (case "parent" a cocher). Le lien d'invitation ouvre Lumi avec le code deja rempli.
+- Profils : chaque enfant a son profil (prenom, age, classe). Bouton "← Profils" pour changer d'enfant.
+- Lecon : on pose une question ou on montre une PHOTO du cahier (bouton 📷) ; Lumi guide par questions, ne donne jamais la reponse finale.
+- Interro (🎯 Quiz, menu ☰ Outils) : un sujet (vide = theme du programme du niveau), questions a choix multiple, explication et score.
+- Classe (🏫) : mini-cours etape par etape avec une question de controle a chaque etape.
+- Fiche (📄) : fiche de revision construite depuis la lecon ; liste a cocher (Revision, Quiz, Apprentissage, Exemples corriges, Astuce) ; boutons Imprimer et Partager (PDF) ; corrige du quiz a la fin de la fiche.
+- Progres (📊) : lecons terminees + interros avec bilan (bien compris / a retravailler).
+- Nouvelle lecon (🆕) : archive la lecon en cours (confirmation en 2 touches) et repart a zero.
+- Voix : ⚙️ Reglages → "Voix de Lumi" (Vivienne, Denise, Eloise, Sylvie ou voix du telephone) + vitesse ; 🔊 pour ecouter, ✋ pour couper.
+- Installation : Android/Chrome → "Installer l'application" ; iPhone → Safari, bouton Partager, "Sur l'ecran d'accueil".
+- Mises a jour : automatiques (au plus tard a la prochaine ouverture) ; secours ⚙️ → "Mettre a jour Lumi".
+- Confidentialite : aucune publicite, les donnees servent uniquement a l'apprentissage ; Lumi ne parle jamais de son fonctionnement interne.
+- Plan gratuit : un nombre limite d'echanges par jour ; le plan Famille est illimite.
+
+REGLES : ne reponds QUE sur l'utilisation de l'application. Si la question porte sur un exercice ou un devoir, invite a ouvrir le profil de l'enfant et a poser la question dans la lecon. Si tu ne sais pas : propose d'ouvrir ⚙️ Reglages ou de demander au responsable de Lumi. Jamais de details techniques internes (serveurs, modeles, code).`;
+}
+app.post('/api/aide', async (req, res) => {
+  try {
+    const access = await reserveUsage(req, 'chat');
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const acc = access.account;
+    const question = String((req.body || {}).question || '').trim().slice(0, 500);
+    if (!question) return res.status(400).json({ error: 'Pose ta question sur l’application 🙂' });
+    const r = await callOllama([
+      { role: 'system', content: aideSystemPrompt() },
+      { role: 'user', content: question }
+    ], { maxTokens: 500 });
+    const reponse = String(r.content || '').trim().slice(0, 1200);
+    if (!reponse) return res.status(502).json({ error: 'Je n’ai pas de réponse, réessaie 🙂' });
+    await countTokens(acc, tokenEstimate(aideSystemPrompt() + question) + tokenEstimate(reponse));
+    res.json({ reponse });
+  } catch (e) {
+    console.error('[aide]', e);
     res.status(500).json({ error: friendlyError(e) });
   }
 });
