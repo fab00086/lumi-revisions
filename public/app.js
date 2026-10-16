@@ -1831,7 +1831,7 @@ window.addEventListener('popstate', () => {
 // page propre à imprimer/enregistrer en PDF — au lieu de recracher la
 // conversation brute de l'écran. Mise en page pensée pour le papier :
 // cartes, étapes numérotées, encadrés à colorer, impressions fidèles.
-function openFichePrint(fiche, name, level) {
+function openFichePrint(fiche, name, level, presetWindow) {
   const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const date = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   const cours = (fiche.cours || []).map(n => `<div class="notion"><strong>${esc(n.titre)}</strong>${n.titre && n.contenu ? ' — ' : ''}${esc(n.contenu)}</div>`).join('');
@@ -1880,15 +1880,21 @@ function openFichePrint(fiche, name, level) {
   .astuce { background: #fff8e6; border-left: 4px solid #e0a82e; padding: 10px 13px; border-radius: 8px; margin-top: 12px; }
   .pied { margin-top: 14px; font-size: 11px; color: #9ca3af; text-align: center; }
   .noprint { text-align: center; margin-top: 26px; }
-  .noprint button { font-size: 15px; padding: 10px 18px; border-radius: 10px; border: none; background: #6d5bd0; color: #fff; cursor: pointer; }
+  .noprint button { font-size: 15px; padding: 10px 18px; border-radius: 10px; border: none; background: #6d5bd0; color: #fff; cursor: pointer; margin: 4px; }
+  .noprint button.second { background: #efe9ff; color: #4a3f8f; }
   @media print {
     .noprint { display: none; }
     body { padding: 0; max-width: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    h2 { break-after: avoid; }
-    .notion, .etape, .exo, .qa, .bilan > div { break-inside: avoid; }
+    .entete, .resume { break-after: avoid; }
+    /* Chaque grande partie démarre sur une nouvelle page : rien n'est coupé
+       et il reste de la place pour écrire les réponses du quiz. */
+    h2 { break-before: page; break-after: avoid; }
+    h2:first-of-type { break-before: auto; }
+    .notion, .etape, .exo, .qa, .bilan > div, .astuce { break-inside: avoid; }
   }
 </style></head>
 <body>
+<div id="fiche-contenu">
   <header class="entete">
     <div>
       <p class="kicker">Fiche de révision · Lumi</p>
@@ -1906,12 +1912,22 @@ function openFichePrint(fiche, name, level) {
   ${reussi || aReviser ? `<h2>🌱 Où en es-tu ?</h2><div class="bilan">${reussi ? `<div class="reussi"><h3>✓ Bien compris</h3><ul>${reussi}</ul></div>` : ''}${aReviser ? `<div class="areviser"><h3>↻ À retravailler</h3><ul>${aReviser}</ul></div>` : ''}</div>` : ''}
   ${fiche.astuce ? `<p class="astuce">💡 Astuce : ${esc(fiche.astuce)}</p>` : ''}
   <p class="pied">Relis les notions, puis cache les réponses du quiz pour te tester. 💪<br>Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
-  <div class="noprint"><button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button></div>
+</div>
+  <div class="noprint">
+    <button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
+    <button class="second" onclick="lumiShare()">📤 Partager</button>
+  </div>
+<script>
+function lumiShare() {
+  var texte = ((document.getElementById('fiche-contenu') || document.body).innerText || '').trim();
+  if (navigator.share) navigator.share({ title: 'Fiche de révision — ' + ${JSON.stringify(String(fiche.titre || 'Lumi').replace(/[<>]/g, ''))}, text: texte }).catch(function () {});
+  else if (navigator.clipboard) navigator.clipboard.writeText(texte).then(function () { alert('Fiche copiée ! Colle-la dans ton message.'); }, function () {});
+}
+</script>
 </body></html>`;
-  const w = window.open('', '_blank');
-  if (!w) { toast('Autorise les fenêtres pop-up pour imprimer la fiche.'); return; }
+  const w = presetWindow || window.open('', '_blank');
+  if (!w || w.closed) { toast('Autorise les fenêtres pop-up pour voir la fiche.'); return; }
   w.document.open(); w.document.write(html); w.document.close(); w.focus();
-  setTimeout(() => w.print(), 400);
 }
 
 // Liste a cocher : l'enfant (ou le parent) choisit ce qui va sur la fiche
@@ -1947,6 +1963,17 @@ $('btn-fiche-go').addEventListener('click', async () => {
   $('fiche-modal').classList.add('hidden');
   const name = currentProfile.name || 'enfant';
   setStatus('Je prépare ta fiche de révision… 📄');
+  // Fenêtre ouverte TOUT DE SUITE (dans le geste de l'utilisateur) : iOS/Safari
+  // bloquent les fenêtres ouvertes après une attente réseau. On y montre
+  // « préparation… » puis on remplit dès que la fiche est prête.
+  let ficheWin = null;
+  try { ficheWin = window.open('', '_blank'); } catch {}
+  if (ficheWin && !ficheWin.closed) {
+    try {
+      ficheWin.document.write('<meta charset="utf-8"><p style="font-family:Georgia;padding:40px;color:#4a3f8f">Je prépare ta fiche de révision… 📄</p>');
+      ficheWin.document.close();
+    } catch {}
+  }
   let fiche;
   try {
     const r = await fetch('/api/fiche', {
@@ -1957,12 +1984,13 @@ $('btn-fiche-go').addEventListener('click', async () => {
     if (!r.ok) throw new Error(j.error || 'Impossible de préparer la fiche.');
     fiche = j.fiche;
   } catch (e) {
+    if (ficheWin && !ficheWin.closed) { try { ficheWin.close(); } catch {} }
     setStatus("Je t'écoute 👂");
     toast('⚠️ ' + (e.message || 'Impossible de préparer la fiche.'));
     return;
   }
   setStatus("Je t'écoute 👂");
-  openFichePrint(fiche, name, currentProfile.level);
+  openFichePrint(fiche, name, currentProfile.level, ficheWin);
 });
 
 // ---------- Vidéos (lecteur intégré) ----------

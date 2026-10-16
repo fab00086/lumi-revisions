@@ -2,7 +2,7 @@
 // IMPORTANT : garder cette valeur EGALE a la version de server.js (/api/version)
 // sinon le bouton « Mettre à jour » et le toast restent affichés en boucle.
 // tests/version-sync.cjs verifie la concordance.
-const lumiInterfaceVersion = '2026-10-16.2';
+const lumiInterfaceVersion = '2026-10-16.3';
 let lumiUpdateBusy = false;
 let lumiUpdateNotice = false;
 async function checkLumiUpdate() {

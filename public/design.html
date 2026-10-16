@@ -57,8 +57,11 @@
     #zone-fiche .bloc { box-shadow: none; padding: 0; margin: 0; border-radius: 0; }
     #zone-fiche .bloc > h2, #zone-fiche .bloc > .note, #zone-fiche .fiche-actions, #zone-fiche .toc { display: none !important; }
     #fiche-sheet { border: none; border-radius: 0; padding: 0; max-width: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    #fiche-sheet h2 { break-after: avoid; }
-    #fiche-sheet .notion, #fiche-sheet .etape, #fiche-sheet .exo, #fiche-sheet .qa, #fiche-sheet .bilan > div { break-inside: avoid; }
+    #fiche-sheet .entete, #fiche-sheet .resume { break-after: avoid; }
+    /* Chaque grande partie démarre sur une nouvelle page (multi-pages propre). */
+    #fiche-sheet h2 { break-before: page; break-after: avoid; }
+    #fiche-sheet h2:first-of-type { break-before: auto; }
+    #fiche-sheet .notion, #fiche-sheet .etape, #fiche-sheet .exo, #fiche-sheet .qa, #fiche-sheet .bilan > div, #fiche-sheet .astuce { break-inside: avoid; }
   }
 </style>
 </head>
@@ -210,8 +213,16 @@
     </div>
     <div class="fiche-actions">
       <button class="btn btn-primary" type="button" onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
-      <p class="hint">Astuce : sur téléphone, « Imprimer » propose « Enregistrer en PDF ».</p>
+      <button class="btn" type="button" onclick="apercuShare()">📤 Partager</button>
+      <p class="hint">Sur téléphone : « Imprimer » propose « Enregistrer en PDF » et « Partager » ouvre la feuille du téléphone (impression, envoi…). Chaque partie démarre sur une nouvelle page.</p>
     </div>
+    <script>
+      function apercuShare() {
+        var texte = (document.getElementById('fiche-sheet') || document.body).innerText.trim();
+        if (navigator.share) navigator.share({ title: 'Fiche de révision — Lumi (exemple)', text: texte }).catch(function () {});
+        else if (navigator.clipboard) navigator.clipboard.writeText(texte).then(function () { alert('Fiche copiée !'); }, function () {});
+      }
+    </script>
   </section>
 
   <p class="hint" style="text-align:center">Aperçu statique — aucune donnée réelle, aucun appel à l'IA. <a href="/">Retour à Lumi</a></p>

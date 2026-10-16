@@ -87,7 +87,7 @@ test('fiche : la page imprimée rend notions, étapes numérotées, exemples cor
   let page = '';
   const fake = { document: { open() {}, write(h) { page += h; }, close() {} }, focus() {}, print() {} };
   const c = vm.createContext({ console, window: { open: () => fake }, toast() {}, setTimeout() {} });
-  vm.runInContext(frontSection('function openFichePrint(fiche, name, level)', "$('btn-print')"), c);
+  vm.runInContext(frontSection('function openFichePrint(', "$('btn-print')"), c);
   c.openFichePrint({
     titre: 'Les fractions', resume: 'On a comparé des fractions.',
     notions: [{ titre: 'Numérateur', contenu: 'le nombre du haut' }],
