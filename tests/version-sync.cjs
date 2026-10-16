@@ -32,3 +32,12 @@ test('cache-buster iOS : app.js et style.css portent le meme numero que le SW (s
   assert.equal(appVer[1], fromSw[1], 'app.js?v doit suivre le numero de cache du SW');
   assert.equal(cssVer[1], fromSw[1], 'style.css?v doit suivre le numero de cache du SW');
 });
+
+test('apercu design : la page /design existe avec la fiche exemple et le bouton d\'impression', () => {
+  const design = fs.readFileSync(path.join(__dirname, '../public/design.html'), 'utf8');
+  assert.match(server, /app\.get\('\/design'/, 'la route /design doit exister');
+  assert.match(design, /Aperçu design/);
+  assert.match(design, /id="fiche-sheet"/, 'la fiche exemple doit etre presente');
+  assert.match(design, /window\.print\(\)/, 'le bouton d\'impression doit etre present');
+  assert.match(design, /fiche-opt|Créer ma fiche/, 'la liste a cocher doit etre montree');
+});

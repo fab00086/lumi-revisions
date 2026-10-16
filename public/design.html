@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumi — Aperçu design</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { padding: 20px 14px 70px; }
+  .apercu { max-width: 900px; margin: 0 auto; }
+  .apercu h1 { font-size: 24px; margin: 0 0 4px; }
+  .apercu .sous { color: var(--text-soft); margin: 0 0 14px; font-size: 14px; }
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .toc a { font-size: 13px; padding: 7px 12px; border-radius: 999px; background: var(--card); color: var(--violet-dark); text-decoration: none; box-shadow: 0 2px 8px rgba(30,20,60,.08); }
+  .bloc { background: var(--card); border-radius: 18px; padding: 16px 16px 18px; margin-bottom: 18px; box-shadow: 0 6px 22px rgba(30,20,60,.07); }
+  .bloc > h2 { margin: 0 0 4px; font-size: 17px; color: var(--violet-dark); }
+  .bloc > .note { margin: 0 0 12px; color: var(--text-soft); font-size: 13px; }
+  .demo-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .demo-label { font-size: 12px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 6px; }
+  /* Conversation d'exemple */
+  .demo-chat { background: var(--bg); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  /* Fiche imprimable (mêmes styles que la vraie fiche PDF) */
+  #fiche-sheet { font-family: Georgia, "Times New Roman", serif; color: #1f2430; max-width: 740px; margin: 0 auto; padding: 26px 22px; font-size: 15px; line-height: 1.45; background: #fff; border: 1px solid #e6e2f7; border-radius: 12px; }
+  #fiche-sheet .entete { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; border-bottom: 3px solid #6d5bd0; padding-bottom: 10px; }
+  #fiche-sheet .kicker { text-transform: uppercase; letter-spacing: 2px; font-size: 10px; color: #6d5bd0; font-weight: bold; margin: 0 0 5px; }
+  #fiche-sheet h1 { font-size: 23px; margin: 0 0 3px; color: #1f2430; }
+  #fiche-sheet .meta { color: #6b7280; font-size: 12.5px; margin: 0; }
+  #fiche-sheet .meta.date { white-space: nowrap; padding-bottom: 2px; }
+  #fiche-sheet .resume { font-style: italic; background: #f3efff; border-left: 4px solid #6d5bd0; padding: 10px 13px; border-radius: 8px; margin: 12px 0 0; }
+  #fiche-sheet h2 { font-size: 15.5px; color: #4a3f8f; border-bottom: 2px solid #ece7fb; padding-bottom: 5px; margin: 16px 0 8px; }
+  #fiche-sheet .notion { border: 1px solid #e6e2f7; background: #faf9ff; border-radius: 10px; padding: 7px 12px; margin: 5px 0; }
+  #fiche-sheet .notion strong { color: #4a3f8f; }
+  #fiche-sheet .etape { display: flex; gap: 9px; align-items: flex-start; margin: 5px 0; }
+  #fiche-sheet .etape .num { flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%; background: #6d5bd0; color: #fff; font-size: 13px; font-weight: bold; text-align: center; line-height: 24px; }
+  #fiche-sheet .etape .txt strong { color: #4a3f8f; }
+  #fiche-sheet .exo { border-left: 4px solid #c9bff2; background: #fbfaff; border-radius: 0 10px 10px 0; padding: 8px 12px; margin: 5px 0; }
+  #fiche-sheet .exo .enonce { margin: 0; }
+  #fiche-sheet .exo .correction { margin: 5px 0 0; color: #1e7a3c; }
+  #fiche-sheet .qa { border: 1px dashed #d8d2f0; border-radius: 10px; padding: 7px 12px; margin: 5px 0; }
+  #fiche-sheet .qa .question { margin: 0; font-weight: bold; }
+  #fiche-sheet .qa .reponse { margin: 3px 0 0; color: #1e7a3c; font-style: italic; }
+  #fiche-sheet .bilan { display: flex; gap: 12px; flex-wrap: wrap; }
+  #fiche-sheet .bilan > div { flex: 1; min-width: 200px; border-radius: 10px; border: 1px solid; padding: 9px 12px; }
+  #fiche-sheet .bilan h3 { font-size: 13.5px; margin: 0 0 5px; }
+  #fiche-sheet .bilan ul { margin: 0; padding-left: 18px; }
+  #fiche-sheet .bilan li { margin: 3px 0; }
+  #fiche-sheet .reussi { border-color: #bfe3c9; background: #f2fbf4; }
+  #fiche-sheet .reussi h3 { color: #1e7a3c; }
+  #fiche-sheet .areviser { border-color: #f2d5b8; background: #fff8f0; }
+  #fiche-sheet .areviser h3 { color: #b3541e; }
+  #fiche-sheet .astuce { background: #fff8e6; border-left: 4px solid #e0a82e; padding: 10px 13px; border-radius: 8px; margin-top: 12px; }
+  #fiche-sheet .pied { margin-top: 14px; font-size: 11px; color: #9ca3af; text-align: center; }
+  .fiche-actions { text-align: center; margin-top: 14px; }
+  @media print {
+    body { padding: 0; }
+    .apercu > :not(#zone-fiche) { display: none !important; }
+    #zone-fiche .bloc { box-shadow: none; padding: 0; margin: 0; border-radius: 0; }
+    #zone-fiche .bloc > h2, #zone-fiche .bloc > .note, #zone-fiche .fiche-actions, #zone-fiche .toc { display: none !important; }
+    #fiche-sheet { border: none; border-radius: 0; padding: 0; max-width: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    #fiche-sheet h2 { break-after: avoid; }
+    #fiche-sheet .notion, #fiche-sheet .etape, #fiche-sheet .exo, #fiche-sheet .qa, #fiche-sheet .bilan > div { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="apercu">
+  <h1>🖌️ Aperçu design — Lumi</h1>
+  <p class="sous">Tout le design en un seul endroit pour valider : boutons, écrans, fenêtres et la fiche imprimable (exemple, sans IA). <a href="/">← Retour à Lumi</a></p>
+
+  <nav class="toc">
+    <a href="#boutons">Boutons &amp; outils</a>
+    <a href="#ecrans">Écrans</a>
+    <a href="#fenetres">Fenêtres</a>
+    <a href="#zone-fiche">Fiche imprimable</a>
+  </nav>
+
+  <section class="bloc" id="boutons">
+    <h2>Boutons &amp; outils</h2>
+    <p class="note">Les grands boutons de la leçon (dans le menu ☰ Outils) :</p>
+    <div class="demo-row">
+      <button class="icon-btn labeled-btn" type="button"><span class="button-icon">🎯</span><span class="button-label">Quiz</span></button>
+      <button class="icon-btn labeled-btn" type="button"><span class="button-icon">🏫</span><span class="button-label">Classe</span></button>
+      <button class="icon-btn labeled-btn" type="button"><span class="button-icon">🎬</span><span class="button-label">Vidéo</span></button>
+      <button class="icon-btn labeled-btn" type="button"><span class="button-icon">🆕</span><span class="button-label">Leçon</span></button>
+      <button class="icon-btn labeled-btn" type="button"><span class="button-icon">📊</span><span class="button-label">Progrès</span></button>
+      <button class="icon-btn labeled-btn" type="button"><span class="button-icon">📄</span><span class="button-label">Fiche</span></button>
+      <button class="icon-btn labeled-btn" type="button"><span class="button-icon">⚙️</span><span class="button-label">Réglages</span></button>
+    </div>
+    <p class="demo-label">Barre du haut</p>
+    <div class="demo-row">
+      <button class="icon-btn labeled-btn" type="button"><span class="button-icon">←</span><span class="button-label">Profils</span></button>
+      <span class="badge">9 ans</span>
+      <details class="chat-tools"><summary>☰ Outils</summary></details>
+    </div>
+    <p class="demo-label">Boutons d'action</p>
+    <div class="demo-row">
+      <button class="btn" type="button">🔊 Tester la voix</button>
+      <button class="btn btn-primary" type="button">📄 Créer ma fiche</button>
+      <button class="btn install-btn" type="button">📲 Installer Lumi</button>
+      <button class="btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
+    </div>
+  </section>
+
+  <section class="bloc" id="ecrans">
+    <h2>Écrans</h2>
+    <p class="note">Accueil (choix du profil) — maquette :</p>
+    <div class="card" style="box-shadow:none;border:1px dashed #ddd2f7;max-width:none;">
+      <div class="logo">🧑‍🏫</div>
+      <h1>Lumi</h1>
+      <p class="subtitle">Choisis ton profil pour commencer.</p>
+      <div class="demo-row">
+        <button class="profile-pill" type="button">👧 Manon <span class="badge">CM1</span> <span class="del">✕</span></button>
+        <button class="profile-pill" type="button">👦 Liam <span class="badge">4e</span> <span class="del">✕</span></button>
+      </div>
+    </div>
+    <p class="demo-label">La leçon (conversation) — maquette :</p>
+    <div class="demo-chat">
+      <div class="msg user"><div class="bubble">Combien font 7 fois 8 ? Je ne comprends pas les tables.</div></div>
+      <div class="msg assistant"><div class="bubble">Bonne question ! 🎉 Tu connais 7 × 7 = 49 : combien faut-il ajouter pour arriver à 7 × 8 ?</div></div>
+      <div class="sources"><strong>📚 Sources :</strong> <a href="https://eduscol.education.fr/1540/programmes-de-cycle-3" target="_blank" rel="noopener">Programme officiel de l'Éducation nationale — cycle 3 (CM1, CM2, 6e)</a></div>
+      <div class="msg user"><div class="bubble">56 ?</div></div>
+      <div class="msg assistant"><div class="bubble">Bravo ! Oui, 7 × 8 = 56. Et si tu inverses, 8 × 7, ça donne quoi ? 💪</div></div>
+    </div>
+    <p class="demo-label">États de la voix et des sources</p>
+    <div class="demo-row">
+      <span class="hint" style="margin:0">Je réfléchis… 🤔</span>
+      <span class="hint" style="margin:0">Je parle 🗣️</span>
+      <span class="hint" style="margin:0">Je t'écoute 👂</span>
+    </div>
+  </section>
+
+  <section class="bloc" id="fenetres">
+    <h2>Fenêtres</h2>
+    <p class="note">La liste à cocher de la fiche (avant impression) — maquette :</p>
+    <div class="modal-box" style="max-width:420px;margin:0 auto;box-shadow:0 8px 26px rgba(30,20,60,.12);">
+      <div class="modal-head">
+        <strong>📄 Fiche de révision</strong>
+        <button class="icon-btn" type="button" title="Fermer">✕</button>
+      </div>
+      <p class="hint">Coche ce que tu veux sur ta fiche à imprimer :</p>
+      <label class="consent-row"><input type="checkbox" checked> 📖 <strong>Révision</strong> — les notions à retenir + la méthode</label>
+      <label class="consent-row"><input type="checkbox" checked> 🎯 <strong>Quiz</strong> — des questions pour se tester</label>
+      <label class="consent-row"><input type="checkbox"> 🧠 <strong>Apprentissage</strong> — le cours expliqué pas à pas</label>
+      <label class="consent-row"><input type="checkbox" checked> ✏️ <strong>Exemples corrigés</strong> — des exercices type</label>
+      <label class="consent-row"><input type="checkbox" checked> 💡 <strong>Astuce</strong> — pour mémoriser</label>
+      <button class="btn btn-primary" type="button">📄 Créer ma fiche</button>
+    </div>
+    <p class="demo-label">Fenêtre Interro (haut) — maquette</p>
+    <div class="modal-box" style="max-width:420px;margin:0 auto;box-shadow:0 8px 26px rgba(30,20,60,.12);">
+      <div class="modal-head">
+        <strong>🎯 Interro</strong>
+        <button class="icon-btn" type="button" title="Fermer">✕</button>
+      </div>
+      <div class="video-search">
+        <input type="text" placeholder="Sur quel sujet ? (ex : les fractions)">
+        <button class="btn btn-primary" type="button">C'est parti !</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="bloc" id="zone-fiche">
+    <h2>Fiche de révision (impression / PDF)</h2>
+    <p class="note">Exemple complet — même rendu que la vraie fiche. Le bouton imprime cette page (la fiche seule part à l'impression).</p>
+    <div id="fiche-sheet">
+      <header class="entete">
+        <div>
+          <p class="kicker">Fiche de révision · Lumi</p>
+          <h1>Les tables de multiplication</h1>
+          <p class="meta">Manon · CM1</p>
+        </div>
+        <p class="meta date">16 octobre 2026</p>
+      </header>
+      <p class="resume">Calculer une multiplication, comme 7 x 8, à l'aide des tables et d'astuces.</p>
+      <h2>🧠 Le cours pas à pas</h2>
+      <div class="notion"><strong>La multiplication, c'est des groupes</strong> — 7 x 8, c'est 7 groupes de 8. On peut aussi voir 8 + 8 + 8 + 8 + 8 + 8 + 8 = 56. Multiplier va plus vite que d'ajouter encore et encore.</div>
+      <div class="notion"><strong>L'ordre ne change rien</strong> — 7 x 8 = 8 x 7 = 56. Tu peux choisir l'ordre le plus facile à calculer.</div>
+      <h2>📌 Les notions à retenir</h2>
+      <div class="notion"><strong>Astuce du +1 groupe</strong> — Si tu connais 7 x 7 = 49, alors 7 x 8 = 49 + 8 = 56.</div>
+      <div class="notion"><strong>Astuce du 9</strong> — Pour la table de 9 : 9 x 7 = 70 - 7 = 63. On fait x10 puis on enlève le nombre.</div>
+      <h2>🪜 La méthode pas à pas</h2>
+      <div class="etape"><span class="num">1</span><div class="txt"><strong>Je lis</strong><br>7 x 8 : combien de groupes de combien ?</div></div>
+      <div class="etape"><span class="num">2</span><div class="txt"><strong>Je cherche une table proche</strong><br>7 x 7 = 49 que je connais par cœur.</div></div>
+      <div class="etape"><span class="num">3</span><div class="txt"><strong>J'ajoute ou j'enlève un groupe</strong><br>49 + 8 = 56, donc 7 x 8 = 56.</div></div>
+      <h2>✏️ Exemples corrigés</h2>
+      <div class="exo">
+        <p class="enonce">Combien font 6 x 8 ?</p>
+        <p class="correction">✓ 6 x 7 = 42, j'ajoute 6 : 42 + 6 = 48. Donc 6 x 8 = 48.</p>
+      </div>
+      <div class="exo">
+        <p class="enonce">Combien font 9 x 8 ?</p>
+        <p class="correction">✓ Je fais 8 x 10 = 80, j'enlève 8 : 80 - 8 = 72. Donc 9 x 8 = 72.</p>
+      </div>
+      <h2>🧠 Quiz : tu sais le faire ?</h2>
+      <div class="qa"><p class="question">1. Combien font 7 x 9 ?</p><p class="reponse">Réponse : 63</p></div>
+      <div class="qa"><p class="question">2. Combien font 4 x 8 ?</p><p class="reponse">Réponse : 32</p></div>
+      <div class="qa"><p class="question">3. Si 6 x 7 = 42, combien font 6 x 8 ?</p><p class="reponse">Réponse : 48</p></div>
+      <h2>📊 Mon bilan</h2>
+      <div class="bilan">
+        <div class="reussi">
+          <h3>✓ Bien compris</h3>
+          <ul><li>Le sens de la multiplication</li><li>L'astuce du +1 groupe</li></ul>
+        </div>
+        <div class="areviser">
+          <h3>↗ À retravailler</h3>
+          <ul><li>La table de 9 à mémoriser</li></ul>
+        </div>
+      </div>
+      <p class="astuce">💡 Astuce : pour la table de 9, les chiffres du résultat s'additionnent toujours à 9 (6 + 3 = 9).</p>
+      <p class="pied">Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
+    </div>
+    <div class="fiche-actions">
+      <button class="btn btn-primary" type="button" onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
+      <p class="hint">Astuce : sur téléphone, « Imprimer » propose « Enregistrer en PDF ».</p>
+    </div>
+  </section>
+
+  <p class="hint" style="text-align:center">Aperçu statique — aucune donnée réelle, aucun appel à l'IA. <a href="/">Retour à Lumi</a></p>
+</div>
+</body>
+</html>

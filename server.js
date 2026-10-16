@@ -535,6 +535,9 @@ app.get(['/admin', '/admin.html'], (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
+// Apercu design : page statique de validation du look (aucune donnee reelle,
+// aucun appel a l'IA). Ouverte depuis les Reglages ou directement /design.
+app.get('/design', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'design.html')));
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') // Safari garde trop le cache
 }));
@@ -690,7 +693,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-16.1' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-16.2' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
