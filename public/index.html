@@ -11,11 +11,37 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Lumi">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="style.css?v=62">
+  <link rel="stylesheet" href="style.css?v=63">
   <link rel="stylesheet" href="/katex/katex.min.css">
   <script defer src="/katex/katex.min.js"></script>
 </head>
 <body>
+
+  <!-- ===== Écran de chargement : Lumi écrit + barre de progression ===== -->
+  <div id="splash" class="splash" aria-hidden="true">
+    <div class="splash-box">
+      <div class="splash-scene">
+        <svg class="splash-avatar" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="60" cy="60" r="56" fill="#efe9ff"/>
+          <circle cx="60" cy="56" r="36" fill="#ffd9a0"/>
+          <path d="M24 56 C24 30 40 20 60 20 C80 20 96 30 96 56 C96 46 82 36 60 36 C38 36 24 46 24 56 Z" fill="#7a4a2b"/>
+          <g fill="none" stroke="#4a3b52" stroke-width="2.2">
+            <circle cx="48" cy="54" r="10"/>
+            <circle cx="72" cy="54" r="10"/>
+            <line x1="58" y1="54" x2="62" y2="54"/>
+          </g>
+          <circle cx="48" cy="54" r="4.5" fill="#2c1f2e"/>
+          <circle cx="72" cy="54" r="4.5" fill="#2c1f2e"/>
+          <circle cx="46.6" cy="52.4" r="1.6" fill="#ffffff"/>
+          <circle cx="70.6" cy="52.4" r="1.6" fill="#ffffff"/>
+          <path d="M52 76 Q60 82 68 76" stroke="#a3384f" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <span class="splash-pencil" aria-hidden="true">✏️</span>
+      </div>
+      <p class="splash-text">Lumi écrit<span class="splash-dots"><span>.</span><span>.</span><span>.</span></span></p>
+      <div class="splash-bar"><div class="splash-fill"></div></div>
+    </div>
+  </div>
 
   <!-- ===== Écran : code d'accès (mode en ligne sécurisé) ===== -->
   <div id="screen-gate" class="screen hidden">
@@ -424,9 +450,14 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {}));
     }
+    // Securite : ne jamais laisser l'ecran de chargement bloque (8 s max).
+    setTimeout(() => {
+      const s = document.getElementById('splash');
+      if (s && !s.classList.contains('hidden')) { s.classList.add('done'); setTimeout(() => s.classList.add('hidden'), 350); }
+    }, 8000);
   </script>
-  <script src="app.js?v=62"></script>
-  <script src="update.js?v=62"></script>
+  <script src="app.js?v=63"></script>
+  <script src="update.js?v=63"></script>
 </body>
 </html>
 

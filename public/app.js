@@ -3161,6 +3161,7 @@ async function initApp() {
     $('gate-consent').checked = false;
     $('gate-error').textContent = 'Code rempli depuis ton invitation. Confirme être le parent, puis touche « Entrer ».';
     showGateBrowserHint();
+    hideSplash();
     $('gate-consent').focus(); return;
   }
   try {
@@ -3168,12 +3169,13 @@ async function initApp() {
     if (g.locked && !g.open) {
       $('screen-gate').classList.remove('hidden');
       showGateBrowserHint();
+      hideSplash();
       $('gate-code').focus();
       return;
     }
   } catch {
     $('screen-gate').classList.remove('hidden');
-    $('gate-error').textContent = 'Lumi ne peut pas vérifier ton accès. Vérifie la connexion puis réessaie.'; return;
+    $('gate-error').textContent = 'Lumi ne peut pas vérifier ton accès. Vérifie la connexion puis réessaie.'; hideSplash(); return;
   }
   try { const me = await (await fetch('/api/auth/me')).json(); configureAdminTest(me.adminTest === true); }
   catch { configureAdminTest(false); }
@@ -3181,7 +3183,15 @@ async function initApp() {
   if (typeof checkWhisperStt === 'function') checkWhisperStt(); // dictée Whisper du PC, si dispo
   $('screen-profile').classList.remove('hidden');
   handleBillingReturn();
-  fetchProfiles().then(() => { renderProfiles(); resumeAfterMicRepair(); });
+  fetchProfiles().then(() => { hideSplash(); renderProfiles(); resumeAfterMicRepair(); });
+}
+// Écran de chargement : barre de progression + petite animation de Lumi qui
+// écrit. Refermé dès que l'app sait quel écran montrer (code, profils...).
+function hideSplash() {
+  const el = $('splash');
+  if (!el) return;
+  el.classList.add('done');
+  if (typeof setTimeout === 'function') setTimeout(() => el.classList.add('hidden'), 320);
 }
 function enterGate() {
   const code = $('gate-code').value.trim();

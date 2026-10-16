@@ -188,6 +188,26 @@ body {
 .help-q:hover { background: #e2d9fb; }
 .help-result { margin-top: 10px; }
 .help-result .help-a { background: #faf9ff; border: 1px solid #e6e2f7; border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1.5; margin: 0 0 8px; white-space: pre-line; }
+/* Écran de chargement : Lumi écrit + barre de progression */
+.splash { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: var(--bg); transition: opacity 0.3s ease; }
+.splash.hidden { display: none; }
+.splash.done { opacity: 0; pointer-events: none; }
+.splash.done .splash-fill { width: 100%; }
+.splash-box { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.splash-scene { position: relative; }
+.splash-avatar { width: 104px; height: 104px; display: block; animation: splash-bob 1.7s ease-in-out infinite; }
+.splash-pencil { position: absolute; right: -10px; bottom: 6px; font-size: 24px; animation: splash-write 0.7s ease-in-out infinite; }
+.splash-text { margin: 0; color: var(--violet-dark); font-weight: 700; font-size: 16px; }
+.splash-dots span { display: inline-block; animation: splash-blink 1.2s infinite; }
+.splash-dots span:nth-child(2) { animation-delay: 0.2s; }
+.splash-dots span:nth-child(3) { animation-delay: 0.4s; }
+.splash-bar { width: 190px; height: 9px; border-radius: 999px; background: #e6e0f8; overflow: hidden; }
+.splash-fill { height: 100%; width: 8%; border-radius: 999px; background: linear-gradient(90deg, #6d5bd0, #9a8cf0); animation: splash-grow 3.5s ease-out forwards; transition: width 0.3s ease; }
+@keyframes splash-grow { from { width: 8%; } to { width: 90%; } }
+@keyframes splash-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes splash-write { 0%, 100% { transform: rotate(-14deg) translateX(0); } 50% { transform: rotate(-2deg) translateX(-4px); } }
+@keyframes splash-blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .splash-avatar, .splash-pencil, .splash-fill, .splash-dots span { animation: none; } .splash-fill { width: 60%; } }
 
 /* Cahier de textes Pronote */
 .devoir-date { display: block; font-size: 12.5px; color: var(--text-soft); margin: 2px 0 8px; }

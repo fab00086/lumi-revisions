@@ -41,3 +41,13 @@ test('apercu design : la page /design existe avec la fiche exemple et le bouton 
   assert.match(design, /window\.print\(\)/, 'le bouton d\'impression doit etre present');
   assert.match(design, /fiche-opt|Créer ma fiche/, 'la liste a cocher doit etre montree');
 });
+
+test('ecran de chargement : barre de progression + animation, et fermeture branchee', () => {
+  const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  assert.match(html, /id="splash"/, 'index.html doit contenir l ecran de chargement');
+  assert.match(html, /splash-fill/, 'la barre de progression doit etre presente');
+  assert.match(html, /splash-pencil/, 'l animation du crayon doit etre presente');
+  assert.match(html, /setTimeout\(\(\) => \{[\s\S]*10000|8000/, 'la securite anti-blocage doit exister');
+  assert.match(app, /function hideSplash\(\)/, 'hideSplash doit exister');
+  assert.ok((app.match(/hideSplash\(\)/g) || []).length >= 4, 'hideSplash doit etre appele sur chaque sortie d initialisation');
+});
