@@ -1882,6 +1882,8 @@ function openFichePrint(fiche, name, level, presetWindow) {
   .noprint { text-align: center; margin-top: 26px; }
   .noprint button { font-size: 15px; padding: 10px 18px; border-radius: 10px; border: none; background: #6d5bd0; color: #fff; cursor: pointer; margin: 4px; }
   .noprint button.second { background: #efe9ff; color: #4a3f8f; }
+  .retour { margin: 0 0 14px; }
+  .retour button { font-size: 14px; padding: 8px 14px; border-radius: 10px; border: none; background: #efe9ff; color: #4a3f8f; cursor: pointer; }
   @media print {
     .noprint { display: none; }
     body { padding: 0; max-width: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1894,6 +1896,7 @@ function openFichePrint(fiche, name, level, presetWindow) {
   }
 </style></head>
 <body>
+  <p class="retour noprint"><button onclick="window.close(); setTimeout(function(){ if (!window.closed) location.href = '/'; }, 250);">← Retour à Lumi</button></p>
 <div id="fiche-contenu">
   <header class="entete">
     <div>

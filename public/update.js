@@ -2,9 +2,15 @@
 // IMPORTANT : garder cette valeur EGALE a la version de server.js (/api/version)
 // sinon le bouton « Mettre à jour » et le toast restent affichés en boucle.
 // tests/version-sync.cjs verifie la concordance.
-const lumiInterfaceVersion = '2026-10-16.3';
+const lumiInterfaceVersion = '2026-10-16.4';
 let lumiUpdateBusy = false;
 let lumiUpdateNotice = false;
+// Mise a jour AUTOMATIQUE (sans passer par Reglages) : la version est
+// verifiee a chaque ouverture / retour au premier plan ; elle s'applique
+// seulement HORS LECON (ecran des profils, aucune fenetre ouverte), sinon
+// elle attend le retour aux profils ou la prochaine ouverture.
+let lumiUpdatePending = false;
+let lumiReloading = false;
 async function checkLumiUpdate() {
   try {
     const response = await fetch('/api/version', { cache: 'no-store' });
@@ -15,10 +21,34 @@ async function checkLumiUpdate() {
       ? `Version installée : ${lumiInterfaceVersion} — à jour`
       : `Version installée : ${lumiInterfaceVersion} — le serveur propose ${version}. Touche « Mettre à jour Lumi ».`;
     if (version !== lumiInterfaceVersion) {
+      lumiUpdatePending = true;
       document.querySelectorAll('[data-update-lumi]').forEach(button => { button.textContent = '🔄 Nouvelle version — mettre à jour'; });
-      if (!lumiUpdateNotice) { lumiUpdateNotice = true; toast('Une nouvelle version de Lumi est disponible. Utilise « Mettre à jour Lumi ».', 8000); }
+      if (!lumiUpdateNotice) { lumiUpdateNotice = true; toast('Une nouvelle version de Lumi est prête : elle s\'installe toute seule sur l\'écran des profils (ou à la prochaine ouverture).', 8000); }
+      lumiMiseAJourHorsLecon();
     }
   } catch { /* Keep the offline interface available. */ }
+}
+// En lecon (ou une fenetre ouverte) : on ne recharge jamais tout seul.
+function lumiEnLecon() {
+  const chat = document.getElementById('screen-chat');
+  return !!(chat && !chat.classList.contains('hidden'));
+}
+function lumiOccupe() {
+  if (lumiEnLecon()) return true;
+  const modal = document.querySelector ? document.querySelector('.modal:not(.hidden)') : null;
+  return !!modal;
+}
+// Applique la mise a jour au premier moment calme : petit message puis
+// rechargement complet (les ?v= et le service worker garantissent le reste).
+function lumiMiseAJourHorsLecon() {
+  if (!lumiUpdatePending || lumiReloading) return;
+  if (lumiOccupe()) return;
+  lumiReloading = true;
+  try { toast('Mise à jour de Lumi… 🌙', 4000); } catch {}
+  setTimeout(() => {
+    try { window.location.replace(window.location.pathname + '?_maj=' + Date.now()); }
+    catch { window.location.reload(); }
+  }, 1200);
 }
 async function updateLumi() {
   if (lumiUpdateBusy) return;
@@ -49,4 +79,27 @@ async function updateLumi() {
 document.querySelectorAll('[data-update-lumi]').forEach(button => button.addEventListener('click', updateLumi));
 window.addEventListener('focus', checkLumiUpdate);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkLumiUpdate(); });
+// Une mise a jour en attente s'applique des qu'on est au calme (retour aux
+// profils compris), meme sans rebouger l'application.
+if (typeof setInterval === 'function') setInterval(() => { try { lumiMiseAJourHorsLecon(); } catch {} }, 4000);
+// Service worker : nouvelle verification a chaque ouverture, et rechargement
+// quand un nouveau worker prend la main (jamais a la toute premiere visite).
+window.addEventListener('load', () => {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {});
+});
+if ('serviceWorker' in navigator) {
+  let lumiHadController = !!navigator.serviceWorker.controller;
+  if (typeof navigator.serviceWorker.addEventListener === 'function') navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!lumiHadController) { lumiHadController = true; return; }
+    lumiUpdatePending = true;
+    lumiMiseAJourHorsLecon();
+  });
+}
+// Nettoyer le marqueur de mise a jour (?_maj=...) de l'adresse apres coup.
+try {
+  if (new URLSearchParams(location.search).has('_maj')) {
+    const u = new URL(location.href); u.searchParams.delete('_maj');
+    window.history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+  }
+} catch {}
 checkLumiUpdate();

@@ -12,7 +12,8 @@ function setup({ online = true, text = '', version = '2026-10-03.20' } = {}) {
    document: {querySelectorAll:()=>buttons,querySelector:s=>s==='#input'?{value:text}:{classList:{contains:()=>true}},getElementById:id=>id==='lumi-version'?badge:null,addEventListener(){}},
    window:{addEventListener(){}},navigator:{serviceWorker:{register:async()=>({update:async()=>{checks++;}})}},
    fetch:async()=>{if(!online)throw Error('offline');return {ok:true,json:async()=>({version})};},
-   location:{reload:()=>{reloads++;}},toast:t=>{message=t;},setLiveMic(){},stopSpeech(){}
+   location:{reload:()=>{reloads++;},search:'',href:'https://lumi.test/',pathname:'/'},toast:t=>{message=t;},setLiveMic(){},stopSpeech(){},
+   setTimeout:()=>0,setInterval:()=>0,URLSearchParams,URL
  });
  vm.runInContext(source,c);return {c,buttons,badge,reloads:()=>reloads,checks:()=>checks,message:()=>message};
 }
