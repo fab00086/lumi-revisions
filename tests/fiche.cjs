@@ -107,4 +107,7 @@ test('fiche : la page imprimée rend notions, étapes numérotées, exemples cor
   assert.ok(page.includes('Corrigé du quiz') && page.includes('<strong>1.</strong> 5'), 'corrigé séparé en fin de fiche');
   assert.ok(page.includes('Bien compris') && page.includes('À retravailler'), 'bilan affiché');
   assert.ok(page.includes('Imprimer / Enregistrer en PDF'), 'bouton d\'impression présent');
+  assert.ok(page.includes('class="tabbtn"'), 'onglets présents (une partie = un onglet)');
+  assert.ok(page.includes('name="onglet"'), 'groupe d onglets présent');
+  assert.ok(page.includes('class="tab tp0"'), 'première partie dans un onglet');
 });

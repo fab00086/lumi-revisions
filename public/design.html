@@ -42,6 +42,23 @@
   #fiche-sheet .consigne { font-style: italic; color: #6b7280; margin: 0 0 6px; font-size: 13px; }
   #fiche-sheet .corrige { background: #f2fbf4; border: 1px solid #bfe3c9; border-radius: 10px; padding: 8px 12px; }
   #fiche-sheet .corrige p { margin: 3px 0; color: #1e7a3c; }
+  /* Onglets : un par partie cochee (ecran) ; a l'impression toutes sortent. */
+  #fiche-sheet .fiche-onglets { margin-top: 14px; }
+  #fiche-sheet .tabinput { display: none; }
+  #fiche-sheet .tabbtn { display: inline-block; margin: 0 6px 8px 0; padding: 8px 14px; border-radius: 999px; background: #efe9ff; color: #4a3f8f; cursor: pointer; font-size: 13.5px; user-select: none; }
+  #fiche-sheet .tab { display: none; }
+  #fiche-sheet #ong0:checked ~ .tp0 { display: block; }
+  #fiche-sheet #ong1:checked ~ .tp1 { display: block; }
+  #fiche-sheet #ong2:checked ~ .tp2 { display: block; }
+  #fiche-sheet #ong3:checked ~ .tp3 { display: block; }
+  #fiche-sheet #ong4:checked ~ .tp4 { display: block; }
+  #fiche-sheet #ong5:checked ~ .tp5 { display: block; }
+  #fiche-sheet #ong0:checked ~ label[for="ong0"],
+  #fiche-sheet #ong1:checked ~ label[for="ong1"],
+  #fiche-sheet #ong2:checked ~ label[for="ong2"],
+  #fiche-sheet #ong3:checked ~ label[for="ong3"],
+  #fiche-sheet #ong4:checked ~ label[for="ong4"],
+  #fiche-sheet #ong5:checked ~ label[for="ong5"] { background: #6d5bd0; color: #fff; }
   #fiche-sheet .bilan { display: flex; gap: 12px; flex-wrap: wrap; }
   #fiche-sheet .bilan > div { flex: 1; min-width: 200px; border-radius: 10px; border: 1px solid; padding: 9px 12px; }
   #fiche-sheet .bilan h3 { font-size: 13.5px; margin: 0 0 5px; }
@@ -60,10 +77,12 @@
     #zone-fiche .bloc { box-shadow: none; padding: 0; margin: 0; border-radius: 0; }
     #zone-fiche .bloc > h2, #zone-fiche .bloc > .note, #zone-fiche .fiche-actions, #zone-fiche .toc { display: none !important; }
     #fiche-sheet { border: none; border-radius: 0; padding: 0; max-width: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    #fiche-sheet .tabbtn { display: none !important; }
+    #fiche-sheet .tab { display: block !important; }
+    #fiche-sheet section.tab { break-before: page; }
+    #fiche-sheet section.tab:first-of-type { break-before: auto; }
     #fiche-sheet .entete, #fiche-sheet .resume { break-after: avoid; }
-    /* Chaque grande partie démarre sur une nouvelle page (multi-pages propre). */
-    #fiche-sheet h2 { break-before: page; break-after: avoid; }
-    #fiche-sheet h2:first-of-type { break-before: auto; }
+    #fiche-sheet h2 { break-after: avoid; }
     #fiche-sheet .notion, #fiche-sheet .etape, #fiche-sheet .exo, #fiche-sheet .qa, #fiche-sheet .bilan > div, #fiche-sheet .astuce { break-inside: avoid; }
   }
 </style>
@@ -177,44 +196,71 @@
         <p class="meta date">16 octobre 2026</p>
       </header>
       <p class="resume">Calculer une multiplication, comme 7 x 8, à l'aide des tables et d'astuces.</p>
-      <h2>🧠 Le cours pas à pas</h2>
-      <div class="notion"><strong>La multiplication, c'est des groupes</strong> — 7 x 8, c'est 7 groupes de 8. On peut aussi voir 8 + 8 + 8 + 8 + 8 + 8 + 8 = 56. Multiplier va plus vite que d'ajouter encore et encore.</div>
-      <div class="notion"><strong>L'ordre ne change rien</strong> — 7 x 8 = 8 x 7 = 56. Tu peux choisir l'ordre le plus facile à calculer.</div>
-      <h2>📌 Les notions à retenir</h2>
-      <div class="notion"><strong>Astuce du +1 groupe</strong> — Si tu connais 7 x 7 = 49, alors 7 x 8 = 49 + 8 = 56.</div>
-      <div class="notion"><strong>Astuce du 9</strong> — Pour la table de 9 : 9 x 7 = 70 - 7 = 63. On fait x10 puis on enlève le nombre.</div>
-      <h2>🪜 La méthode pas à pas</h2>
-      <div class="etape"><span class="num">1</span><div class="txt"><strong>Je lis</strong><br>7 x 8 : combien de groupes de combien ?</div></div>
-      <div class="etape"><span class="num">2</span><div class="txt"><strong>Je cherche une table proche</strong><br>7 x 7 = 49 que je connais par cœur.</div></div>
-      <div class="etape"><span class="num">3</span><div class="txt"><strong>J'ajoute ou j'enlève un groupe</strong><br>49 + 8 = 56, donc 7 x 8 = 56.</div></div>
-      <h2>✏️ Exemples corrigés</h2>
-      <div class="exo">
-        <p class="enonce">Combien font 6 x 8 ?</p>
-        <p class="correction">✓ 6 x 7 = 42, j'ajoute 6 : 42 + 6 = 48. Donc 6 x 8 = 48.</p>
+      <div class="fiche-onglets">
+        <input type="radio" name="onglet" id="ong0" class="tabinput" checked>
+        <input type="radio" name="onglet" id="ong1" class="tabinput">
+        <input type="radio" name="onglet" id="ong2" class="tabinput">
+        <input type="radio" name="onglet" id="ong3" class="tabinput">
+        <input type="radio" name="onglet" id="ong4" class="tabinput">
+        <input type="radio" name="onglet" id="ong5" class="tabinput">
+        <label for="ong0" class="tabbtn">📌 Révision</label>
+        <label for="ong1" class="tabbtn">🧠 Apprentissage</label>
+        <label for="ong2" class="tabbtn">✏️ Exemples</label>
+        <label for="ong3" class="tabbtn">🎯 Quiz</label>
+        <label for="ong4" class="tabbtn">✅ Corrigé</label>
+        <label for="ong5" class="tabbtn">💡 Astuce</label>
+        <section class="tab tp0">
+          <h2>📌 Les notions à retenir</h2>
+          <div class="notion"><strong>Astuce du +1 groupe</strong> — Si tu connais 7 x 7 = 49, alors 7 x 8 = 49 + 8 = 56.</div>
+          <div class="notion"><strong>Astuce du 9</strong> — Pour la table de 9 : 9 x 7 = 70 - 7 = 63. On fait x10 puis on enlève le nombre.</div>
+          <h2>🪜 La méthode pas à pas</h2>
+          <div class="etape"><span class="num">1</span><div class="txt"><strong>Je lis</strong><br>7 x 8 : combien de groupes de combien ?</div></div>
+          <div class="etape"><span class="num">2</span><div class="txt"><strong>Je cherche une table proche</strong><br>7 x 7 = 49 que je connais par cœur.</div></div>
+          <div class="etape"><span class="num">3</span><div class="txt"><strong>J'ajoute ou j'enlève un groupe</strong><br>49 + 8 = 56, donc 7 x 8 = 56.</div></div>
+          <h2>🌱 Où en es-tu ?</h2>
+          <div class="bilan">
+            <div class="reussi">
+              <h3>✓ Bien compris</h3>
+              <ul><li>Le sens de la multiplication</li><li>L'astuce du +1 groupe</li></ul>
+            </div>
+            <div class="areviser">
+              <h3>↗ À retravailler</h3>
+              <ul><li>La table de 9 à mémoriser</li></ul>
+            </div>
+          </div>
+        </section>
+        <section class="tab tp1">
+          <h2>🧠 Le cours pas à pas</h2>
+          <div class="notion"><strong>La multiplication, c'est des groupes</strong> — 7 x 8, c'est 7 groupes de 8. On peut aussi voir 8 + 8 + 8 + 8 + 8 + 8 + 8 = 56. Multiplier va plus vite que d'ajouter encore et encore.</div>
+          <div class="notion"><strong>L'ordre ne change rien</strong> — 7 x 8 = 8 x 7 = 56. Tu peux choisir l'ordre le plus facile à calculer.</div>
+        </section>
+        <section class="tab tp2">
+          <h2>✏️ Exemples corrigés</h2>
+          <div class="exo">
+            <p class="enonce">Combien font 6 x 8 ?</p>
+            <p class="correction">✓ 6 x 7 = 42, j'ajoute 6 : 42 + 6 = 48. Donc 6 x 8 = 48.</p>
+          </div>
+          <div class="exo">
+            <p class="enonce">Combien font 9 x 8 ?</p>
+            <p class="correction">✓ Je fais 8 x 10 = 80, j'enlève 8 : 80 - 8 = 72. Donc 9 x 8 = 72.</p>
+          </div>
+        </section>
+        <section class="tab tp3">
+          <h2>🎯 Quiz : tu sais le faire ?</h2>
+          <div class="qa"><p class="question">1. Combien font 7 x 9 ?</p></div>
+          <div class="qa"><p class="question">2. Combien font 4 x 8 ?</p></div>
+          <div class="qa"><p class="question">3. Si 6 x 7 = 42, combien font 6 x 8 ?</p></div>
+        </section>
+        <section class="tab tp4">
+          <h2>✅ Corrigé du quiz</h2>
+          <p class="consigne">Réponds d'abord sur la fiche (sans regarder !), puis vérifie ici :</p>
+          <div class="corrige"><p><strong>1.</strong> 63</p><p><strong>2.</strong> 32</p><p><strong>3.</strong> 48</p></div>
+        </section>
+        <section class="tab tp5">
+          <h2>💡 Astuce</h2>
+          <p class="astuce">Pour la table de 9, les chiffres du résultat s'additionnent toujours à 9 (6 + 3 = 9).</p>
+        </section>
       </div>
-      <div class="exo">
-        <p class="enonce">Combien font 9 x 8 ?</p>
-        <p class="correction">✓ Je fais 8 x 10 = 80, j'enlève 8 : 80 - 8 = 72. Donc 9 x 8 = 72.</p>
-      </div>
-      <h2>🧠 Quiz : tu sais le faire ?</h2>
-      <div class="qa"><p class="question">1. Combien font 7 x 9 ?</p></div>
-      <div class="qa"><p class="question">2. Combien font 4 x 8 ?</p></div>
-      <div class="qa"><p class="question">3. Si 6 x 7 = 42, combien font 6 x 8 ?</p></div>
-      <h2>📊 Mon bilan</h2>
-      <div class="bilan">
-        <div class="reussi">
-          <h3>✓ Bien compris</h3>
-          <ul><li>Le sens de la multiplication</li><li>L'astuce du +1 groupe</li></ul>
-        </div>
-        <div class="areviser">
-          <h3>↗ À retravailler</h3>
-          <ul><li>La table de 9 à mémoriser</li></ul>
-        </div>
-      </div>
-      <p class="astuce">💡 Astuce : pour la table de 9, les chiffres du résultat s'additionnent toujours à 9 (6 + 3 = 9).</p>
-      <h2>✅ Corrigé du quiz</h2>
-      <p class="consigne">Réponds d'abord sur la fiche (sans regarder !), puis vérifie ici :</p>
-      <div class="corrige"><p><strong>1.</strong> 63</p><p><strong>2.</strong> 32</p><p><strong>3.</strong> 48</p></div>
       <p class="pied">Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
     </div>
     <div class="fiche-actions">

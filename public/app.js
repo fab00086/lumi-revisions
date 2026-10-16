@@ -1848,6 +1848,44 @@ function openFichePrint(fiche, name, level, presetWindow) {
   const corrige = (fiche.quiz || []).map((q, i) => q.reponse ? `<p><strong>${i + 1}.</strong> ${esc(q.reponse)}</p>` : '').filter(Boolean).join('');
   const reussi = (fiche.reussi || []).map(x => `<li>${esc(x)}</li>`).join('');
   const aReviser = (fiche.a_reviser || []).map(x => `<li>${esc(x)}</li>`).join('');
+  // Page a ONGLETS : chaque partie cochee devient un onglet (ecran) et une
+  // page (impression). Le texte de partage est prepare ici : les onglets
+  // caches ne seraient pas captes par innerText.
+  const sections = [];
+  if (notions || methode || reussi || aReviser) {
+    sections.push({ label: '📌 Révision', html:
+      (notions ? `<h2>📌 Les notions à retenir</h2>${notions}` : '')
+      + (methode ? `<h2>🪜 La méthode pas à pas</h2>${methode}` : '')
+      + ((reussi || aReviser) ? `<h2>🌱 Où en es-tu ?</h2><div class="bilan">${reussi ? `<div class="reussi"><h3>✓ Bien compris</h3><ul>${reussi}</ul></div>` : ''}${aReviser ? `<div class="areviser"><h3>↻ À retravailler</h3><ul>${aReviser}</ul></div>` : ''}</div>` : '') });
+  }
+  if (cours) sections.push({ label: '🧠 Apprentissage', html: `<h2>🧠 Le cours pas à pas</h2>${cours}` });
+  if (exemples) sections.push({ label: '✏️ Exemples', html: `<h2>✏️ Exemples corrigés</h2>${exemples}` });
+  if (quiz) sections.push({ label: '🎯 Quiz', html: `<h2>🎯 Quiz : tu sais le faire ?</h2>${quiz}` });
+  if (corrige) sections.push({ label: '✅ Corrigé', html: `<h2>✅ Corrigé du quiz</h2><p class="consigne">Réponds d'abord sur la fiche (sans regarder !), puis vérifie ici :</p><div class="corrige">${corrige}</div>` });
+  if (fiche.astuce) sections.push({ label: '💡 Astuce', html: `<h2>💡 Astuce</h2><p class="astuce">${esc(fiche.astuce)}</p>` });
+  let ongletsCss = '', ongletsInputs = '', ongletsLabels = '', ongletsSections = '';
+  sections.forEach((s, i) => {
+    ongletsCss += `#ong${i}:checked ~ .tp${i} { display: block; }\n`
+      + `#ong${i}:checked ~ label[for="ong${i}"] { background: #6d5bd0; color: #fff; }\n`;
+    ongletsInputs += `<input type="radio" name="onglet" id="ong${i}" class="tabinput"${i === 0 ? ' checked' : ''}>`;
+    ongletsLabels += `<label for="ong${i}" class="tabbtn">${s.label}</label>`;
+    ongletsSections += `<section class="tab tp${i}">${s.html}</section>`;
+  });
+  // Texte pret pour « Partager » (tous les onglets, meme caches).
+  const T = [];
+  T.push('📄 ' + (fiche.titre || 'Fiche de révision'));
+  T.push(name + (level ? ' · ' + level : ''));
+  if (fiche.resume) T.push('', fiche.resume);
+  if ((fiche.notions || []).length) { T.push('', '📌 Les notions à retenir'); (fiche.notions || []).forEach(n => T.push('- ' + n.titre + ' : ' + n.contenu)); }
+  if ((fiche.methode || []).length) { T.push('', '🪜 La méthode pas à pas'); (fiche.methode || []).forEach((n, i) => T.push((i + 1) + '. ' + n.titre + ' : ' + n.contenu)); }
+  if ((fiche.cours || []).length) { T.push('', '🧠 Le cours pas à pas'); (fiche.cours || []).forEach(n => T.push('- ' + n.titre + ' : ' + n.contenu)); }
+  if ((fiche.exemples || []).length) { T.push('', '✏️ Exemples corrigés'); (fiche.exemples || []).forEach(x => T.push('- ' + (typeof x === 'string' ? x : (x && x.enonce) || '') + (x && x.correction ? ' → ' + x.correction : ''))); }
+  if ((fiche.quiz || []).length) { T.push('', '🎯 Quiz'); (fiche.quiz || []).forEach((q, i) => T.push((i + 1) + '. ' + q.question)); }
+  const reponsesQuiz = (fiche.quiz || []).map((q, i) => q.reponse ? (i + 1) + '. ' + q.reponse : '').filter(Boolean);
+  if (reponsesQuiz.length) T.push('', '✅ Corrigé du quiz', ...reponsesQuiz);
+  if ((fiche.reussi || []).length || (fiche.a_reviser || []).length) { T.push('', '🌱 Où en es-tu ?'); (fiche.reussi || []).forEach(x => T.push('✓ ' + x)); (fiche.a_reviser || []).forEach(x => T.push('↻ ' + x)); }
+  if (fiche.astuce) T.push('', '💡 Astuce : ' + fiche.astuce);
+  const textePartage = T.join('\n').replace(/[<>]/g, '').slice(0, 4000);
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche de révision — ${esc(name)}</title>
 <style>
   * { box-sizing: border-box; }
@@ -1890,14 +1928,22 @@ function openFichePrint(fiche, name, level, presetWindow) {
   .noprint button.second { background: #efe9ff; color: #4a3f8f; }
   .retour { margin: 0 0 14px; }
   .retour button { font-size: 14px; padding: 8px 14px; border-radius: 10px; border: none; background: #efe9ff; color: #4a3f8f; cursor: pointer; }
+  /* Onglets : un onglet par partie cochee (ecran). A l'impression, toutes
+     les parties sortent, chacune sur sa propre page. */
+  .fiche-onglets { margin-top: 14px; }
+  .tabinput { display: none; }
+  .tabbtn { display: inline-block; margin: 0 6px 8px 0; padding: 8px 14px; border-radius: 999px; background: #efe9ff; color: #4a3f8f; cursor: pointer; font-size: 13.5px; user-select: none; }
+  .tab { display: none; }
+${ongletsCss}
   @media print {
     .noprint { display: none; }
+    .tabbtn { display: none !important; }
+    .tab { display: block !important; }
+    section.tab { break-before: page; }
+    section.tab:first-of-type { break-before: auto; }
     body { padding: 0; max-width: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .entete, .resume { break-after: avoid; }
-    /* Chaque grande partie démarre sur une nouvelle page : rien n'est coupé
-       et il reste de la place pour écrire les réponses du quiz. */
-    h2 { break-before: page; break-after: avoid; }
-    h2:first-of-type { break-before: auto; }
+    h2 { break-after: avoid; }
     .notion, .etape, .exo, .qa, .bilan > div, .astuce { break-inside: avoid; }
   }
 </style></head>
@@ -1913,14 +1959,11 @@ function openFichePrint(fiche, name, level, presetWindow) {
     <p class="meta date">${date}</p>
   </header>
   ${fiche.resume ? `<p class="resume">${esc(fiche.resume)}</p>` : ''}
-  ${cours ? `<h2>🧠 Le cours pas à pas</h2>${cours}` : ''}
-  ${notions ? `<h2>📌 Les notions à retenir</h2>${notions}` : ''}
-  ${methode ? `<h2>🪜 La méthode pas à pas</h2>${methode}` : ''}
-  ${exemples ? `<h2>✏️ Exemples corrigés</h2>${exemples}` : ''}
-  ${quiz ? `<h2>🧠 Quiz : tu sais le faire ?</h2>${quiz}` : ''}
-  ${reussi || aReviser ? `<h2>🌱 Où en es-tu ?</h2><div class="bilan">${reussi ? `<div class="reussi"><h3>✓ Bien compris</h3><ul>${reussi}</ul></div>` : ''}${aReviser ? `<div class="areviser"><h3>↻ À retravailler</h3><ul>${aReviser}</ul></div>` : ''}</div>` : ''}
-  ${fiche.astuce ? `<p class="astuce">💡 Astuce : ${esc(fiche.astuce)}</p>` : ''}
-  ${corrige ? `<h2>✅ Corrigé du quiz</h2><p class="consigne">Réponds d'abord sur la fiche (sans regarder !), puis vérifie ici :</p><div class="corrige">${corrige}</div>` : ''}
+  <div class="fiche-onglets">
+${ongletsInputs}
+${ongletsLabels}
+${ongletsSections}
+  </div>
   <p class="pied">Relis les notions, réponds au quiz sans regarder, puis vérifie avec le corrigé. 💪<br>Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
 </div>
   <div class="noprint">
@@ -1929,7 +1972,7 @@ function openFichePrint(fiche, name, level, presetWindow) {
   </div>
 <script>
 function lumiShare() {
-  var texte = ((document.getElementById('fiche-contenu') || document.body).innerText || '').trim();
+  var texte = ${JSON.stringify(textePartage)};
   if (navigator.share) navigator.share({ title: 'Fiche de révision — ' + ${JSON.stringify(String(fiche.titre || 'Lumi').replace(/[<>]/g, ''))}, text: texte }).catch(function () {});
   else if (navigator.clipboard) navigator.clipboard.writeText(texte).then(function () { alert('Fiche copiée ! Colle-la dans ton message.'); }, function () {});
 }
