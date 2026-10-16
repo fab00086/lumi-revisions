@@ -136,7 +136,7 @@ test('chat : réponse interrompue non mémorisée et non prononcée',async()=>{
 test('nouvelle leçon : confirmation en 2 taps, erreur d’archivage préserve la conversation',async()=>{
  const u=ui();const c=context({...u,currentProfile:{id:'a'},history:[{content:'à garder'}],archiving:false,chatLoading:false,activeChat:null,fetch:async()=>({ok:false}),addBubble(){},escapeHtml:String,cancelChat(){throw Error('ne doit pas effacer');}});run(c,section(front,"$('btn-new').addEventListener",'async function openProgress'));
  const btn=u.$('btn-new');
- await btn.handlers.click();assert.equal(btn.textContent,'Terminer ?');assert.equal(c.archiving,false);assert.equal(c.history[0].content,'à garder');
+ await btn.handlers.click();assert.match(btn.textContent,/Terminer \?/);assert.equal(c.archiving,false);assert.equal(c.history[0].content,'à garder');
  await btn.handlers.click();await new Promise(r=>setImmediate(r));assert.equal(c.archiving,false);assert.equal(c.history[0].content,'à garder');
 });
 test('photo du cahier : prévisualisation, envoi seulement sur confirmation',async()=>{

@@ -2620,18 +2620,23 @@ $('btn-new').addEventListener('click', (e) => {
   // Une réponse en cours est annulée au premier appui ; un chargement affiche
   // un message au lieu d'ignorer le toucher.
   if (activeChat) cancelChat();
-  else if (chatLoading) { toast('Lumi termine ce qu’elle fait… réessaie dans un instant 🙂', 4000); return; }
-  // Confirme en 2 taps : archiver efface la leçon en cours, on ne déclenche pas ça par accident.
+  else if (chatLoading) { if (typeof toast === 'function') toast('Lumi termine ce qu’elle fait… réessaie dans un instant 🙂', 4000); return; }
   const btn = (e && e.currentTarget) || $('btn-new');
+  // Premier toucher : on EXPLIQUE clairement qu'il faut confirmer — sur iPhone,
+  // le petit changement de texte passait inaperçu et le bouton semblait mort.
   if (!btn.classList.contains('armed')) {
     btn.classList.add('armed');
     const old = btn.innerHTML;
-    btn.textContent = 'Terminer ?';
-    setTimeout(() => { btn.classList.remove('armed'); btn.innerHTML = old; }, 4000);
+    btn.textContent = '✋ Terminer ?';
+    if (typeof toast === 'function') toast('Touche encore « Terminer ? » pour finir la leçon en cours : elle sera rangée dans 📊 Progrès.', 6000);
+    setTimeout(() => { btn.classList.remove('armed'); btn.innerHTML = old; }, 8000);
     return;
   }
   btn.classList.remove('armed');
   btn.innerHTML = '<span class="button-icon" aria-hidden="true">🆕</span><span class="button-label">Leçon</span>';
+  const toolsEl = $('chat-tools');
+  if (toolsEl && 'open' in toolsEl) toolsEl.open = false;
+  if (typeof setStatus === 'function') setStatus('Je range ta leçon… 📦');
   archiveCurrentLesson();
 });
 async function archiveCurrentLesson() {
@@ -2652,6 +2657,7 @@ async function archiveCurrentLesson() {
     history = [];
     $('chat').innerHTML = '';
     addBubble('assistant', 'Nouvelle leçon, ' + escapeHtml(profile.name) + ' ! 👋 Montre-moi ton devoir ou pose une question.');
+    if (typeof toast === 'function') toast('Leçon rangée dans 📊 Progrès — on repart de zéro ! 🆕', 5000);
     if (typeof micLiveResume === 'function') micLiveResume();
   } catch (err) {
     addBubble('assistant', '⚠️ ' + escapeHtml(err.message));
