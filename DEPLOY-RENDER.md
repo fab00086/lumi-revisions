@@ -65,13 +65,13 @@ Le PC reste utilisable : la version locale continue de fonctionner comme avant.
 ## 5. 💳 Paiement en ligne « Lumi Famille » (Stripe) — à tester en local d'abord
 
 L'abonnement famille (accès illimité) s'active depuis **l'espace parent →
-carte « Passe à Lumi Famille »** : 7,99 €/mois ou 79 €/an. Tant que Stripe
+carte « Passe à Lumi Famille »** : 7,99 €/mois ou 69,90 €/an (2 mois offerts). Tant que Stripe
 n'est pas configuré, cette carte reste invisible et Lumi marche comme avant.
 
 1. Crée un compte Stripe (mode **Test** au début) : https://dashboard.stripe.com/register
 2. Crée un produit « Lumi Famille » avec deux tarifs récurrents :
    - `7,99 € / mois` → note l'identifiant `price_...`
-   - `79 € / an` → note l'identifiant `price_...`
+   - `69,90 € / an` → note l'identifiant `price_...`
 3. Dans le `.env` local, **à la fin du fichier** (ne jamais insérer au milieu) :
 
    ```

@@ -2873,7 +2873,7 @@ function billingCardHtml(b) {
   const dateOnly = iso => { try { return new Date(iso).toLocaleDateString('fr-FR'); } catch { return ''; } };
   const price = (p, fallback) => (p && Number.isFinite(p.amount)) ? p.amount.toFixed(2).replace('.', ',').replace(/,00$/, '') : fallback;
   const monthPrice = price(b.prices && b.prices.month, '7,99');
-  const yearPrice = price(b.prices && b.prices.year, '79');
+  const yearPrice = price(b.prices && b.prices.year, '69,90');
   const portalBtn = '<button id="btn-billing-portal" class="btn" type="button">Gérer mon abonnement</button>';
   if (s && (s.status === 'active' || s.status === 'trialing')) {
     const end = s.currentPeriodEnd ? ` jusqu’au ${dateOnly(s.currentPeriodEnd)}` : '';
