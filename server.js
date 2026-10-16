@@ -723,7 +723,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-16.9' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-16.10' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -972,7 +972,7 @@ async function requireAccount(req, res) {
 // plans payants et inconnus restent illimites (fail-open, securisé pour
 // la famille) : seuls 'free' et les essais expirés sont plafonnés.
 const FREE_DAILY = Math.max(1, parseInt(ENV.LUMI_FREE_DAILY || '20', 10));
-const QUOTA_MESSAGE = "Lumi a besoin de faire une pause aujourd'hui 💤 Demande à tes parents de la relancer — ils savent comment !";
+const QUOTA_MESSAGE = "Lumi a fait le plein d'échanges gratuits pour aujourd'hui 💤 Les parents peuvent débloquer Lumi Famille pour continuer sans limite — Espace parent → 💳 Passe à Lumi Famille.";
 function todayKey() {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -1141,7 +1141,18 @@ async function reserveUsage(req, kind) {
   const task = writeQueue.then(async () => {
     const r = await resolveAccount(req);
     if (!r) return { status: 401, error: 'Entre ton code famille pour utiliser Lumi.' };
-    if (!quotaOk(r.account, kind)) return { status: 402, error: QUOTA_MESSAGE };
+    if (!quotaOk(r.account, kind)) {
+      // Quota gratuit epuise : le front propose aux parents de passer a
+      // Lumi Famille pour continuer (utilise/affiche dans le message). Si le
+      // paiement n'est pas encore configure, on guide vers le responsable.
+      const day = todayKey(), u = r.account.usage || {};
+      const used = (u.chat?.[day] || 0) + (u.quiz?.[day] || 0);
+      const paiementPret = stripeEnabled('month') || stripeEnabled('year');
+      const error = paiementPret
+        ? QUOTA_MESSAGE
+        : "Lumi a fait le plein d'échanges gratuits pour aujourd'hui 💤 Demande à tes parents (ou au responsable de Lumi) de débloquer plus d'échanges.";
+      return { status: 402, error, quota: { used, limit: planLimit(r.account) } };
+    }
     await countUsage(r.account, kind);
     return { account: r.account };
   });
@@ -1723,9 +1734,13 @@ app.get('/api/billing/status', async (req, res) => {
   const enabled = stripeEnabled('month') || stripeEnabled('year');
   let prices = { month: null, year: null };
   if (enabled && !r.local && !r.adminTest) { try { prices = await stripePrices(); } catch {} }
+  // Compteur du jour : affiche dans la carte d'abonnement de l'espace parent.
+  const day = todayKey(), u = acc.usage || {};
+  const usedToday = (u.chat?.[day] || 0) + (u.quiz?.[day] || 0);
   res.json({
     enabled, plan: effectivePlan(acc), trialEnds: acc.trialEnds || null,
-    subscription: stripeSubView(acc), prices
+    subscription: stripeSubView(acc), prices,
+    quota: { used: usedToday, limit: planLimit(acc) }
   });
 });
 // Ouverture du paiement : Stripe Checkout en mode abonnement, retour sur Lumi.

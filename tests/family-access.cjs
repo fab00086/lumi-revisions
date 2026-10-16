@@ -131,6 +131,15 @@ test('QR d’invitation : route admin, affiché dans la gestion, joint à l’e-
  assert.ok(adminJs.includes('navigator.canShare'),'partage du QR en image avec le SMS quand supporte');
 });
 
+test('quota gratuit epuise : compteur du jour + passage a Lumi Famille depuis le chat',()=>{
+ const appJs=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');
+ assert.ok(source.includes('quota: { used, limit: planLimit(r.account) }'),'le 402 porte le compteur du jour');
+ assert.ok(source.includes('Passe à Lumi Famille'),'le message de quota guide vers le paiement');
+ assert.ok(appJs.includes('function showQuotaPaused'),'bulle quota avec raccourci parents');
+ assert.ok(appJs.includes('Parents : passer à Lumi Famille'),'bouton parents present dans le chat');
+ assert.ok(appJs.includes('échanges gratuits utilisés'),'compteur du jour affiche dans l espace parent');
+});
+
 test('lien famille : ?access= marche aussi (les messageries qui jettent le #)',()=>{
  const script=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');const start=script.indexOf('function readFamilyInvitation()'),end=script.indexOf('async function initApp()',start);
  const code='LUMI-ABCD-1234-5678-90AB-CDEF-1234';

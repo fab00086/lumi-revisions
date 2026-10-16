@@ -481,6 +481,13 @@ async function send(text, imageBase64) {
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
+      // Quota gratuit epuise : message clair + raccourci parents (c'est le
+      // parent qui peut debloquer Lumi Famille pour continuer).
+      if (j.quota) {
+        removeTyping(); setStatus("Je t'écoute 👂");
+        showQuotaPaused(j.error);
+        return;
+      }
       throw new Error(j.error || 'Oups, Lumi n\'arrive pas à répondre. Réessaie, ça va marcher ! 😊');
     }
     if (generation !== chatGeneration) return;
@@ -559,6 +566,19 @@ async function send(text, imageBase64) {
 function setStatus(txt) {
   $('teacher-status').textContent = txt;
   $('voice-feedback').textContent = txt;
+}
+
+// Quota gratuit epuise : message + bouton pour les parents (espace parent ou
+// se trouve « Passe a Lumi Famille »). Utilise par le chat, le quiz, la classe.
+function showQuotaPaused(text) {
+  const bubble = addBubble('assistant', '⏸️ ' + escapeHtml(text || 'Quota gratuit atteint pour aujourd’hui.'));
+  const b = document.createElement('button');
+  b.className = 'btn btn-primary';
+  b.style.marginTop = '8px';
+  b.textContent = '👨‍👩‍👧 Parents : passer à Lumi Famille';
+  b.addEventListener('click', () => { const p = $('btn-parent'); if (p) p.click(); });
+  bubble.appendChild(document.createElement('br'));
+  bubble.appendChild(b);
 }
 
 // ---------- Voix (lecture + avatar qui parle) ----------
@@ -2868,7 +2888,11 @@ function billingCardHtml(b) {
   const warn = (s && (s.status === 'past_due' || s.status === 'unpaid'))
     ? '<p class="parent-line">⚠️ Ton dernier paiement n’a pas abouti : mets à jour ta carte pour retrouver l’accès illimité.</p>' : '';
   const trial = b.plan === 'trial' && b.trialEnds ? `<p class="parent-line">🎁 Essai en cours jusqu’au ${dateOnly(b.trialEnds)}.</p>` : '';
-  const quota = b.plan === 'free' ? ' Le quota gratuit s’applique actuellement.' : '';
+  const quota = b.plan === 'free'
+    ? ((b.quota && Number.isFinite(b.quota.limit))
+        ? ` Aujourd’hui : ${b.quota.used}/${b.quota.limit} échanges gratuits utilisés${b.quota.used >= b.quota.limit ? ' — quota atteint ⏸️ débloque pour continuer' : ''}.`
+        : ' Le quota gratuit s’applique actuellement.')
+    : '';
   // Safari iOS : l'app installée gère bien le paiement par carte ; Apple Pay,
   // lui, n'est proposé que dans Safari (règle Apple, pas un bug de Lumi).
   const iosHint = isIOSDevice() ? '<p class="hint">📱 Sur iPhone/iPad : le paiement par carte fonctionne ici. Pour Apple Pay, ouvre Lumi dans Safari.</p>' : '';
