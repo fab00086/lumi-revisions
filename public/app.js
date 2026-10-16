@@ -286,6 +286,8 @@ async function startChat(p) {
   const ph = $('child-photo');
   if (p.photo) { ph.src = p.photo; ph.classList.remove('hidden'); } else { ph.classList.add('hidden'); }
   $('chat').innerHTML = '';
+  // Le bouton retour du téléphone ramène aux profils (au lieu de quitter l'app).
+  try { if (!(window.history.state && window.history.state.lumi === 'chat')) window.history.pushState({ lumi: 'chat' }, ''); } catch {}
 
   // Recharge la lecon en cours de l'enfant (pour reprendre)
   let saved = null;
@@ -1799,8 +1801,10 @@ $('btn-send').addEventListener('click', () => send($('input').value));
 $('input').addEventListener('keydown', (e) => { if (e.key === 'Enter') send($('input').value); });
 
 // ---------- Retour ----------
-$('btn-back').addEventListener('click', () => {
-  if (archiving) return;
+// Quitter la leçon est TOUJOURS possible : un archivage en cours (ou resté
+// suspendu après un passage en arrière-plan, vécu sur iPhone) ne doit plus
+// jamais bloquer le retour — sinon il ne reste qu'à fermer et rouvrir l'app.
+function goToProfiles(fromPop = false) {
   if (typeof setLiveMic === 'function') setLiveMic(false); // on quitte la conversation
   cancelChat();
   if ('speechSynthesis' in window) speechSynthesis.cancel();
@@ -1808,48 +1812,100 @@ $('btn-back').addEventListener('click', () => {
   $('screen-chat').classList.add('hidden');
   $('screen-profile').classList.remove('hidden');
   renderProfiles();
+  // Consomme l'état d'historique posé en entrant dans la leçon (sinon le
+  // bouton retour du téléphone demanderait ensuite une pression « morte »).
+  if (!fromPop && window.history.state && window.history.state.lumi === 'chat') {
+    try { window.history.back(); } catch {}
+  }
+}
+$('btn-back').addEventListener('click', () => goToProfiles());
+// Bouton retour du téléphone (Android) et geste de retour (iOS) : on revient
+// aux profils au lieu de quitter l'application.
+window.addEventListener('popstate', () => {
+  if (!$('screen-chat').classList.contains('hidden')) goToProfiles(true);
 });
 
 // ---------- Impression ----------
-// Fiche de révision : l'IA résume la leçon (notions, acquis, à retravailler)
-// puis on l'ouvre dans une page propre à imprimer/enregistrer en PDF — au lieu
-// de recracher la conversation brute de l'écran.
+// Fiche de révision : l'IA résume la leçon (notions, méthode pas à pas,
+// exemples corrigés, quiz, acquis, à retravailler) puis on l'ouvre dans une
+// page propre à imprimer/enregistrer en PDF — au lieu de recracher la
+// conversation brute de l'écran. Mise en page pensée pour le papier :
+// cartes, étapes numérotées, encadrés à colorer, impressions fidèles.
 function openFichePrint(fiche, name, level) {
   const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const notions = (fiche.notions || []).map(n => `<li><strong>${esc(n.titre)}</strong> — ${esc(n.contenu)}</li>`).join('');
-  const methode = (fiche.methode || []).map(n => `<li><strong>${esc(n.titre)}</strong> — ${esc(n.contenu)}</li>`).join('');
-  const exemples = (fiche.exemples || []).map(x => `<li>${esc(x)}</li>`).join('');
+  const date = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const cours = (fiche.cours || []).map(n => `<div class="notion"><strong>${esc(n.titre)}</strong>${n.titre && n.contenu ? ' — ' : ''}${esc(n.contenu)}</div>`).join('');
+  const notions = (fiche.notions || []).map(n => `<div class="notion"><strong>${esc(n.titre)}</strong>${n.titre && n.contenu ? ' — ' : ''}${esc(n.contenu)}</div>`).join('');
+  const methode = (fiche.methode || []).map((n, i) => `<div class="etape"><span class="num">${i + 1}</span><div class="txt"><strong>${esc(n.titre)}</strong>${n.titre && n.contenu ? '<br>' : ''}${esc(n.contenu)}</div></div>`).join('');
+  const exemples = (fiche.exemples || []).map(x => {
+    const enonce = typeof x === 'string' ? x : (x && x.enonce) || '';
+    const correction = typeof x === 'string' ? '' : (x && x.correction) || '';
+    return `<div class="exo"><p class="enonce">${esc(enonce)}</p>${correction ? `<p class="correction">✓ ${esc(correction)}</p>` : ''}</div>`;
+  }).join('');
+  const quiz = (fiche.quiz || []).map((q, i) => `<div class="qa"><p class="question">${i + 1}. ${esc(q.question)}</p>${q.reponse ? `<p class="reponse">Réponse : ${esc(q.reponse)}</p>` : ''}</div>`).join('');
   const reussi = (fiche.reussi || []).map(x => `<li>${esc(x)}</li>`).join('');
   const aReviser = (fiche.a_reviser || []).map(x => `<li>${esc(x)}</li>`).join('');
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche de révision — ${esc(name)}</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: Georgia, "Times New Roman", serif; color: #1f2430; max-width: 720px; margin: 0 auto; padding: 40px 28px; line-height: 1.55; }
-  h1 { font-size: 24px; margin: 0 0 4px; }
-  .soustitre { color: #6b7280; font-size: 14px; margin: 0 0 22px; }
-  .resume { font-style: italic; background: #f3efff; border-left: 4px solid #6d5bd0; padding: 12px 14px; border-radius: 8px; margin: 0 0 22px; }
-  h2 { font-size: 17px; color: #4a3f8f; border-bottom: 2px solid #ece7fb; padding-bottom: 6px; margin: 24px 0 10px; }
-  ul { margin: 0; padding-left: 20px; }
-  li { margin: 6px 0; }
-  .reussi li { color: #1e7a3c; }
-  .areviser li { color: #b3541e; }
-  .astuce { background: #fff8e6; border-left: 4px solid #e0a82e; padding: 12px 14px; border-radius: 8px; margin-top: 22px; }
-  .pied { margin-top: 32px; font-size: 12px; color: #9ca3af; text-align: center; }
+  @page { size: A4; margin: 14mm; }
+  body { font-family: Georgia, "Times New Roman", serif; color: #1f2430; max-width: 740px; margin: 0 auto; padding: 32px 30px; font-size: 15px; line-height: 1.45; }
+  .entete { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; border-bottom: 3px solid #6d5bd0; padding-bottom: 10px; }
+  .kicker { text-transform: uppercase; letter-spacing: 2px; font-size: 10px; color: #6d5bd0; font-weight: bold; margin: 0 0 5px; }
+  h1 { font-size: 23px; margin: 0 0 3px; }
+  .meta { color: #6b7280; font-size: 12.5px; margin: 0; }
+  .meta.date { white-space: nowrap; padding-bottom: 2px; }
+  .resume { font-style: italic; background: #f3efff; border-left: 4px solid #6d5bd0; padding: 10px 13px; border-radius: 8px; margin: 12px 0 0; }
+  h2 { font-size: 15.5px; color: #4a3f8f; border-bottom: 2px solid #ece7fb; padding-bottom: 5px; margin: 16px 0 8px; }
+  .notion { border: 1px solid #e6e2f7; background: #faf9ff; border-radius: 10px; padding: 7px 12px; margin: 5px 0; }
+  .notion strong { color: #4a3f8f; }
+  .etape { display: flex; gap: 9px; align-items: flex-start; margin: 5px 0; }
+  .etape .num { flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%; background: #6d5bd0; color: #fff; font-size: 13px; font-weight: bold; text-align: center; line-height: 24px; }
+  .etape .txt strong { color: #4a3f8f; }
+  .exo { border-left: 4px solid #c9bff2; background: #fbfaff; border-radius: 0 10px 10px 0; padding: 8px 12px; margin: 5px 0; }
+  .exo .enonce { margin: 0; }
+  .exo .correction { margin: 5px 0 0; color: #1e7a3c; }
+  .qa { border: 1px dashed #d8d2f0; border-radius: 10px; padding: 7px 12px; margin: 5px 0; }
+  .qa .question { margin: 0; font-weight: bold; }
+  .qa .reponse { margin: 3px 0 0; color: #1e7a3c; font-style: italic; }
+  .bilan { display: flex; gap: 12px; }
+  .bilan > div { flex: 1; border-radius: 10px; border: 1px solid; padding: 9px 12px; }
+  .bilan h3 { font-size: 13.5px; margin: 0 0 5px; }
+  .bilan ul { margin: 0; padding-left: 18px; }
+  .bilan li { margin: 3px 0; }
+  .reussi { border-color: #bfe3c9; background: #f2fbf4; }
+  .reussi h3 { color: #1e7a3c; }
+  .areviser { border-color: #f2d5b8; background: #fff8f0; }
+  .areviser h3 { color: #b3541e; }
+  .astuce { background: #fff8e6; border-left: 4px solid #e0a82e; padding: 10px 13px; border-radius: 8px; margin-top: 12px; }
+  .pied { margin-top: 14px; font-size: 11px; color: #9ca3af; text-align: center; }
   .noprint { text-align: center; margin-top: 26px; }
   .noprint button { font-size: 15px; padding: 10px 18px; border-radius: 10px; border: none; background: #6d5bd0; color: #fff; cursor: pointer; }
-  @media print { .noprint { display: none; } body { padding: 0; } }
+  @media print {
+    .noprint { display: none; }
+    body { padding: 0; max-width: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    h2 { break-after: avoid; }
+    .notion, .etape, .exo, .qa, .bilan > div { break-inside: avoid; }
+  }
 </style></head>
 <body>
-  <h1>📄 ${esc(fiche.titre || 'Fiche de révision')}</h1>
-  <p class="soustitre">${esc(name)}${level ? ' · ' + esc(level) : ''} · Fiche générée par Lumi</p>
+  <header class="entete">
+    <div>
+      <p class="kicker">Fiche de révision · Lumi</p>
+      <h1>${esc(fiche.titre || 'Fiche de révision')}</h1>
+      <p class="meta">${esc(name)}${level ? ' · ' + esc(level) : ''}</p>
+    </div>
+    <p class="meta date">${date}</p>
+  </header>
   ${fiche.resume ? `<p class="resume">${esc(fiche.resume)}</p>` : ''}
-  ${notions ? `<h2>Les notions à retenir</h2><ul>${notions}</ul>` : ''}
-  ${methode ? `<h2>La méthode pas à pas</h2><ul>${methode}</ul>` : ''}
-  ${exemples ? `<h2>Exemples</h2><ul>${exemples}</ul>` : ''}
-  ${reussi ? `<h2>Bien compris ✓</h2><ul class="reussi">${reussi}</ul>` : ''}
-  ${aReviser ? `<h2>À retravailler</h2><ul class="areviser">${aReviser}</ul>` : ''}
+  ${cours ? `<h2>🧠 Le cours pas à pas</h2>${cours}` : ''}
+  ${notions ? `<h2>📌 Les notions à retenir</h2>${notions}` : ''}
+  ${methode ? `<h2>🪜 La méthode pas à pas</h2>${methode}` : ''}
+  ${exemples ? `<h2>✏️ Exemples corrigés</h2>${exemples}` : ''}
+  ${quiz ? `<h2>🧠 Quiz : tu sais le faire ?</h2>${quiz}` : ''}
+  ${reussi || aReviser ? `<h2>🌱 Où en es-tu ?</h2><div class="bilan">${reussi ? `<div class="reussi"><h3>✓ Bien compris</h3><ul>${reussi}</ul></div>` : ''}${aReviser ? `<div class="areviser"><h3>↻ À retravailler</h3><ul>${aReviser}</ul></div>` : ''}</div>` : ''}
   ${fiche.astuce ? `<p class="astuce">💡 Astuce : ${esc(fiche.astuce)}</p>` : ''}
-  <p class="pied">Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
+  <p class="pied">Relis les notions, puis cache les réponses du quiz pour te tester. 💪<br>Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
   <div class="noprint"><button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button></div>
 </body></html>`;
   const w = window.open('', '_blank');
@@ -1858,16 +1914,44 @@ function openFichePrint(fiche, name, level) {
   setTimeout(() => w.print(), 400);
 }
 
-$('btn-print').addEventListener('click', async () => {
+// Liste a cocher : l'enfant (ou le parent) choisit ce qui va sur la fiche
+// imprimee. Le dernier choix est memorise par profil.
+const FICHE_OPTS = ['revision', 'quiz', 'apprentissage', 'exemples', 'astuce'];
+function ficheOptsKey() { return 'lumi-fiche-opts:' + ((currentProfile && currentProfile.id) || 'x'); }
+function loadFicheOpts() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(ficheOptsKey()) || 'null'); } catch {}
+  return {
+    revision: saved ? saved.revision !== false : true,
+    quiz: saved ? saved.quiz !== false : true,
+    apprentissage: saved ? saved.apprentissage === true : false,
+    exemples: saved ? saved.exemples !== false : true,
+    astuce: saved ? saved.astuce !== false : true
+  };
+}
+$('btn-print').addEventListener('click', () => {
   if (!currentProfile) { toast("Ouvre une leçon d'abord."); return; }
   if (!history.length) { toast('La leçon est encore vide : pose une question avant de faire la fiche.'); return; }
+  const opts = loadFicheOpts();
+  for (const k of FICHE_OPTS) { const box = $('fiche-opt-' + k); if (box) box.checked = opts[k]; }
+  $('fiche-modal').classList.remove('hidden');
+});
+$('btn-fiche-close').addEventListener('click', () => $('fiche-modal').classList.add('hidden'));
+$('btn-fiche-go').addEventListener('click', async () => {
+  const opts = {};
+  for (const k of FICHE_OPTS) { const box = $('fiche-opt-' + k); opts[k] = !!(box && box.checked); }
+  if (!opts.revision && !opts.quiz && !opts.apprentissage && !opts.exemples && !opts.astuce) {
+    toast('Coche au moins une chose pour ta fiche 🙂'); return;
+  }
+  try { localStorage.setItem(ficheOptsKey(), JSON.stringify(opts)); } catch {}
+  $('fiche-modal').classList.add('hidden');
   const name = currentProfile.name || 'enfant';
   setStatus('Je prépare ta fiche de révision… 📄');
   let fiche;
   try {
     const r = await fetch('/api/fiche', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ profile: currentProfile, history })
+      body: JSON.stringify({ profile: currentProfile, history, options: opts })
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'Impossible de préparer la fiche.');
@@ -2402,6 +2486,10 @@ $('btn-new').addEventListener('click', (e) => {
 });
 async function archiveCurrentLesson() {
   archiving = true;
+  // Filet de securite : si l'archivage reste suspendu (app passee en
+  // arriere-plan pendant la requete), l'app ne reste jamais bloquee plus de 20 s.
+  const garde = (typeof setTimeout === 'function' && typeof clearTimeout === 'function')
+    ? setTimeout(() => { archiving = false; }, 20000) : null;
   const profile = { ...currentProfile };
   try {
     const r = await fetch('/api/child', {
@@ -2418,6 +2506,7 @@ async function archiveCurrentLesson() {
   } catch (err) {
     addBubble('assistant', '⚠️ ' + escapeHtml(err.message));
   } finally {
+    if (garde) clearTimeout(garde);
     archiving = false;
   }
 }

@@ -690,7 +690,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-15.12' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-16.1' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
@@ -2573,37 +2573,86 @@ app.get('/api/classroom', async (req, res) => {
 
 // ---------- Fiche de révision (support PDF / impression) ----------
 // L'IA lit la conversation de la lecon et en tire une fiche structuree
-// (notions, ce qui est acquis, ce qui reste a travailler) — bien plus utile
-// qu'une simple impression de l'ecran.
-async function buildFiche(history, profile = {}) {
+// (notions, methode, exemples corriges, quiz, acquis, a retravailler) — une
+// vraie fiche a coller dans le cahier, pas une impression de l'ecran. Contenu
+// volontairement riche : regles + exemples, corrections detaillees, question
+// de quiz pour se tester. Le budget de tokens doit suivre (sinon le modele
+// compresse tout et la fiche parait pauvre).
+async function buildFiche(history, profile = {}, options = {}) {
   const msgs = (Array.isArray(history) ? history : [])
     .filter(h => h && (h.role === 'user' || h.role === 'assistant'))
     .slice(-40)
     .map(h => (h.role === 'user' ? 'Enfant : ' : 'Lumi : ') + String(h.content || '').slice(0, 600));
   if (msgs.length < 2) return null;
   const age = profile.age ?? 10;
+  // Liste a cocher (revision, quiz, apprentissage, exemples, astuce) : on ne
+  // genere QUE ce qui est demande — fiche courte et rapide si peu coche.
+  // Tout decoche : revision forcee (jamais de fiche vide).
+  const o = {
+    revision: options.revision !== false,
+    quiz: options.quiz !== false,
+    apprentissage: options.apprentissage === true,
+    exemples: options.exemples !== false,
+    astuce: options.astuce !== false
+  };
+  if (!o.revision && !o.quiz && !o.apprentissage && !o.exemples && !o.astuce) o.revision = true;
+  const champs = [`"titre":"sujet court (max 50 caracteres)"`, `"resume":"une phrase qui resume la seance"`];
+  const consignes = [];
+  if (o.revision) {
+    champs.push(`"notions":[{"titre":"notion courte","contenu":"la regle ou la definition puis un exemple concret - 2 a 3 phrases"}]`);
+    champs.push(`"methode":[{"titre":"etape courte","contenu":"que faire, dans l'ordre, pour reussir ce type d'exercice"}]`);
+    champs.push(`"reussi":["ce que l'enfant a compris (max 3)"]`);
+    champs.push(`"a_reviser":["points a retravailler (max 2)"]`);
+    consignes.push('4 a 7 notions et 2 a 4 etapes de methode');
+  }
+  if (o.apprentissage) {
+    champs.push(`"cours":[{"titre":"partie courte","contenu":"l'explication pas a pas qui part de zero, comme un petit cours, 3 a 5 phrases"}]`);
+    consignes.push(`3 a 5 parties pour le cours d'apprentissage`);
+  }
+  if (o.exemples) {
+    champs.push(`"exemples":[{"enonce":"un exercice type, different de celui de la seance","correction":"sa correction detaillee etape par etape"}]`);
+    consignes.push('1 a 3 exemples corriges');
+  }
+  if (o.quiz) {
+    champs.push(`"quiz":[{"question":"question pour se tester","reponse":"reponse courte"}]`);
+    consignes.push('3 a 5 questions de quiz');
+  }
+  if (o.astuce) champs.push(`"astuce":"astuce de memorisation courte"`);
+  const schema = '{' + champs.join(',') + '}';
   const r = await callOllama([
-    { role: 'system', content: `Tu es Lumi. Tu lis la conversation d'un enfant de ${age} ans avec son tuteur (elle peut commencer par la lecture d'une photo du devoir). Tu produis une FICHE DE REVISION COMPLETE sur le sujet travaille — complete meme si la conversation est courte, a partir de l'exercice ou de la photo. Reponds UNIQUEMENT par un objet JSON compact, sans texte autour, sans LaTeX : {"titre":"sujet court (max 50 caracteres)","resume":"une phrase : le sujet travaille","notions":[{"titre":"notion courte","contenu":"definition ou regle + un exemple"}],"methode":[{"titre":"etape courte","contenu":"une etape de la methode"}],"exemples":["1 a 3 exemples concrets courts"],"reussi":["ce que l'enfant a compris (max 3)"],"a_reviser":["points a retravailler (max 2)"],"astuce":"astuce de memorisation courte"}. Entre 4 et 7 notions, 2 a 4 etapes de methode. Tout en francais, mots adaptes a ${age} ans.` },
+    { role: 'system', content: `Tu es Lumi, tutrice d'un enfant de ${age} ans. Tu lis la conversation de la seance (elle peut commencer par la lecture d'une photo du devoir) et tu rediges une FICHE DE REVISION, comme celle qu'un enfant colle dans son cahier : concrete, utilisable seule. Appuie-toi sur le sujet EXACT de la seance (les nombres, mots ou phrases de l'exercice ou de la photo), jamais un cours generique. Interdit : mentionner la conversation, la photo ou l'IA. Reponds UNIQUEMENT par un objet JSON, sans texte autour, sans LaTeX (ecris les maths avec x, /, =), sans retour a la ligne a l'interieur des phrases. Schema EXACT : ${schema}. ${consignes.join(', ')}${consignes.length ? '. ' : ''}Tout en francais, mots adaptes a ${age} ans.` },
     { role: 'user', content: msgs.join('\n').slice(0, 9000) }
-  ], { maxTokens: 1600 });
+  ], { maxTokens: o.apprentissage ? 3600 : 3200 });
   const raw = String(r.content || '');
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) return null;
   try {
     const j = JSON.parse(m[0]);
     const strs = v => (Array.isArray(v) ? v : []).map(String).filter(Boolean).slice(0, 6);
-    const items = (arr, max) => (Array.isArray(arr) ? arr : []).slice(0, max)
-      .map(n => ({ titre: String((n && n.titre) || '').slice(0, 120), contenu: String((n && n.contenu) || '').slice(0, 400) }))
+    const items = (arr, max, len = 400) => (Array.isArray(arr) ? arr : []).slice(0, max)
+      .map(n => ({ titre: String((n && n.titre) || '').slice(0, 120), contenu: String((n && n.contenu) || '').slice(0, len) }))
       .filter(n => n.titre || n.contenu);
+    // Exercices corriges : accepte aussi le format simple "texte" (ancien) en
+    // le rangeant en enonce sans correction — jamais de perte de contenu.
+    const exos = (arr, max) => (Array.isArray(arr) ? arr : []).slice(0, max)
+      .map(x => typeof x === 'string'
+        ? { enonce: x.slice(0, 300), correction: '' }
+        : { enonce: String((x && (x.enonce || x.exercice)) || '').slice(0, 300), correction: String((x && (x.correction || x.solution)) || '').slice(0, 500) })
+      .filter(x => x.enonce || x.correction);
+    const quiz = (arr, max) => (Array.isArray(arr) ? arr : []).slice(0, max)
+      .map(q => ({ question: String((q && (q.question || q.q)) || '').slice(0, 200), reponse: String((q && (q.reponse || q.r)) || '').slice(0, 300) }))
+      .filter(q => q.question);
     return {
       titre: String(j.titre || '').slice(0, 60) || 'Fiche de révision',
       resume: String(j.resume || '').slice(0, 300),
-      notions: items(j.notions, 7),
-      methode: items(j.methode, 4),
-      exemples: strs(j.exemples).slice(0, 3),
-      reussi: strs(j.reussi).slice(0, 3),
-      a_reviser: strs(j.a_reviser).slice(0, 2),
-      astuce: String(j.astuce || '').slice(0, 300)
+      notions: o.revision ? items(j.notions, 7) : [],
+      methode: o.revision ? items(j.methode, 4) : [],
+      cours: o.apprentissage ? items(j.cours, 5, 900) : [],
+      exemples: o.exemples ? exos(j.exemples, 3) : [],
+      quiz: o.quiz ? quiz(j.quiz, 5) : [],
+      reussi: o.revision ? strs(j.reussi).slice(0, 3) : [],
+      a_reviser: o.revision ? strs(j.a_reviser).slice(0, 2) : [],
+      astuce: o.astuce ? String(j.astuce || '').slice(0, 300) : ''
     };
   } catch { return null; }
 }
@@ -2613,8 +2662,8 @@ app.post('/api/fiche', async (req, res) => {
     const access = await reserveUsage(req, 'chat');
     if (access.error) return res.status(access.status).json({ error: access.error });
     const acc = access.account;
-    const { profile, history } = req.body || {};
-    const fiche = await buildFiche(history, profile || {});
+    const { profile, history, options } = req.body || {};
+    const fiche = await buildFiche(history, profile || {}, options || {});
     if (!fiche) return res.status(502).json({ error: "Je n'ai pas réussi à préparer la fiche. Réessaie dans un instant. 📄" });
     await countTokens(acc, tokenEstimate(JSON.stringify(history || '').slice(0, 9000)) + tokenEstimate(JSON.stringify(fiche)));
     res.json({ fiche });

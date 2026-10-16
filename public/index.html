@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Lumi">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="style.css?v=56">
+  <link rel="stylesheet" href="style.css?v=57">
   <link rel="stylesheet" href="/katex/katex.min.css">
   <script defer src="/katex/katex.min.js"></script>
 </head>
@@ -192,6 +192,23 @@
       </div>
       <div id="quiz-progress" class="hint"></div>
       <div id="quiz-area"></div>
+    </div>
+  </div>
+
+  <!-- ===== Fiche de révision : liste à cocher avant impression ===== -->
+  <div id="fiche-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <strong>📄 Fiche de révision</strong>
+        <button id="btn-fiche-close" class="icon-btn" title="Fermer">✕</button>
+      </div>
+      <p class="hint">Coche ce que tu veux sur ta fiche à imprimer :</p>
+      <label class="consent-row"><input id="fiche-opt-revision" type="checkbox" checked> 📖 <strong>Révision</strong> — les notions à retenir + la méthode</label>
+      <label class="consent-row"><input id="fiche-opt-quiz" type="checkbox" checked> 🎯 <strong>Quiz</strong> — des questions pour se tester</label>
+      <label class="consent-row"><input id="fiche-opt-apprentissage" type="checkbox"> 🧠 <strong>Apprentissage</strong> — le cours expliqué pas à pas</label>
+      <label class="consent-row"><input id="fiche-opt-exemples" type="checkbox" checked> ✏️ <strong>Exemples corrigés</strong> — des exercices type</label>
+      <label class="consent-row"><input id="fiche-opt-astuce" type="checkbox" checked> 💡 <strong>Astuce</strong> — pour mémoriser</label>
+      <button id="btn-fiche-go" class="btn btn-primary" type="button">📄 Créer ma fiche</button>
     </div>
   </div>
 
@@ -388,8 +405,8 @@
       window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {}));
     }
   </script>
-  <script src="app.js?v=56"></script>
-  <script src="update.js?v=56"></script>
+  <script src="app.js?v=57"></script>
+  <script src="update.js?v=57"></script>
 </body>
 </html>
 
