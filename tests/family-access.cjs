@@ -120,6 +120,17 @@ test('lien famille : retire les secrets de l’adresse et refuse un code Admin o
  }
 });
 
+test('QR d’invitation : route admin, affiché dans la gestion, joint à l’e-mail et au partage SMS',()=>{
+ const adminJs=fs.readFileSync(path.join(__dirname,'../public/admin.js'),'utf8');
+ const adminHtml=fs.readFileSync(path.join(__dirname,'../public/admin.html'),'utf8');
+ assert.ok(source.includes("app.get('/api/admin/invite-qr'"),'route QR serveur presente');
+ assert.ok(source.includes('QRCode.toBuffer'),'generation PNG du QR');
+ assert.ok(source.includes('lumi-qr-invitation.png'),'QR joint a l e-mail d approbation');
+ assert.ok(adminHtml.includes('id="code-qr"'),'image QR dans la gestion');
+ assert.ok(adminJs.includes('/api/admin/invite-qr?code='),'la gestion charge le QR du code');
+ assert.ok(adminJs.includes('navigator.canShare'),'partage du QR en image avec le SMS quand supporte');
+});
+
 test('lien famille : ?access= marche aussi (les messageries qui jettent le #)',()=>{
  const script=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');const start=script.indexOf('function readFamilyInvitation()'),end=script.indexOf('async function initApp()',start);
  const code='LUMI-ABCD-1234-5678-90AB-CDEF-1234';

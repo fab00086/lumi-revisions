@@ -104,6 +104,11 @@ select.plan-select, input.limit-input {
 <section id="code-result" class="note hidden" style="margin-bottom:20px" role="status">
 <strong id="code-label"></strong><p>Copie ce code maintenant : il ne sera plus affiché après fermeture.</p>
 <input id="issued-code" class="limit-input" readonly aria-label="Code famille créé">
+<div id="code-qr-box" class="hidden" style="margin-top:12px;text-align:center">
+  <img id="code-qr" alt="QR code d'invitation (contient le code de la famille)" style="width:200px;height:200px;background:#fff;border-radius:12px;padding:6px;box-shadow:0 2px 10px rgba(0,0,0,.08)">
+  <p style="margin:6px 0 4px;font-size:13px;opacity:.75">La famille scanne ce QR avec l'appareil photo : Lumi s'ouvre avec le code déjà rempli.</p>
+  <a id="code-qr-download" class="btn-sm" href="#" download="lumi-invitation-qr.png">💾 Télécharger le QR</a>
+</div>
 <div class="btn-row" style="margin-top:12px"><button id="sms-code" class="btn-sm">📱 Envoyer par SMS</button><button id="copy-only-code" class="btn-sm">Copier le code</button><button id="copy-code" class="btn-sm">Copier l’invitation</button><button id="share-code" class="btn-sm">Partager le code</button><button id="close-code" class="btn-sm">Fermer</button></div>
 <p class="hint">Sur ton téléphone, choisis Messages, le destinataire, puis confirme l’envoi. Les SMS utilisent ton forfait. Sur ordinateur, l’invitation est copiée pour la coller dans ta messagerie. Aucun SMS ne part automatiquement du serveur.</p>
 </section>

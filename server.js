@@ -655,15 +655,25 @@ async function notifyApprovedAccess() {
       const bytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(mail.code.iv) }, await mailEncryptionKey(), new Uint8Array(mail.code.bytes));
       const code = new TextDecoder().decode(bytes);
       if (familyCodeHash(code) !== acc.settings.accessCodeHash) throw new Error('Code remplacé');
+      // Invitation : lien avec le code dedans + QR code joint (l'appareil photo
+      // du telephone ouvre Lumi avec le code deja rempli).
+      const invite = new URL('/', MAIL_PUBLIC_URL);
+      invite.search = 'access=' + encodeURIComponent(code);
+      let mailPieces;
+      try {
+        const png = await QRCode.toBuffer(invite.href, { type: 'png', width: 480, margin: 2 });
+        mailPieces = [{ filename: 'lumi-qr-invitation.png', content: png.toString('base64') }];
+      } catch {}
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST', signal: AbortSignal.timeout(10000),
         headers: { Authorization: 'Bearer ' + MAIL_API_KEY, 'Content-Type': 'application/json', 'Idempotency-Key': 'lumi-approved-' + acc.id + '-' + mail.version },
         body: JSON.stringify({ from: MAIL_FROM, to: [acc.email], subject: 'Lumi — ton accès est autorisé',
-          text: 'Ta demande d’accès à Lumi a été approuvée.\n\n1. Ouvre ' + new URL('/', MAIL_PUBLIC_URL).href +
-            '\n2. Dans le champ du code, saisis : ' + code + '\n3. Confirme être le parent ou responsable légal et appuie sur Entrer.\n4. Crée le profil de ton enfant. Sur téléphone, tu peux ensuite installer Lumi depuis le navigateur.\n\nCe code est personnel à ta famille : ne le partage pas avec une autre famille. Appareils autorisés : ' + acc.settings.maxDevices +
+          text: 'Ta demande d’accès à Lumi a été approuvée.\n\n1. Ouvre ' + invite.href + ' — le code est déjà rempli. (Ou scanne le QR code joint avec l’appareil photo : même résultat !)' +
+            '\n2. Si le code n’apparaît pas, saisis-le à la main : ' + code + '\n3. Confirme être le parent ou responsable légal et appuie sur Entrer.\n4. Crée le profil de ton enfant. Sur téléphone, tu peux ensuite installer Lumi depuis le navigateur.\n\nCe code est personnel à ta famille : ne le partage pas avec une autre famille. Appareils autorisés : ' + acc.settings.maxDevices +
             '. Utilisation : ' + (Number.isFinite(planLimit(acc)) ? planLimit(acc) + ' échanges par jour' : 'illimitée') +
             '.\n\nConfidentialité et droits sur tes données : ' + new URL('/confidentialite.html', MAIL_PUBLIC_URL).href +
-            '\nLes coordonnées servent à gérer ton accès ; les profils et échanges servent à accompagner les apprentissages. Tu peux demander l’accès, la rectification ou l’effacement de tes données depuis Lumi. Aucun mot de passe administrateur n’est transmis dans ce message.' })
+            '\nLes coordonnées servent à gérer ton accès ; les profils et échanges servent à accompagner les apprentissages. Tu peux demander l’accès, la rectification ou l’effacement de tes données depuis Lumi. Aucun mot de passe administrateur n’est transmis dans ce message.',
+          attachments: mailPieces })
       });
       if (!response.ok || !(await response.json()).id) throw new Error('Envoi non confirmé');
       await updateAccessMail(acc.id, current => { if (current.version !== mail.version) return false; current.status = 'sent'; current.sentAt = new Date().toISOString(); delete current.code; }, 'approvalMail');
@@ -673,6 +683,26 @@ async function notifyApprovedAccess() {
   }
 }
 // ---------- Limitation des tentatives ----------
+// QR d'invitation (reserve a la gestion) : le lien contenant le code de la
+// famille, a montrer/imprimer/envoyer — l'appareil photo du telephone ouvre
+// Lumi avec le code deja rempli.
+app.get('/api/admin/invite-qr', async (req, res) => {
+  if (!hasAdmin(req)) return res.status(401).json({ error: 'Accès admin requis.' });
+  const code = String(req.query.code || '').trim().toUpperCase();
+  if (!/^LUMI-(?:[0-9A-F]{4}-){5}[0-9A-F]{4}$/.test(code)) return res.status(400).json({ error: 'Code invalide.' });
+  const base = (typeof MAIL_PUBLIC_URL !== 'undefined' && MAIL_PUBLIC_URL) || ('https://' + (req.headers.host || 'lumirevision.com'));
+  const invite = new URL('/', base);
+  invite.search = 'access=' + encodeURIComponent(code);
+  try {
+    const png = await QRCode.toBuffer(invite.href, { type: 'png', width: 480, margin: 2 });
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(png);
+  } catch (e) {
+    console.error('[qr]', e);
+    res.status(500).json({ error: 'QR code indisponible.' });
+  }
+});
 const loginAttempts = new Map();
 function allowLoginAttempt(req, res, prefix = 'login', max = 20) {
   const key = prefix + ':' + (req.ip || req.socket?.remoteAddress || 'unknown');
@@ -693,7 +723,7 @@ function accessCookieValue() {
   return createHash('sha256').update('lumi-house:' + ACCESS_CODE).digest('hex');
 }
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-16.7' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-16.8' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
