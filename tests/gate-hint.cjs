@@ -1,4 +1,4 @@
-// « Le lien ouvre Chrome et rien ne marche » : sur iPhone, Lumi a besoin de
+// « Le lien ouvre Chrome et rien ne marche » : sur iPhone, Savika a besoin de
 // Safari (voix, micro, installation) ; dans les navigateurs internes des
 // messageries, on guide. gateBrowserHint() detecte l'appareil et le navigateur.
 const test = require('node:test');

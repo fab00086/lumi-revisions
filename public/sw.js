@@ -1,15 +1,22 @@
-// Service worker Lumi : rend l'app INSTALLABLE (PWA) et rapide a ouvrir.
+// Service worker Savika : rend l'app INSTALLABLE (PWA) et rapide a ouvrir.
 // Cache l'interface ; les appels /api/* passent toujours par le reseau.
 'use strict';
 
-const CACHE = 'lumi-v67';
+const CACHE = 'lumi-v72';
 const SHELL = [
   '/',
   '/index.html',
+  '/app',
+  '/app/',
+  '/app/index.html',
   '/app.js',
+  '/app/app.js',
   '/update.js',
+  '/app/update.js',
   '/style.css',
+  '/app/style.css',
   '/manifest.json',
+  '/app/manifest.json',
   '/sound-check.wav',
   '/audio-ready.wav',
   '/icon.svg',
@@ -47,6 +54,10 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // L'IA, les donnees et le quiz : toujours le reseau, jamais de cache
   if (url.pathname.startsWith('/api/')) return;
+  if (url.pathname.startsWith('/profs')) {
+    e.respondWith(fetch(e.request).catch(async () => (await caches.match(e.request, { ignoreSearch: true })) || new Response('Hors ligne', { status: 503 })));
+    return;
+  }
   if (e.request.method !== 'GET') return;
   // Opening Admin must reach the server to require a fresh password.
   if (url.origin === location.origin && ['/admin', '/admin.html'].includes(url.pathname)) {
@@ -65,8 +76,11 @@ self.addEventListener('fetch', (e) => {
       }
       return r;
     }).catch(async () => {
-      const hit = await caches.match(e.request, { ignoreSearch: true });
-      return hit || new Response('Lumi est hors ligne. Reconnecte-toi puis recharge la page.',
+      const hit = await caches.match(e.request, { ignoreSearch: true })
+        || await caches.match('/app')
+        || await caches.match('/app/')
+        || await caches.match('/index.html');
+      return hit || new Response('Savika est hors ligne. Reconnecte-toi puis recharge la page.',
         { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
     }));
     return;

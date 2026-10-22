@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
 function section(a, b) { const start = source.indexOf(a), end = source.indexOf(b, start); assert.ok(start >= 0 && end > start, a); return source.slice(start, end); }
 
 // Fixture : stockage KV factice + serveur Whisper factice (API Whishper).
-// Le serveur Lumi ne parle jamais au vrai Whisper dans les tests.
+// Le serveur Savika ne parle jamais au vrai Whisper dans les tests.
 async function fixture(env = {}, nativeRunner) {
   const { createWhisperRunner } = await import('../whisper-python.js');
   const records = [];
@@ -139,13 +139,13 @@ test('dictée Python sur hébergement : sélection du moteur sans API Whishper, 
       assert.equal(buffer.toString(), 'ABC');
       assert.equal(ext, 'webm');
       if (busy) throw Object.assign(Error('Dictée occupée.'), { status: 429 });
-      return 'Bonjour Lumi.';
+      return 'Bonjour Savika.';
     }
   });
   try {
     assert.deepEqual(await (await f.get('/api/transcribe/status')).json(), { available: true, model: 'tiny', engine: 'whisper' });
     const r = await f.post('/api/transcribe', { audio: 'QUJD', mime: 'audio/webm' });
-    assert.deepEqual(await r.json(), { ok: true, texte: 'Bonjour Lumi.' });
+    assert.deepEqual(await r.json(), { ok: true, texte: 'Bonjour Savika.' });
     assert.equal(f.whisper.posts.length, 0);
     busy = true;
     assert.equal((await f.post('/api/transcribe', { audio: 'QUJD', mime: 'audio/webm' })).status, 429);

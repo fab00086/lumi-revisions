@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Admin Lumi — Gestion des clients</title>
+<title>Admin Savika — Gestion des clients</title>
 <link rel="stylesheet" href="style.css">
 <style>
 /* Page admin adulte : palette de l'app, densité de lecture du coup. */
@@ -59,10 +59,10 @@ select.plan-select, input.limit-input {
 </head>
 <body>
 <div class="admin-wrap">
-  <a class="management-link" href="/">← Retour à Lumi</a>
+  <a class="management-link" href="/app">← Retour à Savika</a>
   <div id="login-box">
     <h1 class="admin-title">🔐 Gestion des familles</h1>
-    <p class="admin-sub">Entre ton mot de passe de gestion. Le code habituel de Lumi ouvre seulement l’espace famille.</p>
+    <p class="admin-sub">Entre ton mot de passe de gestion. Le code habituel de Savika ouvre seulement l’espace famille.</p>
     <input id="admin-code" type="password" placeholder="Mot de passe de gestion" autocomplete="current-password">
     <button id="admin-login" class="btn btn-primary" style="width:100%">Ouvrir la gestion</button>
     <p id="login-err" style="color:#c0392b; font-size:14px; margin-top:8px"></p>
@@ -78,7 +78,7 @@ select.plan-select, input.limit-input {
       <form id="mail-form" class="client-ctl">
         <label>Ton adresse e-mail<input id="mail-email" class="limit-input" type="email" maxlength="254" required autocomplete="email"></label>
         <label>Clé du service Resend<input id="mail-key" class="limit-input" type="password" autocomplete="new-password" placeholder="re_…"></label>
-        <label>Adresse d’envoi Lumi<input id="mail-from" class="limit-input" type="text" maxlength="254" placeholder="Lumi &lt;acces@ton-domaine.fr&gt;"></label>
+        <label>Adresse d’envoi Savika<input id="mail-from" class="limit-input" type="text" maxlength="254" placeholder="Savika &lt;acces@ton-domaine.fr&gt;"></label>
         <p class="hint">Pour les invitations aux familles, utilise une adresse sur un <a href="https://resend.com/domains" target="_blank" rel="noopener noreferrer">domaine vérifié dans Resend</a>. L’adresse de test onboarding@resend.dev peut seulement envoyer à ton propre compte Resend. Ton adresse personnelle ci-dessus reste privée ; seule l’adresse d’envoi apparaît dans les e-mails.</p>
         <p class="hint">Crée une clé sur <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer">Resend</a> avec le même e-mail que ci-dessus. Une fois enregistrée, laisse ce champ vide pour conserver la clé.</p>
         <button id="mail-save" class="btn-sm" type="submit">Enregistrer les notifications</button>
@@ -86,7 +86,7 @@ select.plan-select, input.limit-input {
       </form>
     </details>
     <div class="bar">
-      <button id="admin-test" class="btn btn-sm">🧪 Essayer Lumi comme Admin</button>
+      <button id="admin-test" class="btn btn-sm">🧪 Essayer Savika comme Admin</button>
       <button id="btn-refresh" class="btn btn-sm wide" style="min-width:120px">↻ Rafraîchir</button>
       <button id="admin-logout" class="btn-sm">Fermer la gestion</button><div class="spacer"></div>
       <span id="mode-note" class="note" style="display:none"></span>
@@ -106,7 +106,7 @@ select.plan-select, input.limit-input {
 <input id="issued-code" class="limit-input" readonly aria-label="Code famille créé">
 <div id="code-qr-box" class="hidden" style="margin-top:12px;text-align:center">
   <img id="code-qr" alt="QR code d'invitation (contient le code de la famille)" style="width:200px;height:200px;background:#fff;border-radius:12px;padding:6px;box-shadow:0 2px 10px rgba(0,0,0,.08)">
-  <p style="margin:6px 0 4px;font-size:13px;opacity:.75">La famille scanne ce QR avec l'appareil photo : Lumi s'ouvre avec le code déjà rempli.</p>
+  <p style="margin:6px 0 4px;font-size:13px;opacity:.75">La famille scanne ce QR avec l'appareil photo : Savika s'ouvre avec le code déjà rempli.</p>
   <a id="code-qr-download" class="btn-sm" href="#" download="lumi-invitation-qr.png">💾 Télécharger le QR</a>
 </div>
 <div class="btn-row" style="margin-top:12px"><button id="sms-code" class="btn-sm">📱 Envoyer par SMS</button><button id="copy-only-code" class="btn-sm">Copier le code</button><button id="copy-code" class="btn-sm">Copier l’invitation</button><button id="share-code" class="btn-sm">Partager le code</button><button id="close-code" class="btn-sm">Fermer</button></div>
@@ -114,7 +114,7 @@ select.plan-select, input.limit-input {
 </section>
 <h2 style="font-size:20px">Demandes et accès existants</h2>
 <div id="clients" class="client"></div>
-    <p id="admin-empty" class="empty hidden">Aucune demande pour le moment. Tu peux créer un accès ou partager le lien de Lumi.</p>
+    <p id="admin-empty" class="empty hidden">Aucune demande pour le moment. Tu peux créer un accès ou partager le lien de Savika.</p>
   </div>
 </div>
 <div id="toast" class="toastmsg"></div>

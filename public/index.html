@@ -3,21 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Lumi — Révisions avec moi</title>
+  <title>Savika — Révisions avec moi</title>
   <meta name="theme-color" content="#6c5ce7">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Lumi">
+  <meta name="apple-mobile-web-app-title" content="Savika">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="style.css?v=67">
+  <link rel="stylesheet" href="style.css?v=72">
   <link rel="stylesheet" href="/katex/katex.min.css">
   <script defer src="/katex/katex.min.js"></script>
 </head>
 <body>
 
-  <!-- ===== Écran de chargement : Lumi écrit + barre de progression ===== -->
+  <!-- ===== Écran de chargement : Savika écrit + barre de progression ===== -->
   <div id="splash" class="splash" aria-hidden="true">
     <div class="splash-box">
       <div class="splash-scene">
@@ -38,7 +38,7 @@
         </svg>
         <span class="splash-pencil" aria-hidden="true">✏️</span>
       </div>
-      <p class="splash-text">Lumi écrit<span class="splash-dots"><span>.</span><span>.</span><span>.</span></span></p>
+      <p class="splash-text">Savika écrit<span class="splash-dots"><span>.</span><span>.</span><span>.</span></span></p>
       <div class="splash-bar"><div class="splash-fill"></div></div>
     </div>
   </div>
@@ -47,7 +47,7 @@
   <div id="screen-gate" class="screen hidden">
     <div class="card">
       <div class="logo">🔒</div>
-      <h1>Lumi</h1>
+      <h1>Savika</h1>
       <p class="subtitle">Demande un accès. Après approbation, utilise le code réservé à ta famille. Le mot de passe de gestion ouvre l’espace Admin.</p>
       <div class="video-search">
         <input id="gate-code" type="password" placeholder="Code famille ou mot de passe personnel" autocomplete="current-password">
@@ -56,10 +56,22 @@
       <p id="gate-error" class="hint"></p>
       <div id="gate-browser-hint" class="browser-hint hidden"></div>
       <label class="consent-row"><input id="gate-consent" type="checkbox"> Pour ouvrir un accès famille, je confirme être le parent ou responsable légal.</label>
+      <div class="parent-auth">
+        <button id="btn-parent-mode" class="btn install-btn" type="button"><span class="ic" data-ic="user"></span> Parent : se connecter (e-mail + mot de passe)</button>
+        <div id="parent-box" class="hidden">
+          <input id="parent-email" type="email" placeholder="E-mail du parent" autocomplete="email">
+          <input id="parent-password" type="password" placeholder="Mot de passe" autocomplete="current-password">
+          <div class="video-search">
+            <button id="btn-parent-login" class="btn btn-primary" type="button">Se connecter</button>
+            <button id="btn-parent-register" class="btn" type="button">Créer un compte (gratuit)</button>
+          </div>
+          <p id="parent-msg" class="hint">Aucun code nécessaire. Pour créer un compte, coche d’abord la case « je confirme être le parent » ci-dessus.</p>
+        </div>
+      </div>
       <button id="btn-request-access" class="btn install-btn" type="button">Demander un accès</button>
-      <button id="btn-share-gate" class="btn install-btn" type="button">Partager Lumi</button>
-      <button class="btn install-btn" type="button" data-copy-lumi-link>🔗 Copier le lien de Lumi</button>
-      <button class="btn install-btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
+      <button id="btn-share-gate" class="btn install-btn" type="button">Partager Savika</button>
+      <button class="btn install-btn" type="button" data-copy-lumi-link>🔗 Copier le lien de Savika</button>
+      <button class="btn install-btn" type="button" data-update-lumi>🔄 Mettre à jour Savika</button>
       <a href="/admin.html" class="management-link hidden" data-admin-link>🔐 Gestion des familles</a>
     </div>
   </div>
@@ -68,11 +80,11 @@
   <div id="screen-profile" class="screen hidden">
     <div class="card">
       <div class="logo">🌟</div>
-      <h1>Lumi</h1>
+      <h1>Savika</h1>
       <p class="subtitle">Ton maître / ta maîtresse pour les devoirs et les révisions</p>
 
       <div id="profiles" class="profiles"></div>
-      <p id="admin-test-note" class="note hidden">🧪 Espace d’essai Admin : aucun enfant réel ici. Utilise ton nom et ton âge pour tester Lumi.</p>
+      <p id="admin-test-note" class="note hidden">🧪 Espace d’essai Admin : aucun enfant réel ici. Utilise ton nom et ton âge pour tester Savika.</p>
 
       <button id="btn-show-profile-form" class="btn hidden" type="button" style="margin-bottom: 15px;">➕ Ajouter un enfant</button>
       <form id="profile-form" class="profile-form">
@@ -96,15 +108,16 @@
       <p id="profile-hint" class="hint">Tu peux ajouter plusieurs enfants. Depuis une conversation, touche « Profils » pour retrouver cette liste et ajouter un enfant.</p>
 
       <button id="btn-parent" class="btn" type="button">👨‍👩‍👧 Espace parent</button>
-      <button id="btn-help" class="btn" type="button">❓ Aide — comment utiliser Lumi</button>
+      <a href="https://savika.lumirevision.com/" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;color:inherit;opacity:.75;font-size:14px;text-decoration:underline;text-underline-offset:3px">🌐 Site Savika</a>
+      <button id="btn-help" class="btn" type="button">❓ Aide — comment utiliser Savika</button>
       <a href="/admin.html" class="management-link hidden" data-admin-link>🔐 Gestion des familles</a>
       <button id="btn-options-toggle" class="btn install-btn" type="button" style="margin-bottom: 15px;">⚙️ Paramètres &amp; Partage</button>
       <div id="options-panel" class="hidden" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 5px;">
-        <button id="btn-share-app" class="btn install-btn" type="button">🔗 Partager Lumi</button>
-      <button class="btn install-btn" type="button" data-copy-lumi-link>🔗 Copier le lien de Lumi</button>
+        <button id="btn-share-app" class="btn install-btn" type="button">🔗 Partager Savika</button>
+      <button class="btn install-btn" type="button" data-copy-lumi-link>🔗 Copier le lien de Savika</button>
       <button id="btn-switch-access" class="btn install-btn" type="button">Changer de code famille</button>
-      <button id="btn-install" class="btn install-btn" type="button">📲 Installer Lumi sur mon téléphone</button>
-      <button class="btn install-btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
+      <button id="btn-install" class="btn install-btn" type="button">📲 Installer Savika sur mon téléphone</button>
+      <button class="btn install-btn" type="button" data-update-lumi>🔄 Mettre à jour Savika</button>
 
       <div class="connect">
         <button id="btn-connect" class="connect-toggle" type="button">📱 Connecter un téléphone (même Wi-Fi)</button>
@@ -116,10 +129,11 @@
         </div>
       </div>
       </div>
+      <a href="https://savika.lumirevision.com/" target="_blank" rel="noopener" style="display:inline-block;margin-top:16px;color:inherit;opacity:.75;font-size:14px;text-decoration:underline;text-underline-offset:3px">🌐 Site Savika</a>
     </div>
 
     <div id="install-banner" class="install-banner hidden" role="status">
-      <span class="install-banner-text">📲 Garde Lumi à portée de main : installe-la sur ton téléphone.</span>
+      <span class="install-banner-text">📲 Garde Savika à portée de main : installe-la sur ton téléphone.</span>
       <button id="btn-install-banner-action" class="btn btn-primary" type="button">Installer</button>
       <button id="btn-install-banner-dismiss" class="icon-btn" type="button" title="Plus tard">✕</button>
     </div>
@@ -130,19 +144,20 @@
     <header class="topbar">
       <button id="btn-back" class="icon-btn labeled-btn" title="Changer d'enfant"><span class="button-icon" aria-hidden="true">←</span><span class="button-label">Profils</span></button>
       <div class="topbar-title">
-        <strong>Lumi</strong>
+        <strong>Savika</strong>
         <span id="child-age" class="badge"></span>
       </div>
       <details id="chat-tools" class="chat-tools">
-        <summary aria-label="Ouvrir les outils de Lumi">☰ Outils</summary>
+        <summary aria-label="Ouvrir les outils de Savika">☰ Outils</summary>
         <div class="topbar-actions">
         <button id="btn-quiz" class="icon-btn labeled-btn" title="Interro-moi"><span class="button-icon" aria-hidden="true">🎯</span><span class="button-label">Quiz</span></button>
-        <button id="btn-classe" class="icon-btn labeled-btn" title="Mini-cours généré par Lumi"><span class="button-icon" aria-hidden="true">🏫</span><span class="button-label">Classe</span></button>
+        <button id="btn-classe" class="icon-btn labeled-btn" title="Mini-cours généré par Savika"><span class="button-icon" aria-hidden="true">🏫</span><span class="button-label">Classe</span></button>
         <button id="btn-video" class="icon-btn labeled-btn" title="Vidéo d'explication"><span class="button-icon" aria-hidden="true">🎬</span><span class="button-label">Vidéo</span></button>
         <button id="btn-new" class="icon-btn labeled-btn" title="Nouvelle leçon"><span class="button-icon" aria-hidden="true">🆕</span><span class="button-label">Leçon</span></button>
         <button id="btn-progress" class="icon-btn labeled-btn" title="Progression"><span class="button-icon" aria-hidden="true">📊</span><span class="button-label">Progrès</span></button>
         <button id="btn-print" class="icon-btn labeled-btn" title="Fiche de révision (PDF)"><span class="button-icon" aria-hidden="true">📄</span><span class="button-label">Fiche</span></button>
         <button id="btn-settings" class="icon-btn labeled-btn" title="Réglages"><span class="button-icon" aria-hidden="true">⚙️</span><span class="button-label">Réglages</span></button>
+        <a class="icon-btn labeled-btn" href="https://savika.lumirevision.com/" target="_blank" rel="noopener" title="Site principal Savika" style="text-decoration:none;color:inherit"><span class="button-icon" aria-hidden="true">🌐</span><span class="button-label">Site Savika</span></a>
         </div>
       </details>
     </header>
@@ -184,14 +199,14 @@
           <strong id="child-name">…</strong>
         </div>
         <span id="teacher-status">Je t'écoute 👂</span>
-        <button id="btn-listen" class="btn" type="button">🔊 Écouter Lumi</button>
+        <button id="btn-listen" class="btn" type="button">🔊 Écouter Savika</button>
         <button id="btn-stop" class="btn-stop hidden" type="button">✋ Couper la voix</button>
       </div>
     </div>
 
     <details id="voice-player" class="voice-player hidden">
       <summary>🔊 Lecteur audio</summary>
-      <div id="voice-playback" class="hidden" aria-label="Lecteur de la réponse de Lumi"></div>
+      <div id="voice-playback" class="hidden" aria-label="Lecteur de la réponse de Savika"></div>
     </details>
     <div id="chat" class="chat"></div>
 
@@ -239,18 +254,18 @@
     </div>
   </div>
 
-  <!-- ===== Aide : comment utiliser Lumi ===== -->
+  <!-- ===== Aide : comment utiliser Savika ===== -->
   <div id="help-modal" class="modal hidden">
     <div class="modal-box">
       <div class="modal-head">
-        <strong>❓ Aide — comment utiliser Lumi</strong>
+        <strong>❓ Aide — comment utiliser Savika</strong>
         <button id="btn-help-close" class="icon-btn" title="Fermer">✕</button>
       </div>
       <p class="hint">Touche une question :</p>
       <div id="help-questions" class="help-questions"></div>
       <div id="help-result" class="help-result"></div>
       <div class="video-search" style="margin-top:12px">
-        <input id="help-input" type="text" placeholder="Ou pose ta question à Lumi…">
+        <input id="help-input" type="text" placeholder="Ou pose ta question à Savika…">
         <button id="btn-help-ask" class="btn btn-primary" type="button">Demander</button>
       </div>
     </div>
@@ -304,8 +319,8 @@
 
   <div id="request-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="request-title">
     <div class="modal-box">
-      <div class="modal-head"><strong id="request-title">Demander un accès à Lumi</strong><button id="btn-request-close" class="icon-btn" title="Fermer">✕</button></div>
-      <p class="hint">Le responsable de Lumi choisira les limites de ton accès, puis te transmettra ton code par SMS. L’e-mail reste possible si le service d’envoi est activé.</p>
+      <div class="modal-head"><strong id="request-title">Demander un accès à Savika</strong><button id="btn-request-close" class="icon-btn" title="Fermer">✕</button></div>
+      <p class="hint">Le responsable de Savika choisira les limites de ton accès, puis te transmettra ton code par SMS. L’e-mail reste possible si le service d’envoi est activé.</p>
       <p class="hint"><a href="/confidentialite.html" target="_blank" rel="noopener">Confidentialité et droits sur tes données (RGPD)</a></p>
       <form id="request-form">
         <label class="field">Nom de la famille<input id="request-name" type="text" maxlength="80" required></label>
@@ -327,7 +342,7 @@
         <button id="btn-settings-close" class="icon-btn" title="Fermer">✕</button>
       </div>
       <label class="field">
-        <span>Voix de Lumi</span>
+        <span>Voix de Savika</span>
         <select id="voice-select"></select>
       </label>
       <label class="field">
@@ -336,21 +351,22 @@
       </label>
       <label class="consent-row"><input id="dictation-review" type="checkbox"> Relire la dictée 🎤 avant l'envoi (le mode Conversation 🎙️ envoie tout seul). Maintenir 🎤 appuyé pour parler, relâcher pour terminer.</label>
       <label class="consent-row"><input id="dictation-keyboard" type="checkbox"> Dictée iPhone : utiliser le micro du clavier d'Apple 🎤 (recommandé — plus fiable que le micro de Safari).</label>
-      <p class="hint">Choisis « Lumi — voix française » sur iPhone et Android. La première lecture peut prendre quelques secondes.</p>
-      <p class="hint">🔊 Pour entendre Lumi sur ton téléphone, désactive le mode silencieux et monte le volume.</p>
+      <p class="hint">Choisis « Savika — voix française » sur iPhone et Android. La première lecture peut prendre quelques secondes.</p>
+      <p class="hint">🔊 Pour entendre Savika sur ton téléphone, désactive le mode silencieux et monte le volume.</p>
       <button id="btn-test-voice" class="btn" type="button">🔊 Tester la voix</button>
       <a class="btn" href="/test-voix.html" target="_blank" rel="noopener">Tester les voix du téléphone seules</a>
-      <button class="btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
+      <button class="btn" type="button" data-update-lumi>🔄 Mettre à jour Savika</button>
       <a class="btn" href="/design" target="_blank" rel="noopener">🖌️ Aperçu design (valider le look)</a>
       <p class="hint" id="lumi-version"></p>
+      <a class="btn" href="https://savika.lumirevision.com/" target="_blank" rel="noopener">🌐 Site Savika</a>
       <a class="btn" href="/confidentialite.html" target="_blank" rel="noopener">Confidentialité et mes données</a>
       <button id="btn-test-sound" class="btn" type="button">🎵 Tester le son du téléphone</button>
       <p class="hint">Test direct de la voix française : appuie sur ▶ dans ce lecteur.</p>
-      <audio id="voice-direct-test" controls preload="none" src="/voice-check.wav" style="width:100%" aria-label="Test direct de la voix française Lumi"></audio>
+      <audio id="voice-direct-test" controls preload="none" src="/voice-check.wav" style="width:100%" aria-label="Test direct de la voix française Savika"></audio>
       <p id="voice-feedback" class="audio-feedback" role="status" aria-live="polite">Teste d’abord le son, puis la voix.</p>
-      <p class="hint">Si Lumi indique que la voix est prête, retouche « Écouter Lumi ». La voix française de Lumi nécessite Internet ; les autres choix utilisent les voix installées sur ton appareil.</p>
-      <button id="btn-install-settings" class="btn install-btn" type="button">📲 Installer Lumi</button>
-      <button id="btn-help-settings" class="btn" type="button">❓ Comment utiliser Lumi</button>
+      <p class="hint">Si Savika indique que la voix est prête, retouche « Écouter Savika ». La voix française de Savika nécessite Internet ; les autres choix utilisent les voix installées sur ton appareil.</p>
+      <button id="btn-install-settings" class="btn install-btn" type="button">📲 Installer Savika</button>
+      <button id="btn-help-settings" class="btn" type="button">❓ Comment utiliser Savika</button>
       <button id="btn-diag-voice" class="btn" type="button">🩺 Diagnostic micro + voix</button>
       <button id="btn-iphone-help2" class="btn" type="button">🍎 Aide iPhone / iPad (micro + voix)</button>
     </div>
@@ -359,12 +375,12 @@
   <div id="install-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="install-title">
     <div class="modal-box">
       <div class="modal-head">
-        <strong id="install-title">📲 Installer Lumi</strong>
+        <strong id="install-title">📲 Installer Savika</strong>
         <button id="btn-install-close" class="icon-btn" title="Fermer">✕</button>
       </div>
       <p id="install-intro" class="hint"></p>
       <ol id="install-steps" class="help-steps"></ol>
-      <p class="hint">Lumi s’ouvre depuis son icône. Une connexion Internet reste nécessaire pour discuter avec l’IA.</p>
+      <p class="hint">Savika s’ouvre depuis son icône. Une connexion Internet reste nécessaire pour discuter avec l’IA.</p>
       <button id="btn-install-native" class="btn btn-primary hidden" type="button">Installer maintenant</button>
     </div>
   </div>
@@ -390,12 +406,12 @@
       </div>
       <ol class="help-steps">
         <li>Sur le PC, ouvre <strong>Connecter un téléphone</strong> et scanne le <strong>QR code</strong> (adresse HTTPS 🌍 trycloudflare.com). Ouvre ce lien directement dans <strong>Safari</strong>, en dehors du navigateur de WhatsApp, Facebook ou d'une autre application. Évite l'adresse https://192.168… : son certificat local peut empêcher l'accès au micro.</li>
-        <li>Appuie sur <strong>🔊 Écouter Lumi</strong> dans la conversation, ou <strong>Tester la voix</strong> dans les réglages. Monte le volume et <strong>désactive le mode silencieux</strong> (petit interrupteur sur le côté de l'iPhone) : en mode silencieux, la voix de Lumi est coupée.</li>
+        <li>Appuie sur <strong>🔊 Écouter Savika</strong> dans la conversation, ou <strong>Tester la voix</strong> dans les réglages. Monte le volume et <strong>désactive le mode silencieux</strong> (petit interrupteur sur le côté de l'iPhone) : en mode silencieux, la voix de Savika est coupée.</li>
         <li>Appuie sur <strong>🎤</strong> et accepte les demandes d'accès au micro et de reconnaissance vocale. Si tu les as refusées, ouvre les réglages de ce site dans le menu de Safari pour autoriser le microphone.</li>
         <li>Vérifie que <strong>Siri est activé</strong> dans les Réglages de l'iPhone : Safari s'appuie sur ce service pour reconnaître la parole.</li>
-        <li>Le mode 🎙️ réécoute après les réponses. Si iOS bloque une relance, Lumi arrête le mode et te propose de retoucher 🎤. Si cela continue, recharge dans Safari. Tu peux aussi dicter dans le champ de texte avec le micro du clavier, puis envoyer ta question.</li>
+        <li>Le mode 🎙️ réécoute après les réponses. Si iOS bloque une relance, Savika arrête le mode et te propose de retoucher 🎤. Si cela continue, recharge dans Safari. Tu peux aussi dicter dans le champ de texte avec le micro du clavier, puis envoyer ta question.</li>
       </ol>
-      <p class="hint">Pour une dictée réussie : parle à ~20 cm du téléphone, dans un endroit calme, et fais une petite pause après chaque phrase. Si la dictée s'arrête en plein milieu, reparle simplement : Lumi reprend la phrase là où elle en était (tu peux aussi toucher Envoyer quand tout est écrit).</p>
+      <p class="hint">Pour une dictée réussie : parle à ~20 cm du téléphone, dans un endroit calme, et fais une petite pause après chaque phrase. Si la dictée s'arrête en plein milieu, reparle simplement : Savika reprend la phrase là où elle en était (tu peux aussi toucher Envoyer quand tout est écrit).</p>
       <p class="hint">Le site en ligne utilise déjà HTTPS : aucun certificat ni profil à installer. Si Safari affiche une alerte de sécurité, vérifie l'adresse sans contourner l'alerte.</p>
     </div>
   </div>
@@ -427,7 +443,7 @@
     </div>
   </div>
 
-  <!-- ===== Prévisualisation de la photo du cahier, avant envoi à Lumi ===== -->
+  <!-- ===== Prévisualisation de la photo du cahier, avant envoi à Savika ===== -->
   <div id="photo-preview-modal" class="modal hidden">
     <div class="modal-box">
       <div class="modal-head">
@@ -435,10 +451,10 @@
         <button id="btn-photo-preview-close" class="icon-btn" title="Annuler">✕</button>
       </div>
       <img id="photo-preview-img" class="photo-preview-img" alt="Photo du cahier">
-      <p class="hint">La photo est floue, sombre ou coupée ? Refais-la : Lumi lira mieux ton cahier ! ✍️</p>
+      <p class="hint">La photo est floue, sombre ou coupée ? Refais-la : Savika lira mieux ton cahier ! ✍️</p>
       <div class="camera-actions">
         <button id="btn-photo-retake" class="btn">🔄 Refaire la photo</button>
-        <button id="btn-photo-send" class="btn btn-primary">✅ Envoyer à Lumi</button>
+        <button id="btn-photo-send" class="btn btn-primary">✅ Envoyer à Savika</button>
       </div>
     </div>
   </div>
@@ -456,8 +472,8 @@
       if (s && !s.classList.contains('hidden')) { s.classList.add('done'); setTimeout(() => s.classList.add('hidden'), 350); }
     }, 8000);
   </script>
-  <script src="app.js?v=67"></script>
-  <script src="update.js?v=67"></script>
+  <script src="app.js?v=72"></script>
+  <script src="update.js?v=71"></script>
 </body>
 </html>
 

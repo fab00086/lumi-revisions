@@ -9,7 +9,7 @@ const vm = require('node:vm');
 const update = fs.readFileSync(path.join(__dirname, '../public/update.js'), 'utf8');
 const slice = update.slice(
   update.indexOf('function lumiEnLecon()'),
-  update.indexOf('async function updateLumi()')
+  update.indexOf('async function updateSavika()')
 );
 
 function ctx({ enLecon = false, modal = false, pending = true }) {
@@ -43,7 +43,7 @@ test('mise a jour auto : JAMAIS pendant une lecon ni avec une fenetre ouverte', 
 test('mise a jour auto : s applique sur l ecran des profils (message puis rechargement)', () => {
   const f = ctx({ pending: true });
   f.c.lumiMiseAJourHorsLecon();
-  assert.match(String(f.etat.toasted), /Mise à jour de Lumi/);
+  assert.match(String(f.etat.toasted), /Mise à jour de Savika/);
   assert.match(String(f.etat.replaced), /^\/\?_maj=\d+$/);
 });
 

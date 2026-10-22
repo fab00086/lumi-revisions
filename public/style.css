@@ -627,3 +627,16 @@ body {
   .prog-item { flex-direction: column; align-items: flex-start; gap: 6px; }
   .modal-box { max-height: 90dvh; }
 }
+
+/* Connexion parent sans code (depuis la gate) */
+.parent-auth { margin: 6px 0 12px; }
+.parent-auth input {
+  width: 100%; padding: 11px 13px; border-radius: 12px; border: 2px solid #e6e1f7; font-size: 15px; background: #faf9ff; margin-bottom: 8px; box-sizing: border-box;
+}
+.parent-auth input:focus { outline: none; border-color: var(--violet); }
+
+/* ===================== ÉCRITURE MANUSCRITE (chat) ===================== */
+@font-face { font-family: 'Patrick Hand'; font-display: swap; src: url('fonts/patrick-hand.woff2') format('woff2'); }
+@font-face { font-family: 'Caveat'; font-weight: 700; font-display: swap; src: url('fonts/caveat-700.woff2') format('woff2'); }
+.msg .bubble { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; font-size: 16.5px; line-height: 1.38; letter-spacing: .01em; }
+.msg .bubble code, .msg .bubble pre, .msg .bubble .katex { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

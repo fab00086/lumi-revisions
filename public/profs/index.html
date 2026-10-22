@@ -1,0 +1,202 @@
+﻿<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f7f6ff">
+<meta name="description" content="Savika Profs — corrigez les copies par photo et préparez vos cours sur le programme officiel.">
+<title>Savika Profs — Corriger les copies, préparer les cours</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="style.css?v=80">
+<link rel="stylesheet" href="style-savika.css?v=3">
+</head>
+<body>
+<a class="skip" href="#main">Aller au contenu</a>
+
+<!-- ===================== Accès prof (connexion / inscription) ===================== -->
+<div class="auth-wrap" id="auth-wrap">
+  <div class="auth-card">
+    <div class="brand"><span class="brand-mark">S</span><span>Savika <b>Profs</b></span></div>
+    <h1>Connexion à l'espace enseignant</h1>
+    <p class="sub">Corrigez une copie en photo, préparez une séance sur le programme officiel.</p>
+    <div id="auth-box">
+      <label class="field">E-mail professionnel<input id="auth-email" type="email" autocomplete="email" placeholder="prenom.nom@ecole.fr"></label>
+      <label class="field">Mot de passe<input id="auth-password" type="password" autocomplete="current-password" placeholder="6 caractères minimum"></label>
+      <label class="consent" id="auth-consent-row"><input id="auth-consent" type="checkbox"><span>J'accepte les <a href="/confidentialite.html" target="_blank" rel="noopener">conditions d'utilisation et la politique de confidentialité</a>.</span></label>
+      <div class="row">
+        <button id="btn-login" class="btn btn-primary" type="button">Se connecter</button>
+        <button id="btn-register" class="btn" type="button">Créer un compte enseignant</button>
+      </div>
+      <p class="hint"><a href="https://savika.lumirevision.com/" target="_blank" rel="noopener"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.7-3.8-9S9.5 5.5 12 3z"/></svg>Site Savika</a></p>
+      <p class="hint" id="auth-msg">Accès professionnel. Votre compte est personnel et séparé des comptes familles.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== Application ===================== -->
+<div class="app hidden" id="app">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">S</span><span>Savika <b>Profs</b></span></div>
+    <nav class="nav">
+      <button class="nav-btn active" data-view="correct" type="button">Corriger une copie</button>
+      <button class="nav-btn" data-view="lesson" type="button">Idées de cours</button>
+      <button class="nav-btn" data-view="pile" type="button">Pile de copies</button>
+      <button class="nav-btn" data-view="history" type="button">Historique</button>
+    </nav>
+    <div class="user">
+      <a class="site-link" href="https://savika.lumirevision.com/" target="_blank" rel="noopener"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.7-3.8-9S9.5 5.5 12 3z"/></svg>Site Savika</a>
+      <span id="user-email" class="user-mail"></span>
+      <button id="btn-logout" class="btn btn-ghost btn-sm" type="button">Déconnexion</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ---------- Vue : correction de copie ---------- -->
+    <section class="view" id="view-correct">
+      <div class="panel">
+        <h2>Corriger une copie</h2>
+        <p class="hint">Photographiez la copie (à plat, nette) ou déposez une image. Savika propose une correction exercice par exercice avec barème et annotations.</p>
+        <div class="grid-2">
+          <label class="drop" id="drop">
+            <input id="file" type="file" accept="image/*" capture="environment" hidden>
+            <img id="preview" class="preview hidden" alt="Copie photographiée">
+            <span class="drop-ico" id="drop-ico"><svg class="ico ico-lg" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="3"/><path d="M8 7l1.5-2.5h5L16 7"/><circle cx="12" cy="13" r="4"/></svg></span>
+            <span class="drop-txt" id="drop-txt"><b>Prendre une photo</b> ou déposer le fichier ici</span>
+          </label>
+          <div class="form">
+            <div class="row2">
+              <label class="field">Niveau
+                <select id="c-niveau">
+                  <option value="">Choisir</option>
+                  <option>CP</option><option>CE1</option><option>CE2</option><option>CM1</option><option>CM2</option>
+                  <option>6e</option><option>5e</option><option>4e</option><option>3e</option>
+                  <option>2nde</option><option>1re</option><option>Terminale</option><option>Supérieur</option>
+                </select>
+              </label>
+              <label class="field">Matière<input id="c-matiere" type="text" placeholder="Mathématiques, Français…"></label>
+            </div>
+            <div class="row2">
+              <label class="field">Barème total (points)<input id="c-bareme" type="number" min="1" max="200" value="20"></label>
+              <label class="field">Nombre d'exercices (indicatif)<input id="c-exos" type="number" min="1" max="12" placeholder="auto"></label>
+            </div>
+            <label class="field">Consignes particulières (optionnel)
+              <textarea id="c-consignes" rows="2" placeholder="Ex. : ne pas pénaliser l'orthographe, barème détaillé…"></textarea>
+            </label>
+            <button id="btn-correct" class="btn btn-primary btn-lg" type="button">Corriger la copie</button>
+            <p class="hint" id="c-msg"></p>
+            <button id="btn-example" class="btn btn-ghost btn-sm" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.8"/></svg>Pas de copie sous la main ? Voir un exemple (CE1)</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel hidden" id="c-result"></div>
+    </section>
+
+    <!-- ---------- Vue : idées de cours ---------- -->
+    <section class="view hidden" id="view-lesson">
+      <div class="panel">
+        <h2>Préparer une séance</h2>
+        <p class="hint">Une fiche de cours complète, alignée sur le programme officiel : objectifs, déroulé minuté, exercices corrigés, évaluation, différenciation.</p>
+        <div class="form">
+          <div class="row2">
+            <label class="field">Niveau
+              <select id="l-niveau">
+                <option value="">Choisir</option>
+                <option>CP</option><option>CE1</option><option>CE2</option><option>CM1</option><option>CM2</option>
+                <option>6e</option><option>5e</option><option>4e</option><option>3e</option>
+                <option>2nde</option><option>1re</option><option>Terminale</option><option>Supérieur</option>
+              </select>
+            </label>
+            <label class="field">Matière<input id="l-matiere" type="text" placeholder="Mathématiques, Français…" list="matieres"></label>
+          </div>
+          <label class="field">Sujet de la séance<input id="l-topic" type="text" placeholder="Ex. : les fractions équivalentes" list="notions"></label>
+          <datalist id="notions"></datalist>
+          <datalist id="matieres"></datalist>
+          <div class="row2">
+            <label class="field">Durée (minutes)<input id="l-duree" type="number" min="20" max="180" value="55"></label>
+            <label class="field">Objectif souhaité (optionnel)<input id="l-objectif" type="text" placeholder="Ex. : savoir comparer deux fractions"></label>
+          </div>
+          <button id="btn-lesson" class="btn btn-primary btn-lg" type="button">Générer la fiche de cours</button>
+          <p class="hint" id="l-msg"></p>
+        </div>
+      </div>
+      <div class="panel hidden" id="l-result"></div>
+    </section>
+
+
+    <!-- ---------- Vue : mode Pile ---------- -->
+    <section class="view hidden" id="view-pile">
+      <div class="panel" id="pile-setup">
+        <div class="pile-hero">
+          <span class="pill pill-violet">Mode Pile</span>
+          <h2>Toute une classe, corrigée d'un coup</h2>
+          <p class="hint">Photographie les copies une par une : Savika les corrige en arrière-plan, au fil de l'eau. Tu n'écris ensuite que les notes sur les vraies copies — comme d'habitude.
+            <span class="privacy-inline"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Photos effacées automatiquement · aucune donnée d'élève conservée</span></p>
+        </div>
+        <div class="form">
+          <div class="row2">
+            <label class="field">Niveau
+              <select id="p-niveau">
+                <option value="">Choisir</option>
+                <option>CP</option><option>CE1</option><option>CE2</option><option>CM1</option><option>CM2</option>
+                <option>6e</option><option>5e</option><option>4e</option><option>3e</option>
+                <option>2nde</option><option>1re</option><option>Terminale</option><option>Supérieur</option>
+              </select>
+            </label>
+            <label class="field">Matière<input id="p-matiere" type="text" placeholder="Mathématiques, Français…"></label>
+          </div>
+          <div class="row2">
+            <label class="field">Barème total (points)<input id="p-bareme" type="number" min="1" max="200" value="20"></label>
+            <div class="field">Capacité<div class="field-note">Jusqu'à 30 copies · 1 copie = 1 correction</div></div>
+          </div>
+          <label class="field">Consignes communes (optionnel)
+            <textarea id="p-consignes" rows="2" placeholder="Ex. : ne pas pénaliser l'orthographe, barème détaillé…"></textarea>
+          </label>
+          <button id="btn-pile-create" class="btn btn-primary btn-lg" type="button">Créer la pile</button>
+          <p class="hint" id="pile-msg"></p>
+        </div>
+      </div>
+
+      <div class="panel hidden" id="pile-live">
+        <div class="pile-top">
+          <div>
+            <span class="pill pill-teal">Pile en cours</span>
+            <h2 id="pile-title">—</h2>
+            <p class="hint" id="pile-sub"></p>
+          </div>
+          <div class="pile-actions">
+            <label class="btn btn-primary" for="pile-file"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="3"/><path d="M8 7l1.5-2.5h5L16 7"/><circle cx="12" cy="13" r="4"/></svg>Photographier une copie</label>
+            <input id="pile-file" type="file" accept="image/*" capture="environment" hidden>
+            <button id="btn-pile-recap" class="btn" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V4h10v4"/><rect x="4" y="8" width="16" height="8" rx="2"/><path d="M7 16h10v4H7z"/></svg>Relevé PDF</button>
+            <button id="btn-pile-finish" class="btn btn-danger" type="button">Terminer et tout effacer</button>
+          </div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress"><div class="progress-fill" id="pile-bar"></div></div>
+          <span class="progress-txt" id="pile-progress">0 copie</span>
+        </div>
+        <p class="privacy-line"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Les photos sont effacées de la mémoire dès que la copie est corrigée · le lot entier s'efface à « Terminer »</p>
+        <p class="quota-line hidden" id="pile-quota"></p>
+        <div class="pile-grid" id="pile-items"></div>
+        <div class="pile-detail hidden" id="pile-detail"></div>
+      </div>
+    </section>
+
+    <!-- ---------- Vue : historique ---------- -->
+    <section class="view hidden" id="view-history">
+      <div class="panel">
+        <h2>Historique</h2>
+        <p class="hint">Vos corrections et vos fiches de cours enregistrées.</p>
+        <h3 class="h3">Copies corrigées</h3>
+        <ul class="hist" id="hist-corrections"></ul>
+        <h3 class="h3">Fiches de cours</h3>
+        <ul class="hist" id="hist-lessons"></ul>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+<div id="print-area" class="print-only"></div>
+<script src="app.js?v=80"></script>
+</body>
+</html>

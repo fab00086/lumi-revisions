@@ -14,7 +14,7 @@ async function post(path, body) {
 }
 function showCode(j) { $('code-label').textContent = 'Accès : ' + j.label + (j.approvalMailStatus ? (j.emailConfigured ? ' — invitation e-mail en attente d’envoi' : ' — e-mail conservé en attente : configure le service d’envoi') : ''); $('issued-code').value = j.code;
   // QR code de l'invitation : le lien AVEC le code dedans, a montrer, imprimer
-  // ou envoyer — l'appareil photo du telephone ouvre Lumi avec le code rempli.
+  // ou envoyer — l'appareil photo du telephone ouvre Savika avec le code rempli.
   try {
     const qrUrl = '/api/admin/invite-qr?code=' + encodeURIComponent(j.code);
     const qr = $('code-qr'); if (qr) qr.src = qrUrl;
@@ -102,7 +102,7 @@ function familyInvitationText() {
   if (!code) return '';
   // Lien en ?access= : jamais rogné par les messageries (contrairement au #…).
   const link = new URL('/', location.href); link.search = 'access=' + encodeURIComponent(code);
-  return 'Ton code d’accès à Lumi : '+code+'\nOuvrir Lumi : '+link.href+'\nLe lien ouvre Lumi avec le code déjà rempli : confirme être le parent, puis touche « Entrer ». Si le code n’apparaît pas, tape-le à la main (il commence par LUMI-).\nConfidentialité : '+new URL('/confidentialite.html',location.href).href;
+  return 'Ton code d’accès à Savika : '+code+'\nOuvrir Savika : '+link.href+'\nLe lien ouvre Savika avec le code déjà rempli : confirme être le parent, puis touche « Entrer ». Si le code n’apparaît pas, tape-le à la main (il commence par SAVIKA-).\nConfidentialité : '+new URL('/confidentialite.html',location.href).href;
 }
 $('copy-code').onclick = async () => {const text=familyInvitationText();if(!text)return;try {await navigator.clipboard.writeText(text);toast('Invitation copiée avec le code et le lien. Colle-la dans ton SMS.');}catch{$('issued-code').select();toast('Sélectionne et copie le code.');}};
 async function shareFamilyInvitation() {
@@ -111,14 +111,14 @@ async function shareFamilyInvitation() {
   if (!text) { toast('Crée ou approuve un accès avant de le transmettre.'); return; }
   // Le QR (lien AVEC le code dedans) part AUSSI en image quand le téléphone
   // sait partager des fichiers : le destinataire le scanne avec l'appareil
-  // photo et Lumi s'ouvre avec le code déjà rempli (SMS, WhatsApp, Mail...).
+  // photo et Savika s'ouvre avec le code déjà rempli (SMS, WhatsApp, Mail...).
   let files;
   try {
     const r = await fetch('/api/admin/invite-qr?code=' + encodeURIComponent(code));
     if (r.ok) {
       const blob = await r.blob();
       files = [new File([blob], 'lumi-qr-invitation.png', { type: 'image/png' })];
-      text += '\n\n📷 Le QR code joint ouvre Lumi directement : scanne-le avec l’appareil photo.';
+      text += '\n\n📷 Le QR code joint ouvre Savika directement : scanne-le avec l’appareil photo.';
     }
   } catch {}
   // Un seul élément texte : certaines messageries ignorent le texte lorsqu'une URL séparée est fournie.
@@ -126,13 +126,13 @@ async function shareFamilyInvitation() {
   catch(e){if(e.name!=='AbortError')toast('Utilise Copier l’invitation pour transmettre le code et le lien.');}
 }
 $('sms-code').onclick = shareFamilyInvitation;
-$('copy-only-code').onclick = async () => {const input=$('issued-code');if(!input.value)return;try{await navigator.clipboard.writeText(input.value);toast('Code copié. Dans Lumi, touche le champ du code puis « Coller ».');}catch{input.focus();input.select();input.setSelectionRange(0,input.value.length);toast('Code sélectionné. Choisis « Copier », puis colle-le dans Lumi.');}};
+$('copy-only-code').onclick = async () => {const input=$('issued-code');if(!input.value)return;try{await navigator.clipboard.writeText(input.value);toast('Code copié. Dans Savika, touche le champ du code puis « Coller ».');}catch{input.focus();input.select();input.setSelectionRange(0,input.value.length);toast('Code sélectionné. Choisis « Copier », puis colle-le dans Savika.');}};
 $('issued-code').onclick = () => {const input=$('issued-code');input.select();input.setSelectionRange(0,input.value.length);};
 $('share-code').onclick = shareFamilyInvitation;
 $('close-code').onclick = () => {$('issued-code').value='';$('code-result').classList.add('hidden');const qb=$('code-qr-box');if(qb)qb.classList.add('hidden');};
 $('btn-refresh').onclick=refresh;
 $('admin-test').onclick = async () => {
-  try { await post('/api/admin/demo', {}); location.href = '/'; }
+  try { await post('/api/admin/demo', {}); location.href = '/app'; }
   catch (error) { toast(error.message); }
 };
 $('mail-form').onsubmit = async e => {

@@ -58,7 +58,7 @@ test('classe : parse le JSON du mini-cours noye dans du markdown',()=>{
 test('instructions mathématiques : LaTeX conservé',()=>{
  const c=context();run(c,section(back,'function buildSystemPrompt(profile = {})','// ---------- Recherche web'));const prompt=c.buildSystemPrompt();assert.ok(prompt.includes('\\frac{3}{4}'));assert.ok(prompt.includes('\\times'));assert.ok(!prompt.includes('\f'));assert.ok(!prompt.includes('\t'));
 });
-test('mode client : Lumi ne parle jamais de son environnement ; l essai admin peut tout dire',()=>{
+test('mode client : Savika ne parle jamais de son environnement ; l essai admin peut tout dire',()=>{
  const c=context();run(c,section(back,'function buildSystemPrompt(profile = {})','// ---------- Recherche web'));
  const client=c.buildSystemPrompt({name:'Manon',age:9});
  assert.match(client,/fonctionnement interne/);
@@ -66,7 +66,7 @@ test('mode client : Lumi ne parle jamais de son environnement ; l essai admin pe
  // Espace admin/essai : consigne retiree, on peut tout tester.
  const candide=c.buildSystemPrompt({name:'Manon',age:9,candide:true});
  assert.ok(!candide.includes('fonctionnement interne'));
- assert.match(candide,/Lumi/);
+ assert.match(candide,/Savika/);
 });
 
 test('programme scolaire : le tuteur recoit les notions du bon niveau',()=>{
@@ -81,7 +81,7 @@ test('programme scolaire : le tuteur recoit les notions du bon niveau',()=>{
  // aucune donnee programme : le prompt reste utilisable, sans crash
  const c2=context();run(c2,section(back,'function profileLevel(profile','// ---------- Stockage des donnees des enfants ----------'));
  run(c2,section(back,'function buildSystemPrompt(profile = {})','// ---------- Recherche web'));
- assert.ok(c2.buildSystemPrompt({name:'Manon',age:9}).includes('Lumi'));
+ assert.ok(c2.buildSystemPrompt({name:'Manon',age:9}).includes('Savika'));
 });
 function store(extra={}) {const c=context({DATA_FILE:'data.json',DATA_DIR:'.',KV_URL:'https://storage.test',KV_TOKEN:'fake',isDeno:false,denoKv:null,...extra});run(c,section(back,'function loadData()','function topicLabel'));return c;}
 test('stockage : chargement raté ne devient pas une base vide',async()=>{
@@ -153,7 +153,7 @@ test('photo du cahier : prévisualisation, envoi seulement sur confirmation',asy
  // galerie : image illisible -> message, pas d'envoi
  u.els.mic.handlers.change({target:{files:[{}],value:''}});await new Promise(r=>setImmediate(r));assert.equal(c.__finished,undefined);assert.equal(sent,'IMG');
 });
-test('photo du cahier : Lumi encore en train de répondre -> la photo reste en prévisualisation',()=>{
+test('photo du cahier : Savika encore en train de répondre -> la photo reste en prévisualisation',()=>{
  const u=ui();let sent=null,msg='';
  const c=context({...u,send:(t,img)=>{sent=img;},openCamera(){},finishCamera(){},compressImage:async()=>null,toast:m=>{msg=m;},chatBusy:()=>true});
  run(c,section(front,'// Bouton 📷 du cahier','// Photo de profil (selfie)'));
@@ -177,46 +177,52 @@ test('photo : erreur de lecture expliquée à l’enfant',()=>{
  assert.match(c.friendlyError(new Error('La lecture de la photo n’a pas marché. Réessaie.')),/photo/);
  assert.match(c.friendlyError(new Error('Ollama 500: {secret}')),/occupée/);
 });
-test('freemium : local et essai illimités, free plafonné et compté par jour',async()=>{
+test('freemium : local illimité, free plafonné au total (20 appels IA + 5 fiches)',async()=>{
  const c=context({accountPut:async()=>{},console,ENV:{}});
- run(c,section(back,'const FREE_DAILY','function rowToAccount'));
+ run(c,section(back,'const FREE_CALLS','function rowToAccount'));
+ const nowIso=()=>new Date().toISOString();
  const day=run(c,'todayKey()');
  const mk=(over)=>({id:'a',plan:'free',settings:{},usage:{},...over});
  // plan local : jamais limité, jamais compté
- const local=mk({id:'local',plan:'local',usage:{chat:{[day]:9999}}});
- assert.ok(c.quotaOk(local,'chat'));await c.countUsage(local,'chat');assert.equal(local.usage.chat[day],9999);
- // essai dans les temps : illimité. Expiré : plafonné.
- const trial=mk({plan:'trial',trialEnds:new Date(Date.now()+86400000).toISOString(),usage:{chat:{[day]:9999}}});
+ const local=mk({id:'local',plan:'local',usage:{ia7j:Array(99).fill(nowIso())}});
+ assert.ok(c.quotaOk(local,'chat'));await c.countUsage(local,'chat');assert.equal(local.usage.ia7j.length,99);
+ // essai hérité encore actif : illimité ; expiré : plafonné
+ const trial=mk({plan:'trial',trialEnds:new Date(Date.now()+86400000).toISOString(),usage:{ia7j:Array(99).fill(nowIso())}});
  assert.ok(c.quotaOk(trial,'chat'));
- const expired=mk({plan:'trial',trialEnds:new Date(Date.now()-86400000).toISOString(),usage:{chat:{[day]:0}}});
- assert.ok(c.quotaOk(expired,'chat'));expired.usage.chat[day]=run(c,'FREE_DAILY');assert.ok(!c.quotaOk(expired,'chat'));
- // plan free : FREE_DAILY par jour
- const free=mk({usage:{chat:{[day]:run(c,'FREE_DAILY')-1}}});
- assert.ok(c.quotaOk(free,'chat'));
- await c.countUsage(free,'chat');assert.equal(free.usage.chat[day],run(c,'FREE_DAILY'));assert.ok(!c.quotaOk(free,'chat'));
- // dailyLimit du compte famille écrase le défaut
+ const expired=mk({plan:'trial',trialEnds:new Date(Date.now()-86400000).toISOString(),usage:{ia7j:Array(20).fill(nowIso())}});
+ assert.ok(!c.quotaOk(expired,'chat'));
+ // total (une fois) : les appels anciens comptent toujours, jamais rechargés
+ const fresh=mk({usage:{ia7j:Array(19).fill(nowIso()).concat([new Date(Date.now()-8*864e5).toISOString()])}});
+ assert.ok(!c.quotaOk(fresh,'chat')); // 19 récents + 1 ancien = 20 au total => plafond atteint
+ await c.countUsage(fresh,'chat');assert.equal(c.freeCallsUsed(fresh),21);assert.ok(!c.quotaOk(fresh,'chat'));
+ // fiche de révision : 5 au total, quota indépendant des appels
+ const f=mk({usage:{}});
+ assert.ok(c.quotaOk(f,'fiche'));
+ for(let i=0;i<4;i++) await c.countUsage(f,'fiche');
+ assert.ok(c.quotaOk(f,'fiche')); // 4 fiches < 5
+ await c.countUsage(f,'fiche');assert.ok(!c.quotaOk(f,'fiche')); // 5e fiche => plafond atteint
+ assert.ok(c.quotaOk(f,'chat'));
+ // quiz partage le pool des appels IA
+ const both=mk({usage:{ia7j:Array(20).fill(nowIso())}});
+ assert.ok(!c.quotaOk(both,'chat'));assert.ok(!c.quotaOk(both,'quiz'));
+ // dailyLimit posé par l'admin : sémantique journalière, prioritaire sur tout
  const fam=mk({settings:{dailyLimit:2},usage:{chat:{[day]:2}}});
  assert.ok(!c.quotaOk(fam,'chat'));
- // plafond spécial posé par l'admin : il gagne même sur famille / essai en cours
  const famSpec=mk({plan:'family',settings:{dailyLimit:3},usage:{chat:{[day]:3}}});
  assert.ok(!c.quotaOk(famSpec,'chat'));
  const trialSpec=mk({plan:'trial',trialEnds:new Date(Date.now()+86400000).toISOString(),settings:{dailyLimit:1},usage:{chat:{[day]:1}}});
  assert.ok(!c.quotaOk(trialSpec,'chat'));
  // famille sans plafond : illimité par défaut
- const famInf=mk({plan:'family',usage:{chat:{[day]:999999}}});
+ const famInf=mk({plan:'family',usage:{ia7j:Array(99).fill(nowIso())}});
  assert.ok(c.quotaOk(famInf,'chat'));
  // l'usage est compté même sur un compte illimité (visibilité admin de la conso)
- await c.countUsage(famInf,'chat');assert.equal(famInf.usage.chat[day],1000000);
- await c.countUsage(trialSpec,'chat');assert.equal(trialSpec.usage.chat[day],2);
+ await c.countUsage(famInf,'chat');assert.equal(famInf.usage.chat[day],1);
  // jetons : cumulés par jour, jamais pour la maison
  assert.ok(c.tokenEstimate('12345678901234567890')>0);
  await c.countTokens(famInf,c.messageTokens([{content:'12345678901234567890'}])+c.tokenEstimate('coucou'));
  assert.equal(famInf.usage.tok[day],9); // ceil(20/3.2)=7 + ceil(6/3.2)=2
  const local2=mk({id:'local',plan:'local',usage:{}});
  await c.countTokens(local2,500);assert.equal(local2.usage.tok,undefined);
- // chat et quiz partagent le plafond quotidien
- const both=mk({usage:{chat:{[day]:0},quiz:{[day]:run(c,'FREE_DAILY')}}});
- assert.ok(!c.quotaOk(both,'chat'));assert.ok(!c.quotaOk(both,'quiz'));
 });
 test('espace parent : erreur ajoutée sans remplacer les contrôles',()=>{
  const u=ui();let replaced=false;const box=u.$('parent-content');Object.defineProperty(box,'innerHTML',{get:()=>'',set:()=>replaced=true});box.insertAdjacentHTML=()=>{};u.$('parent-gate').value='1';const c=context({...u,renderParentArea(){}});run(c,section(front,'function enterParentArea()','async function renderParentArea'));c.enterParentArea();assert.equal(replaced,false);

@@ -1,0 +1,66 @@
+{
+ "niveau": "CE1",
+ "matiere": "Mathématiques",
+ "correction": {
+  "exercices": [
+   {
+    "titre": "Calculs posés",
+    "enonce": "Poser et calculer 26 + 17 et 45 + 38",
+    "reponse_eleve": "26 + 17 = 43 ; 45 + 38 = 73",
+    "correction": "26 + 17 = 43 ; 45 + 38 = 83",
+    "erreurs": [
+     "Erreur de calcul sur la deuxième addition (oubli de la retenue)"
+    ],
+    "points": 1,
+    "bareme": 2,
+    "commentaire": "Attention à bien gérer la retenue pour le deuxième calcul."
+   },
+   {
+    "titre": "Problème",
+    "enonce": "Maman a 12 bonbons, elle en mange 5. Combien en reste-t-il ?",
+    "reponse_eleve": "12 - 5 = 6. Il reste 6 bonbons.",
+    "correction": "12 - 5 = 7. Il reste 7 bonbons.",
+    "erreurs": [
+     "Erreur de calcul dans la soustraction"
+    ],
+    "points": 1,
+    "bareme": 3,
+    "commentaire": "La démarche et la rédaction sont très bonnes, mais le résultat est faux."
+   },
+   {
+    "titre": "Fractions",
+    "enonce": "Compléter pour obtenir des fractions égales : 1/2 et 3/4",
+    "reponse_eleve": "1/2 = 2/4 ; 3/4 = 5/8",
+    "correction": "1/2 = 2/4 ; 3/4 = 6/8",
+    "erreurs": [
+     "Erreur sur la deuxième fraction égale (3/4 = 6/8)"
+    ],
+    "points": 1.5,
+    "bareme": 3,
+    "commentaire": "Une réponse correcte sur deux."
+   },
+   {
+    "titre": "Ranger les nombres",
+    "enonce": "Ranger du plus petit au plus grand : 34, 43, 29, 38",
+    "reponse_eleve": "29, 34, 38, 43",
+    "correction": "29, 34, 38, 43",
+    "erreurs": [],
+    "points": 2,
+    "bareme": 2,
+    "commentaire": "C'est parfait."
+   }
+  ],
+  "total": 5.5,
+  "bareme": 10,
+  "appreciation": "Léa a compris la méthodologie des exercices, notamment pour le problème et le rangement. Cependant, plusieurs erreurs de calcul simples pénalisent l'ensemble. Un effort de vérification est nécessaire.",
+  "points_forts": [
+   "Rangement des nombres",
+   "Structure de la réponse au problème (calcul et phrase)"
+  ],
+  "a_retravailler": [
+   "Additions avec retenue",
+   "Soustractions simples",
+   "Fractions égales"
+  ]
+ }
+}

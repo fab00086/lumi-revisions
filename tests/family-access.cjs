@@ -94,10 +94,10 @@ test('profils cloud : plusieurs enfants enregistrés, conversations conservées 
 test('invitation SMS : prépare le code, le lien et la confidentialité sans envoyer de message',async()=>{
  const script=fs.readFileSync(path.join(__dirname,'../public/admin.js'),'utf8');
  const start=script.indexOf('function familyInvitationText()'),end=script.indexOf("$('sms-code').onclick",start);
- const nodes={'issued-code':{value:'LUMI-TEST'},'copy-code':{}};
+ const nodes={'issued-code':{value:'SAVIKA-TEST'},'copy-code':{}};
  let shared;const c=vm.createContext({URL,location:{href:'https://lumi.test/admin.html'},$:id=>nodes[id],navigator:{share:async v=>{shared=v;}},toast:()=>{}});
  vm.runInContext(script.slice(start,end),c);await c.shareFamilyInvitation();
- assert.equal(shared.url,undefined);assert.deepEqual(Object.keys(shared),['text']);assert.ok(shared.text.includes('https://lumi.test/?access=LUMI-TEST'));assert.ok(shared.text.includes('LUMI-TEST'));assert.ok(shared.text.includes('/confidentialite.html'));assert.ok(shared.text.includes('parent'));
+ assert.equal(shared.url,undefined);assert.deepEqual(Object.keys(shared),['text']);assert.ok(shared.text.includes('https://lumi.test/?access=SAVIKA-TEST'));assert.ok(shared.text.includes('SAVIKA-TEST'));assert.ok(shared.text.includes('/confidentialite.html'));assert.ok(shared.text.includes('parent'));
  let copied;c.navigator={clipboard:{writeText:async text=>{copied=text;}}};await c.shareFamilyInvitation();assert.equal(copied,shared.text);
  await nodes['copy-code'].onclick();assert.equal(copied,shared.text);
  nodes['issued-code'].value='';shared=null;await c.shareFamilyInvitation();assert.equal(shared,null);
@@ -106,7 +106,7 @@ test('invitation SMS : prépare le code, le lien et la confidentialité sans env
 test('lien famille : remplit le code même avec une session existante, sans connexion ni consentement automatique',async()=>{
  const script=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');
  const start=script.indexOf('function readFamilyInvitation()'),end=script.indexOf('function enterGate()',start);
- const code='LUMI-ABCD-1234-5678-90AB-CDEF-1234';let cleaned='',requests=0;
+ const code='SAVIKA-ABCD-1234-5678-90AB-CDEF-1234';let cleaned='',requests=0;
  const nodes={};for(const id of ['screen-profile','screen-chat','screen-gate','gate-code','gate-consent','gate-error'])nodes[id]={classList:{add(){},remove(){}},value:'',checked:true,focus(){}};
  const c=vm.createContext({URLSearchParams,location:{hash:'#access='+code,pathname:'/',search:''},window:{history:{replaceState:(_s,_t,url)=>{cleaned=url;}}},$:id=>nodes[id],setLiveMic(){},stopSpeech(){},fetch:()=>{requests++;throw Error('Connexion automatique interdite');}});
  vm.runInContext(script.slice(start,end),c);await c.initApp();
@@ -114,7 +114,7 @@ test('lien famille : remplit le code même avec une session existante, sans conn
 });
 test('lien famille : retire les secrets de l’adresse et refuse un code Admin ou mal formé',()=>{
  const script=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');const start=script.indexOf('function readFamilyInvitation()'),end=script.indexOf('async function initApp()',start);
- for(const hash of ['#access=mot-de-passe-admin','#access=LUMI-invalid','#access=%3Cscript%3E']){
+ for(const hash of ['#access=mot-de-passe-admin','#access=SAVIKA-invalid','#access=%3Cscript%3E']){
   let cleaned;const c=vm.createContext({URLSearchParams,location:{hash,pathname:'/',search:''},window:{history:{replaceState:(_s,_t,url)=>{cleaned=url;}}}});
   vm.runInContext(script.slice(start,end),c);assert.equal(c.readFamilyInvitation(),'');assert.equal(cleaned,'/');
  }
@@ -131,18 +131,18 @@ test('QR d’invitation : route admin, affiché dans la gestion, joint à l’e-
  assert.ok(adminJs.includes('navigator.canShare'),'partage du QR en image avec le SMS quand supporte');
 });
 
-test('quota gratuit epuise : compteur du jour + passage a Lumi Famille depuis le chat',()=>{
+test('quota gratuit epuise : compteur du jour + passage a Savika Famille depuis le chat',()=>{
  const appJs=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');
  assert.ok(source.includes('quota: { used, limit: planLimit(r.account) }'),'le 402 porte le compteur du jour');
- assert.ok(source.includes('Passe à Lumi Famille'),'le message de quota guide vers le paiement');
+ assert.ok(source.includes('Passe à Savika Famille'),'le message de quota guide vers le paiement');
  assert.ok(appJs.includes('function showQuotaPaused'),'bulle quota avec raccourci parents');
- assert.ok(appJs.includes('Parents : passer à Lumi Famille'),'bouton parents present dans le chat');
+ assert.ok(appJs.includes('Parents : passer à Savika Famille'),'bouton parents present dans le chat');
  assert.ok(appJs.includes('échanges gratuits utilisés'),'compteur du jour affiche dans l espace parent');
 });
 
 test('lien famille : ?access= marche aussi (les messageries qui jettent le #)',()=>{
  const script=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');const start=script.indexOf('function readFamilyInvitation()'),end=script.indexOf('async function initApp()',start);
- const code='LUMI-ABCD-1234-5678-90AB-CDEF-1234';
+ const code='SAVIKA-ABCD-1234-5678-90AB-CDEF-1234';
  // Avec ?access= : code rempli et adresse nettoyée.
  let cleaned;let c=vm.createContext({URLSearchParams,location:{hash:'',pathname:'/',search:'?access='+code},window:{history:{replaceState:(_s,_t,url)=>{cleaned=url;}}}});
  vm.runInContext(script.slice(start,end),c);
@@ -285,7 +285,7 @@ test('ouverture Admin : efface la connexion précédente, reconnaître le propri
  }finally{await f.close();}
 });
 
-test('mot de passe dans Lumi : gestion seulement après validation, entrée unique signée et essais isolés',async()=>{
+test('mot de passe dans Savika : gestion seulement après validation, entrée unique signée et essais isolés',async()=>{
  const f=await fixture();try {
    assert.equal((await f.unlock('incorrect')).r.status,401);
    const login=await f.unlock('test-admin');assert.equal(login.r.status,200);assert.equal((await login.r.json()).admin,true);
@@ -309,7 +309,7 @@ test('connexion Admin : jeton expiré, modifié ou cookie propriétaire seul ref
  }finally{await f.close();}
 });
 
-test('session Admin ouverte : Lumi utilise toujours les essais, jamais les enfants de la maison',async()=>{
+test('session Admin ouverte : Savika utilise toujours les essais, jamais les enfants de la maison',async()=>{
  const f=await fixture();try {
    await f.c.childSaveList('local',[{id:'maison',name:'Enfant maison',age:9}]);
    const owner=await f.c.resolveAccount({headers:{cookie:f.admin}});
@@ -382,9 +382,9 @@ test('connexions simultanées : une seule place accordée et libération immédi
 });
 test('partage natif : ouvre le choix de messagerie avec un lien sans code ni données privées',async()=>{
  const front=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');
- const start=front.indexOf('async function shareLumi()'),end=front.indexOf("$('btn-share-app')",start);let shared;
+ const start=front.indexOf('async function shareSavika()'),end=front.indexOf("$('btn-share-app')",start);let shared;
  const c=vm.createContext({URL,location:{href:'https://lumi.test/?code=secret'},navigator:{share:async value=>shared=value},toast(){throw Error('partage raté');}});
- vm.runInContext(front.slice(start,end),c);await c.shareLumi();
+ vm.runInContext(front.slice(start,end),c);await c.shareSavika();
  assert.equal(shared.url,'https://lumi.test/');assert.match(shared.text,/Demander un accès/);assert.ok(!JSON.stringify(shared).includes('secret'));
 });
 test('une nouvelle famille ne récupère pas les anciens profils maison du navigateur',async()=>{
@@ -477,7 +477,7 @@ test("erreurs IA : message enfant, jamais de détail interne à l'écran",()=>{
  const seg=section('const CHILD_SAFE_ERROR','function lessonHistory');
  const c=vm.createContext({});vm.runInContext(seg,c);
  const busy=vm.runInContext('friendlyError(new Error("Ollama 500: {internal}"))',c);
- assert.equal(busy,'Oups, Lumi est un peu occupée. Réessaie dans un instant ! 🕒');
+ assert.equal(busy,'Oups, Savika est un peu occupée. Réessaie dans un instant ! 🕒');
  assert.equal(vm.runInContext('friendlyError(new Error("Réponse interrompue : réessaie avec une question plus courte."))',c),'Réponse interrompue : réessaie avec une question plus courte.');
  assert.match(vm.runInContext('friendlyError(new TypeError("fetch failed"))',c),/occupée/);
  assert.match(vm.runInContext('friendlyError(new Error(undefined))',c),/Oups/);

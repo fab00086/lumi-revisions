@@ -1,2 +1,361 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#6c5ce7"><title>Découvrez Lumi — vidéo de 30 secondes</title><meta name="description" content="Découvrez Lumi en 30 secondes : un compagnon pour comprendre les devoirs, étape par étape."><style>*{box-sizing:border-box}body{margin:0;background:#f4f1ff;color:#2d2a45;font-family:system-ui,sans-serif}main{max-width:720px;margin:auto;padding:24px 18px 40px}header{text-align:center}h1{font-size:clamp(24px,5vw,36px);margin:10px 0}p{line-height:1.5}video{display:block;max-width:100%;width:auto;height:70vh;max-height:850px;margin:22px auto;border-radius:20px;background:#4a3cc0;box-shadow:0 10px 40px #4a3cc026}.actions{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}a,button{padding:14px 18px;border:0;border-radius:14px;background:#6c5ce7;color:white;font:inherit;font-weight:700;text-decoration:none;cursor:pointer}.secondary{background:#e8e1ff;color:#4a3cc0}.note{text-align:center;color:#55506f;font-size:14px}a:focus-visible,button:focus-visible{outline:3px solid #ff9f43;outline-offset:3px}#status{min-height:24px;text-align:center}</style></head><body><main><header><h1>Lumi, un compagnon pour comprendre.</h1><p>Découvrez l’application en 30 secondes.</p></header><video id="promo-video" controls playsinline preload="metadata" poster="lumi-reels-affiche.jpg" aria-label="Vidéo promotionnelle de Lumi, 30 secondes"><source src="lumi-reels-voix-naturelle.mp4" type="video/mp4"><track kind="subtitles" src="sous-titres.vtt" srclang="fr" label="Français">Votre navigateur ne peut pas lire cette vidéo. Utilisez le bouton Télécharger.</video><div class="actions"><a href="/">Ouvrir Lumi</a><button id="share-video" type="button" class="secondary">Partager la vidéo</button><a class="secondary" href="lumi-reels-voix-naturelle.mp4" download="Lumi-TikTok-Facebook-Reels.mp4">Télécharger</a></div><p id="status" role="status"></p><p class="note">Vidéo d’illustration de Lumi. Pour ouvrir un accès famille, faites la demande dans l’application.</p></main><script>document.getElementById('share-video').addEventListener('click',async()=>{const status=document.getElementById('status');try{const url=location.href;if(navigator.share){await navigator.share({title:'Découvrez Lumi',text:'Lumi en 30 secondes : un compagnon pour comprendre les devoirs.',url});}else{await navigator.clipboard.writeText(url);status.textContent='Lien de la vidéo copié.';}}catch(error){if(error.name!=='AbortError')status.textContent='Copiez l’adresse de cette page pour partager la vidéo.';}});</script></body></html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#6c5ce7">
+  <title>Lumi — Vidéo de présentation (Devoirs & Révisions)</title>
+  <meta name="description" content="Découvrez Lumi : le tuteur IA bienveillant qui aide vos enfants à faire leurs devoirs étape par étape.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: linear-gradient(135deg, #0b071a 0%, #1e133d 50%, #0b071a 100%);
+      color: #fff;
+      font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 40px;
+    }
+    main {
+      width: 100%;
+      max-width: 480px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .header-logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(108, 92, 231, 0.2);
+      border: 1px solid rgba(162, 155, 254, 0.4);
+      padding: 8px 18px;
+      border-radius: 30px;
+      margin-bottom: 12px;
+      backdrop-filter: blur(8px);
+    }
+    .header-logo span {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #a29bfe;
+    }
+    h1 {
+      font-family: 'Fredoka', sans-serif;
+      font-size: clamp(24px, 5vw, 30px);
+      line-height: 1.25;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #ffffff 40%, #fdcb6e 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    p.subtitle {
+      color: #b2bec3;
+      font-size: 15px;
+      margin-bottom: 18px;
+      line-height: 1.4;
+    }
+
+    /* Video player container */
+    .video-card {
+      position: relative;
+      width: 100%;
+      max-width: 400px;
+      aspect-ratio: 9 / 16;
+      border-radius: 32px;
+      overflow: hidden;
+      box-shadow: 0 25px 60px rgba(108, 92, 231, 0.35), 0 0 0 2px rgba(162, 155, 254, 0.3);
+      background: #000;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Sticky CTA banner at top of video */
+    .top-pill-cta {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      z-index: 15;
+      background: rgba(15, 10, 35, 0.85);
+      border: 2px solid #fdcb6e;
+      border-radius: 20px;
+      padding: 10px 16px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(10px);
+      transition: transform 0.2s, background 0.2s;
+    }
+    .top-pill-cta:hover {
+      transform: scale(1.02);
+      background: rgba(30, 20, 60, 0.95);
+    }
+    .top-pill-cta .site-name {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .top-pill-cta .pill-btn {
+      background: linear-gradient(135deg, #6c5ce7 0%, #e84393 100%);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 6px 12px;
+      border-radius: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    /* Bottom interactive CTA overlay */
+    .bottom-cta-overlay {
+      position: absolute;
+      bottom: 24px;
+      left: 16px;
+      right: 16px;
+      z-index: 15;
+      background: #ffffff;
+      color: #1e1548;
+      border: 3px solid #6c5ce7;
+      border-radius: 22px;
+      padding: 14px 20px;
+      text-decoration: none;
+      font-family: 'Fredoka', sans-serif;
+      font-weight: 800;
+      font-size: 19px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 12px 35px rgba(0,0,0,0.6);
+      animation: pulse-glow 2.5s infinite;
+      transition: transform 0.2s;
+    }
+    .bottom-cta-overlay:hover {
+      transform: scale(1.04);
+      background: #fdfdfd;
+    }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 12px 35px rgba(0,0,0,0.6), 0 0 0 0 rgba(108, 92, 231, 0.7); }
+      50% { box-shadow: 0 14px 45px rgba(108, 92, 231, 0.8), 0 0 0 10px rgba(108, 92, 231, 0); }
+    }
+
+    /* End-screen overlay shown when video finishes */
+    .end-screen {
+      position: absolute;
+      inset: 0;
+      z-index: 25;
+      background: radial-gradient(circle at 50% 40%, rgba(48, 25, 94, 0.98) 0%, rgba(10, 6, 22, 0.98) 100%);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+      backdrop-filter: blur(12px);
+    }
+    .end-screen.visible {
+      display: flex;
+    }
+    .end-screen h2 {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 28px;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .end-screen p {
+      color: #dcdde1;
+      font-size: 16px;
+      margin-bottom: 24px;
+      line-height: 1.4;
+    }
+    .end-btn-click {
+      background: #fff;
+      color: #1e1548;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      padding: 16px 28px;
+      border-radius: 20px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+      margin-bottom: 16px;
+      transition: transform 0.2s;
+    }
+    .end-btn-click:hover {
+      transform: scale(1.05);
+    }
+    .replay-btn {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.4);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 14px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* External action buttons below video */
+    .actions {
+      width: 100%;
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .btn-primary-site {
+      background: linear-gradient(135deg, #6c5ce7 0%, #e84393 100%);
+      color: #fff;
+      padding: 18px 24px;
+      border-radius: 20px;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      box-shadow: 0 12px 30px rgba(108, 92, 231, 0.4);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-primary-site:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 40px rgba(108, 92, 231, 0.6);
+    }
+    .btn-download {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #dcdde1;
+      padding: 12px 18px;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-download:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    /* Guide for Facebook & TikTok */
+    .social-tip-box {
+      margin-top: 28px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px dashed rgba(162, 155, 254, 0.3);
+      border-radius: 18px;
+      padding: 16px;
+      text-align: left;
+      font-size: 13px;
+      color: #b2bec3;
+      line-height: 1.5;
+    }
+    .social-tip-box strong { color: #fdcb6e; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="header-logo">
+      <span>🌟 Lumi Révision</span>
+    </div>
+    <h1>Des devoirs sereins en famille</h1>
+    <p class="subtitle">L'intelligence artificielle bienveillante qui guide vos enfants pas à pas sans faire à leur place.</p>
+
+    <!-- Video Card with Clickable Overlays -->
+    <div class="video-card">
+      <!-- Clickable Top Banner -->
+      <a href="https://www.lumirevision.com" class="top-pill-cta" target="_blank" rel="noopener" title="Aller sur www.lumirevision.com">
+        <span class="site-name">🌐 www.lumirevision.com</span>
+        <span class="pill-btn">Ouvrir ➜</span>
+      </a>
+
+      <!-- Video Element -->
+      <video id="promoVideo" controls playsinline preload="auto">
+        <source src="lumi-tiktok-facebook-promo.mp4" type="video/mp4">
+        Votre navigateur ne gère pas la vidéo HTML5.
+      </video>
+
+      <!-- Clickable Bottom Banner over video -->
+      <a href="https://www.lumirevision.com" class="bottom-cta-overlay" target="_blank" rel="noopener">
+        <span>👉 Visiter www.lumirevision.com</span>
+      </a>
+
+      <!-- End screen with direct button -->
+      <div id="endScreen" class="end-screen">
+        <div style="font-size: 54px; margin-bottom: 10px;">🌟</div>
+        <h2>Prêt pour ce soir ?</h2>
+        <p>Aidez votre enfant à reprendre confiance dès aujourd'hui.</p>
+        <a href="https://www.lumirevision.com" class="end-btn-click" target="_blank" rel="noopener">
+          🚀 www.lumirevision.com
+        </a>
+        <button id="replayBtn" class="replay-btn" type="button">
+          🔄 Revoir la vidéo
+        </button>
+      </div>
+    </div>
+
+    <!-- Direct Big Clickable Buttons below video -->
+    <div class="actions">
+      <a href="https://www.lumirevision.com" class="btn-primary-site" target="_blank" rel="noopener">
+        <span>🌟 Accéder à www.lumirevision.com</span>
+        <span style="font-size: 26px;">➜</span>
+      </a>
+      <div>
+        <a class="btn-download" href="lumi-tiktok-facebook-promo.mp4" download="Lumi-Promo-TikTok-Facebook.mp4">
+          📥 Télécharger la vidéo MP4 complète (99s • 1080x1920)
+        </a>
+      </div>
+    </div>
+
+    <!-- Instructions for Facebook & TikTok links -->
+    <div class="social-tip-box">
+      <strong>📌 Comment rendre le lien cliquable sur les réseaux :</strong><br>
+      • <strong>Sur Facebook :</strong> Collez simplement <code>https://www.lumirevision.com</code> dans le texte de votre publication ou Reel. Facebook le transforme automatiquement en lien bleu cliquable !<br>
+      • <strong>Sur Facebook Ads / Pub :</strong> Dans le Gestionnaire de Publicités, configurez le bouton <em>"En savoir plus"</em> avec l'URL de votre site.<br>
+      • <strong>Sur TikTok :</strong> Mettez le lien dans votre biographie (<em>"Lien en bio"</em>) ou utilisez le sticker de lien interactif si vous avez un compte TikTok Business.
+    </div>
+  </main>
+
+  <script>
+    const video = document.getElementById('promoVideo');
+    const endScreen = document.getElementById('endScreen');
+    const replayBtn = document.getElementById('replayBtn');
+
+    video.addEventListener('ended', () => {
+      endScreen.classList.add('visible');
+    });
+
+    replayBtn.addEventListener('click', () => {
+      endScreen.classList.remove('visible');
+      video.currentTime = 0;
+      video.play();
+    });
+  </script>
+</body>
+</html>

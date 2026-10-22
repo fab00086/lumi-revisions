@@ -1,5 +1,5 @@
 // Bouton Aide : questions courantes pre-ecrites (instantanees, sans IA) +
-// questions libres repondues par Lumi via /api/aide (elle connait les
+// questions libres repondues par Savika via /api/aide (elle connait les
 // fonctions et parametres de l'app, sans jamais reveler l'interne).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -25,12 +25,12 @@ test('aide : au moins 8 questions courantes pre-ecrites (sans appel IA)', () => 
   const bloc = front.slice(start, end);
   const questions = (bloc.match(/\{ q: '/g) || []).length;
   assert.ok(questions >= 8, 'questions courantes : ' + questions);
-  assert.match(bloc, /Installer Lumi/);
+  assert.match(bloc, /Installer Savika/);
   assert.match(bloc, /Fiche de révision/);
-  assert.match(bloc, /Voix de Lumi/);
+  assert.match(bloc, /Voix de Savika/);
 });
 
-test('aide : Lumi connait les fonctions de l app, et reste privee', () => {
+test('aide : Savika connait les fonctions de l app, et reste privee', () => {
   const start = back.indexOf('function aideSystemPrompt()');
   const end = back.indexOf("app.post('/api/aide'", start);
   assert.ok(start >= 0 && end > start, 'aideSystemPrompt introuvable');

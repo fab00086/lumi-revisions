@@ -22,7 +22,7 @@ let chatGeneration = 0;
 let activeChat = null;
 let chatLoading = false;
 let archiving = false;
-// Lumi est occupée (réponse en cours, leçon en chargement ou en archivage) :
+// Savika est occupée (réponse en cours, leçon en chargement ou en archivage) :
 // send() ignorerait l'envoi, donc on prévient l'enfant au lieu de perdre sa photo.
 function chatBusy() { return !!(activeChat || chatLoading || archiving); }
 function cancelChat() {
@@ -63,9 +63,9 @@ function toast(msg, duration = 4000) {
 // Erreurs reecrites en langage enfant : jamais de texte technique brut.
 function friendlyError(err) {
   const e = err || {};
-  if (e.name === 'AbortError') return "Oups, Lumi a mis trop de temps à répondre. Réessaie ! 🤔";
-  if (e instanceof TypeError && String(e.message).includes('fetch')) return "Oups, Lumi n'arrive pas à joindre le serveur. Vérifie ta connexion et réessaie ! 📶";
-  return "Oups, Lumi n'arrive pas à répondre. Réessaie, ça va marcher ! 😊";
+  if (e.name === 'AbortError') return "Oups, Savika a mis trop de temps à répondre. Réessaie ! 🤔";
+  if (e instanceof TypeError && String(e.message).includes('fetch')) return "Oups, Savika n'arrive pas à joindre le serveur. Vérifie ta connexion et réessaie ! 📶";
+  return "Oups, Savika n'arrive pas à répondre. Réessaie, ça va marcher ! 😊";
 }
 // Un message venu du serveur peut etre affiche tel quel ; jamais `err` brut.
 function safeText(err) {
@@ -320,10 +320,9 @@ async function startChat(p) {
     addBubble('assistant', "👋 De retour ! On reprend ta leçon où on s'était arrêté. Pose-moi ta prochaine question 😊");
     speak("De retour ! On reprend ta leçon où on s'était arrêté. Pose-moi ta prochaine question.");
   } else {
-    const greeting = `Salut ${escapeHtml(p.name)} ! 👋 Je suis Lumi. Montre-moi ton devoir (photo 📷) ou pose-moi une question. Je vais t'aider à trouver la réponse toi-même, promis !`;
+    const greeting = `Salut ${escapeHtml(p.name)} ! 👋 Je suis Savika. Montre-moi ton devoir (photo 📷) ou pose-moi une question. Je vais t'aider à trouver la réponse toi-même, promis !`;
     addBubble('assistant', greeting);
-    speak(`Salut ${p.name} ! Je suis Lumi, ton maître ou ta maîtresse. Montre-moi ton devoir, ou pose-moi une question, et je t'aiderai à trouver la réponse toi-même.`);
-    if (typeof afficheDevoirsPronote === 'function') afficheDevoirsPronote();
+    speak(`Salut ${p.name} ! Je suis Savika, ton maître ou ta maîtresse. Montre-moi ton devoir, ou pose-moi une question, et je t'aiderai à trouver la réponse toi-même.`);
   }
 }
 
@@ -358,77 +357,6 @@ function addBubble(role, html, sources) {
   return b;
 }
 
-// ---------- Pronote : les devoirs du jour remontes automatiquement ----------
-let pronoteCache = null;
-async function chargerDevoirsPronote() {
-  try {
-    if (pronoteCache && Date.now() - pronoteCache.at < 10 * 60 * 1000) return pronoteCache.data;
-    const r = await fetch('/api/pronote/devoirs');
-    const j = await r.json();
-    if (!r.ok || !j.ok) return null;
-    pronoteCache = { at: Date.now(), data: j };
-    return j;
-  } catch { return null; }
-}
-
-async function afficheDevoirsPronote() {
-  const j = await chargerDevoirsPronote();
-  if (!j || !Array.isArray(j.jours)) return;
-  // Le plan porte sur le jour le plus proche qui a des devoirs non faits :
-  // si tout est coche fait, on le dit et on s'arrete la.
-  const jour = j.jours.find(d => Array.isArray(d.devoirs) && d.devoirs.length) || null;
-  if (!jour) return;
-  const restants = jour.devoirs.filter(x => (x.description || '').trim());
-  const faits = restants.filter(x => x.fait).length;
-  const plan = restants.filter(x => !x.fait);
-  const label = new Date(jour.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  if (!plan.length) {
-    if (restants.length) {
-      const msg = faits === restants.length
-        ? '🎉 Ton cahier de textes Pronote est vide pour le moment : tous tes devoirs sont marqués faits. Montre-moi ce que tu as envie de travailler !'
-        : '📒 Ton cahier de textes Pronote est vide pour le moment. Montre-moi ton devoir (photo 📷) et on regarde ensemble !';
-      addBubble('assistant', msg + `<span class="devoir-date">vérifié le ${escapeHtml(label)}</span>`);
-      speak('Ton cahier de textes est vide pour le moment.');
-    }
-    return;
-  }
-  const html = '<strong>📒 Ton plan de révisions</strong>'
-    + `<span class="devoir-date">devoirs du cahier de textes Pronote, pour le ${escapeHtml(label)}</span>`
-    + '<div class="devoir-list">'
-    + plan.map((d, i) =>
-        `<div class="devoir-card">`
-        + `<span class="devoir-matiere">${i + 1}. 📘 ${escapeHtml(d.matiere)}</span>`
-        + `<span class="devoir-texte">${escapeHtml(String(d.description).trim().slice(0, 240))}</span>`
-        + (d.fichiers && d.fichiers.length ? `<span class="devoir-fichiers">📎 ${d.fichiers.map(f => escapeHtml(f.nom)).join(', ')}</span>` : '')
-        + '</div>').join('')
-    + (restants.some(x => x.fait) ? '<span class="devoir-fichiers">✓ Devoir déjà coché fait sur Pronote : on le laisse de côté.</span>' : '')
-    + '</div>'
-    + '<p class="devoir-q">Par quoi tu veux commencer ?</p>'
-    + '<div class="devoir-list">'
-    + plan.map((d, i) =>
-        `<div class="devoir-pick">`
-        + `<button type="button" class="devoir-btn" data-devoir="${i}">📘 ${escapeHtml(d.matiere)}</button>`
-        + `<button type="button" class="classe-pick" data-classe="${i}" title="Mini-cours généré">🏫 Classe</button>`
-        + '</div>').join('')
-    + '</div>';
-  const b = addBubble('assistant', html);
-  b.querySelectorAll('button[data-devoir]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const d = plan[Number(btn.dataset.devoir)];
-      if (d) send(`Mon devoir de ${d.matiere} : ${String(d.description).trim()}. On va le faire ensemble : propose-moi un plan d'étapes simple (ce qu'on fait d'abord, ensuite, et comment vérifier que c'est bon à la fin), puis commence par la première étape.`);
-    });
-  });
-  b.querySelectorAll('button[data-classe]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const d = plan[Number(btn.dataset.classe)];
-      if (!d) return;
-      const sujet = `${d.matiere} : ${String(d.description).trim().slice(0, 300)}`;
-      $('btn-classe').click();
-      $('class-topic').value = sujet;
-      startClassroom();
-    });
-  });
-}
 
 function addTyping() {
   const chat = $('chat');
@@ -482,13 +410,13 @@ async function send(text, imageBase64) {
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       // Quota gratuit epuise : message clair + raccourci parents (c'est le
-      // parent qui peut debloquer Lumi Famille pour continuer).
+      // parent qui peut debloquer Savika Famille pour continuer).
       if (j.quota) {
         removeTyping(); setStatus("Je t'écoute 👂");
         showQuotaPaused(j.error);
         return;
       }
-      throw new Error(j.error || 'Oups, Lumi n\'arrive pas à répondre. Réessaie, ça va marcher ! 😊');
+      throw new Error(j.error || 'Oups, Savika n\'arrive pas à répondre. Réessaie, ça va marcher ! 😊');
     }
     if (generation !== chatGeneration) return;
     // Lecture du flux : {type: status|start|delta|error|done}
@@ -569,13 +497,13 @@ function setStatus(txt) {
 }
 
 // Quota gratuit epuise : message + bouton pour les parents (espace parent ou
-// se trouve « Passe a Lumi Famille »). Utilise par le chat, le quiz, la classe.
+// se trouve « Passe a Savika Famille »). Utilise par le chat, le quiz, la classe.
 function showQuotaPaused(text) {
   const bubble = addBubble('assistant', '⏸️ ' + escapeHtml(text || 'Quota gratuit atteint pour aujourd’hui.'));
   const b = document.createElement('button');
   b.className = 'btn btn-primary';
   b.style.marginTop = '8px';
-  b.textContent = '👨‍👩‍👧 Parents : passer à Lumi Famille';
+  b.textContent = '👨‍👩‍👧 Parents : passer à Savika Famille';
   b.addEventListener('click', () => { const p = $('btn-parent'); if (p) p.click(); });
   bubble.appendChild(document.createElement('br'));
   bubble.appendChild(b);
@@ -585,16 +513,16 @@ function showQuotaPaused(text) {
 let voicePref = localStorage.getItem('lumivoice') || null;
 let voiceMode = localStorage.getItem('lumivoiceengine') || 'server';
 let voiceRate = parseFloat(localStorage.getItem('lumirate') || '1.0');
-// La voix « Lumi » (piper) fonctionne sur le PC et sur Render (postinstall).
+// La voix « Savika » (piper) fonctionne sur le PC et sur Render (postinstall).
 // null = pas encore vérifié, false = absente sur CE serveur (install ratée…).
 let serverVoiceOk = null;
 
 // Voix féminines du serveur (edge-tts) — choisissables dans les Paramètres.
 const LUMI_SERVER_VOICES = [
-  { id: 'vivienne', label: 'Lumi — Vivienne (expressive)' },
-  { id: 'denise', label: 'Lumi — Denise (douce)' },
-  { id: 'eloise', label: 'Lumi — Éloïse (voix d’enfant)' },
-  { id: 'sylvie', label: 'Lumi — Sylvie (accent québécois)' },
+  { id: 'vivienne', label: 'Savika — Vivienne (expressive)' },
+  { id: 'denise', label: 'Savika — Denise (douce)' },
+  { id: 'eloise', label: 'Savika — Éloïse (voix d’enfant)' },
+  { id: 'sylvie', label: 'Savika — Sylvie (accent québécois)' },
 ];
 function serverVoiceFromPref() {
   const value = String(voicePref || '');
@@ -788,7 +716,7 @@ async function speakAudio(text) {
   const controller = new AbortController();
   voiceRequest = controller;
   $('btn-stop').classList.remove('hidden');
-  setStatus('Lumi prépare sa voix…');
+  setStatus('Savika prépare sa voix…');
   const requestPart = async part => {
     const timeout = setTimeout(() => controller.abort(), 90000);
     try {
@@ -819,7 +747,7 @@ async function speakAudio(text) {
     }
     const player = $('voice-player');
     if (player && voiceAudioUrl) { player.classList.remove('hidden'); player.open = true; }
-    setStatus(error.name === 'NotAllowedError' ? 'La voix est prête. Appuie sur 🔊 Écouter Lumi ou sur le lecteur audio.' : error.name === 'AbortError' ? 'Voix trop longue à préparer. Appuie sur Écouter Lumi pour réessayer.' : error.message);
+    setStatus(error.name === 'NotAllowedError' ? 'La voix est prête. Appuie sur 🔊 Écouter Savika ou sur le lecteur audio.' : error.name === 'AbortError' ? 'Voix trop longue à préparer. Appuie sur Écouter Savika pour réessayer.' : error.message);
     if (typeof micLiveResume === 'function') micLiveResume();
   };
   try {
@@ -860,7 +788,7 @@ async function speakAudio(text) {
       voiceAudioBusy = false;
       $('avatar').classList.remove('talking');
       if (player) { player.classList.remove('hidden'); player.open = true; }
-      setStatus('Voix en pause — touche Écouter Lumi pour reprendre.');
+      setStatus('Voix en pause — touche Écouter Savika pour reprendre.');
       if (typeof micLiveResume === 'function') micLiveResume();
     };
     voiceAudio.onended = async () => {
@@ -869,7 +797,7 @@ async function speakAudio(text) {
       if (++partIndex < voiceAudioParts.length) {
         switchingPart = true;
         try {
-          setStatus('Lumi continue…');
+          setStatus('Savika continue…');
           const next = await voiceAudioParts[partIndex];
           if (gen !== speakGen) return;
           if (next.error) throw next.error;
@@ -891,7 +819,7 @@ async function speakAudio(text) {
     voiceAudio.onerror = () => {
       if (gen !== speakGen) return;
       stopSpeech();
-      setStatus('Lecture audio interrompue. Appuie sur Écouter Lumi pour réessayer.');
+      setStatus('Lecture audio interrompue. Appuie sur Écouter Savika pour réessayer.');
       if (typeof micLiveResume === 'function') micLiveResume();
     };
     // When Safari requires another touch, retry plays this cached file directly.
@@ -927,9 +855,9 @@ $('btn-listen').addEventListener('click', () => {
     });
     return;
   }
-  speak(lastSpeechText || 'Bonjour ! Je suis Lumi.');
+  speak(lastSpeechText || 'Bonjour ! Je suis Savika.');
 });
-$('btn-test-voice').addEventListener('click', () => speak('Bonjour ! Je suis Lumi. Est-ce que tu entends ma voix ?'));
+$('btn-test-voice').addEventListener('click', () => speak('Bonjour ! Je suis Savika. Est-ce que tu entends ma voix ?'));
 
 // Decoupe le texte aux fins de phrases : iOS coupe le son sur les
 // textes longs, il faut plusieurs morceaux courts.
@@ -1009,7 +937,7 @@ function speak(text) {
           $('avatar').classList.remove('talking');
           $('btn-stop').classList.add('hidden');
           setStatus("Je t'écoute 👂");
-          // Mode discussion : le micro se rouvre maintenant que Lumi s'est tu.
+          // Mode discussion : le micro se rouvre maintenant que Savika s'est tu.
           if (typeof micLiveResume === 'function') micLiveResume();
         }
       };
@@ -1032,7 +960,7 @@ function speak(text) {
         u.onerror = () => {
           if (gen !== speakGen) return;
           stopSpeech();
-          setStatus('Appuie sur 🔊 Écouter Lumi pour lancer la voix.');
+          setStatus('Appuie sur 🔊 Écouter Savika pour lancer la voix.');
           if (typeof micLiveResume === 'function') micLiveResume();
         };
         speechSynthesis.speak(u);
@@ -1042,14 +970,14 @@ function speak(text) {
     speechTimer = setTimeout(() => {
       if (gen !== speakGen) return;
       stopSpeech();
-      setStatus('Voix non démarrée : monte le volume, coupe le mode silencieux, puis appuie sur 🔊 Écouter Lumi.');
+      setStatus('Voix non démarrée : monte le volume, coupe le mode silencieux, puis appuie sur 🔊 Écouter Savika.');
       if (typeof micLiveResume === 'function') micLiveResume();
     }, 5000);
     // Aucun délai : un clic doit conserver son activation utilisateur.
     start();
   } catch {
     stopSpeech();
-    setStatus('Appuie sur 🔊 Écouter Lumi pour réessayer la voix.');
+    setStatus('Appuie sur 🔊 Écouter Savika pour réessayer la voix.');
     if (typeof micLiveResume === 'function') micLiveResume();
   }
 }
@@ -1164,7 +1092,7 @@ $('gallery-file').addEventListener('change', (e) => {
   });
 });
 
-// Bouton 📷 du cahier : la photo passe par la prévisualisation avant d'aller à Lumi
+// Bouton 📷 du cahier : la photo passe par la prévisualisation avant d'aller à Savika
 $('btn-camera').addEventListener('click', () => openCamera(showNotebookPhotoPreview, 'environment', $('mic'), 2000));
 
 // Galerie / téléphone (cahier)
@@ -1194,12 +1122,12 @@ function hideNotebookPhotoPreview() {
   pendingNotebookPhoto = null;
 }
 
-// ✅ Envoyer : la photo part à Lumi (le tuteur)
+// ✅ Envoyer : la photo part à Savika (le tuteur)
 $('btn-photo-send').addEventListener('click', () => {
   const b64 = pendingNotebookPhoto;
   if (!b64) return hideNotebookPhotoPreview();
-  // Lumi répond encore : send() ignorerait la photo. On la garde à l'écran.
-  if (chatBusy()) { toast('Attends que Lumi ait fini de répondre, puis renvoie ta photo ! ⏳'); return; }
+  // Savika répond encore : send() ignorerait la photo. On la garde à l'écran.
+  if (chatBusy()) { toast('Attends que Savika ait fini de répondre, puis renvoie ta photo ! ⏳'); return; }
   hideNotebookPhotoPreview();
   send('', b64);
 });
@@ -1256,7 +1184,7 @@ function compressImage(file, maxDim, quality) {
 let recog = null;
 let micTimer = null;
 // Mode discussion ("mains libres", comme ChatGPT voix) : le micro reste
-// ouvert pendant TOUTE la conversation — il se rouvre tout seul quand Lumi
+// ouvert pendant TOUTE la conversation — il se rouvre tout seul quand Savika
 // a fini de parler (ou quand iOS coupe la session), jusqu'a ce qu'on
 // rappuie sur le bouton 🎙️. Un appui sur 🎤 coupe aussi le mode.
 let liveMic = false;
@@ -1301,7 +1229,7 @@ try {
     });
   }
 } catch {}
-// Auto-reparation iOS : apres que Lumi a parle, Safari peut garder le micro
+// Auto-reparation iOS : apres que Savika a parle, Safari peut garder le micro
 // (marche une seule fois par page). On relance une fois, puis on recharge la
 // page tout seul — la lecon reprend ensuite ou on s'etait arrete.
 let micStartedOnce = false;
@@ -1313,7 +1241,7 @@ let phoneSoundReminderShown = false;
 function remindPhoneSound() {
   if (phoneSoundReminderShown || (!isIOS && !/Android/.test(navigator.userAgent))) return;
   phoneSoundReminderShown = true;
-  if (typeof toast === 'function') toast('🔊 Pour entendre Lumi, désactive le mode silencieux et monte le volume du téléphone.', 8000);
+  if (typeof toast === 'function') toast('🔊 Pour entendre Savika, désactive le mode silencieux et monte le volume du téléphone.', 8000);
 }
 // Dictée : petite toilette du texte reconnu (l'API du navigateur n'ajoute ni
 // ponctuation ni espaces propres). On ne corrige que ce qui est sans
@@ -1347,7 +1275,7 @@ function micError(error) {
   setLiveMic(false);
   setStatus('Micro indisponible — tu peux utiliser la dictée du clavier.');
   const help = isIOS
-    ? "Sur iPhone : ouvre Lumi directement dans Safari via le QR code (pas dans le navigateur d'une autre application, ni l'adresse https://192.168…). Autorise le micro dans les réglages du site, active Siri et la Dictée — et si le micro reste bloqué, recharge la page (tire vers le bas) puis réessaie."
+    ? "Sur iPhone : ouvre Savika directement dans Safari via le QR code (pas dans le navigateur d'une autre application, ni l'adresse https://192.168…). Autorise le micro dans les réglages du site, active Siri et la Dictée — et si le micro reste bloqué, recharge la page (tire vers le bas) puis réessaie."
     : "Autorise le microphone dans les réglages du site de ton navigateur.";
   const messages = {
     'not-allowed': help,
@@ -1409,7 +1337,7 @@ function micLiveRestart(delay = 300) {
     if (liveMic && !recog && !micDraftReview && !chatLoading && !activeChat && !archiving) startListening();
   }, delay);
 }
-// Appele par la voix quand Lumi a fini (ou echoue) de parler : le micro
+// Appele par la voix quand Savika a fini (ou echoue) de parler : le micro
 // reprend tout seul en mode discussion. typeof : la section voix peut etre
 // chargee avant celle-ci.
 function micLiveResume() {
@@ -1420,7 +1348,7 @@ function micLiveResume() {
   }
 }
 // Retourne true si une reprise (puis une recharge de secours) est lancee
-// pour Safari iOS qui garde le micro apres la voix de Lumi.
+// pour Safari iOS qui garde le micro apres la voix de Savika.
 // Jamais avant que le micro ait marche au moins une fois sur la page, et
 // jamais hors mode discussion : on ne recharge pas une page dont on n'est
 // pas sur d'etre en charge.
@@ -1429,7 +1357,7 @@ function iosMicroSelfRepair() {
   if (++micSilentDeaths < 2) return micLiveRestart(600), true;
   micSilentDeaths = 0;
   // Avant la recharge, on note la leçon en cours : au retour sur le profil,
-  // Lumi la rouvrira toute seule (l'enfant n'a plus qu'à retoucher 🎙️).
+  // Savika la rouvrira toute seule (l'enfant n'a plus qu'à retoucher 🎙️).
   try {
     if (typeof sessionStorage !== 'undefined' && typeof currentProfile !== 'undefined' && currentProfile && currentProfile.id)
       sessionStorage.setItem('lumi-mic-repair', JSON.stringify({ id: currentProfile.id, at: Date.now() }));
@@ -1509,14 +1437,14 @@ async function startListening() {
     session.onerror = (e) => {
       if (recog !== session) return;
       stopListening();
-      // La voix de Lumi occupe l'audio : une session qui meurt pendant la
+      // La voix de Savika occupe l'audio : une session qui meurt pendant la
       // lecture sans avoir rien entendu n'est pas un micro silencieux. Elle
       // ne compte pas comme une mort anormale, aucune relance n'est tentée
       // ici (c'était la cause des crashes Safari) — le micro reviendra tout
       // seul à la fin de la voix via micLiveResume.
       if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) return;
       // iOS : « aborted » ou « audio-capture » sans avoir rien entendu =
-      // Safari a repris le micro (souvent juste après la voix de Lumi).
+      // Safari a repris le micro (souvent juste après la voix de Savika).
       // C'est LA cause du « le micro marche une fois puis plus jamais » :
       // on tente la réparation auto au lieu de relancer la même session morte.
       if (isIOS && !heardSpeech && liveMic && (e.error === 'aborted' || e.error === 'audio-capture') && iosMicroSelfRepair()) return;
@@ -1539,7 +1467,7 @@ async function startListening() {
     session.onspeechstart = session.onsoundstart = () => {
       if (recog === session) {
         armWatchdog();
-        // Couper la parole de Lumi si l'enfant l'interrompt en parlant.
+        // Couper la parole de Savika si l'enfant l'interrompt en parlant.
         if (voiceAudioBusy || ('speechSynthesis' in window && speechSynthesis.speaking)) {
           stopSpeech();
           if (isIOS && liveMic) micLiveRestart(700);
@@ -1650,10 +1578,10 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) return;
   setLiveMic(false);
   stopSpeech();
-  setStatus('Conversation en pause. Reviens dans Lumi et touche 🎙️ Conversation pour reprendre.');
+  setStatus('Conversation en pause. Reviens dans Savika et touche 🎙️ Conversation pour reprendre.');
 });
 // Dicter avec le micro du clavier d'Apple (iOS) : ouvre le clavier sur le champ,
-// la dictée native d'iOS s'occupe du reste — aucun conflit avec la voix de Lumi.
+// la dictée native d'iOS s'occupe du reste — aucun conflit avec la voix de Savika.
 function focusKeyboardDictation() {
   const input = $('input');
   input?.focus?.();
@@ -1684,7 +1612,7 @@ $('btn-mic').addEventListener('click', () => {
 
 // ---------- Push-to-talk (maintenir 🎤 pour parler) ----------
 // Pensé pour les enfants : on garde le bouton appuyé, on parle tranquillement,
-// on relâche quand la phrase est finie — Lumi termine la dictée en douceur.
+// on relâche quand la phrase est finie — Savika termine la dictée en douceur.
 // Un appui court reste la dictée classique (bouton qui s'active tout seul).
 let micPttTimer = null;
 let micPttHeld = false;
@@ -1725,7 +1653,7 @@ micButton.addEventListener('pointerleave', pttRelease);
 micButton.addEventListener('contextmenu', (e) => { if (micPttHeld) e.preventDefault(); });
 
 // ---------- Dictée Whisper (PC) : la meilleure oreille pour les enfants ----------
-// Quand le PC fait tourner Whisper (Whishper en Docker), Lumi enregistre
+// Quand le PC fait tourner Whisper (Whishper en Docker), Savika enregistre
 // l'audio et le fait transcrire par ce moteur — bien plus fiable que la
 // reconnaissance du navigateur sur les petites voix. Sinon, rien ne change :
 // la dictée du navigateur reste utilisée.
@@ -1747,7 +1675,7 @@ function whisperSupported() {
 async function startWhisperDictation() {
   if (whisperRecorder || whisperBusy) return;
   if (!window.isSecureContext) {
-    addBubble('assistant', '🎤 Ouvre l’adresse HTTPS de Lumi pour dicter, puis réessaie.');
+    addBubble('assistant', '🎤 Ouvre l’adresse HTTPS de Savika pour dicter, puis réessaie.');
     return;
   }
   stopSpeech();
@@ -1910,14 +1838,16 @@ function openFichePrint(fiche, name, level, presetWindow) {
 <style>
   * { box-sizing: border-box; }
   @page { size: A4; margin: 14mm; }
+  @font-face { font-family: 'Patrick Hand'; font-display: swap; src: url('https://lumirevision.com/fonts/patrick-hand.woff2') format('woff2'); }
+  @font-face { font-family: 'Caveat'; font-weight: 700; font-display: swap; src: url('https://lumirevision.com/fonts/caveat-700.woff2') format('woff2'); }
   body { font-family: Georgia, "Times New Roman", serif; color: #1f2430; max-width: 740px; margin: 0 auto; padding: 32px 30px; font-size: 15px; line-height: 1.45; }
   .entete { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; border-bottom: 3px solid #6d5bd0; padding-bottom: 10px; }
-  .kicker { text-transform: uppercase; letter-spacing: 2px; font-size: 10px; color: #6d5bd0; font-weight: bold; margin: 0 0 5px; }
-  h1 { font-size: 23px; margin: 0 0 3px; }
+  .kicker { font-family: 'Patrick Hand', Georgia, serif; text-transform: uppercase; letter-spacing: 2px; font-size: 12px; color: #6d5bd0; font-weight: bold; margin: 0 0 5px; }
+  h1 { font-family: 'Caveat', Georgia, serif; font-weight: 700; font-size: 33px; margin: 0 0 3px; }
   .meta { color: #6b7280; font-size: 12.5px; margin: 0; }
   .meta.date { white-space: nowrap; padding-bottom: 2px; }
   .resume { font-style: italic; background: #f3efff; border-left: 4px solid #6d5bd0; padding: 10px 13px; border-radius: 8px; margin: 12px 0 0; }
-  h2 { font-size: 15.5px; color: #4a3f8f; border-bottom: 2px solid #ece7fb; padding-bottom: 5px; margin: 16px 0 8px; }
+  h2 { font-family: 'Patrick Hand', Georgia, serif; font-size: 17.5px; color: #4a3f8f; border-bottom: 2px solid #ece7fb; padding-bottom: 5px; margin: 16px 0 8px; }
   .notion { border: 1px solid #e6e2f7; background: #faf9ff; border-radius: 10px; padding: 7px 12px; margin: 5px 0; }
   .notion strong { color: #4a3f8f; }
   .etape { display: flex; gap: 9px; align-items: flex-start; margin: 5px 0; }
@@ -1941,7 +1871,7 @@ function openFichePrint(fiche, name, level, presetWindow) {
   .reussi h3 { color: #1e7a3c; }
   .areviser { border-color: #f2d5b8; background: #fff8f0; }
   .areviser h3 { color: #b3541e; }
-  .astuce { background: #fff8e6; border-left: 4px solid #e0a82e; padding: 10px 13px; border-radius: 8px; margin-top: 12px; }
+  .astuce { font-family: 'Patrick Hand', Georgia, serif; font-size: 15.5px; background: #fff8e6; border-left: 4px solid #e0a82e; padding: 10px 13px; border-radius: 8px; margin-top: 12px; }
   .pied { margin-top: 14px; font-size: 11px; color: #9ca3af; text-align: center; }
   .noprint { text-align: center; margin-top: 26px; }
   .noprint button { font-size: 15px; padding: 10px 18px; border-radius: 10px; border: none; background: #6d5bd0; color: #fff; cursor: pointer; margin: 4px; }
@@ -1968,11 +1898,11 @@ ${ongletsCss}
   }
 </style></head>
 <body>
-  <p class="retour noprint"><button onclick="window.close(); setTimeout(function(){ if (!window.closed) location.href = '/'; }, 250);">← Retour à Lumi</button></p>
+  <p class="retour noprint"><button onclick="window.close(); setTimeout(function(){ if (!window.closed) location.href = '/app'; }, 250);">← Retour à Savika</button></p>
 <div id="fiche-contenu">
   <header class="entete">
     <div>
-      <p class="kicker">Fiche de révision · Lumi</p>
+      <p class="kicker">Fiche de révision · Savika</p>
       <h1>${esc(fiche.titre || 'Fiche de révision')}</h1>
       <p class="meta">${esc(name)}${level ? ' · ' + esc(level) : ''}</p>
     </div>
@@ -1984,7 +1914,7 @@ ${ongletsInputs}
 ${ongletsLabels}
 ${ongletsSections}
   </div>
-  <p class="pied">Relis les notions, réponds au quiz sans regarder, puis vérifie avec le corrigé. 💪<br>Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
+  <p class="pied">Relis les notions, réponds au quiz sans regarder, puis vérifie avec le corrigé. 💪<br>Savika — accompagne les devoirs, ne donne jamais la réponse.</p>
 </div>
   <div class="noprint">
     <button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
@@ -1993,7 +1923,7 @@ ${ongletsSections}
 <script>
 function lumiShare() {
   var texte = ${JSON.stringify(textePartage)};
-  if (navigator.share) navigator.share({ title: 'Fiche de révision — ' + ${JSON.stringify(String(fiche.titre || 'Lumi').replace(/[<>]/g, ''))}, text: texte }).catch(function () {});
+  if (navigator.share) navigator.share({ title: 'Fiche de révision — ' + ${JSON.stringify(String(fiche.titre || 'Savika').replace(/[<>]/g, ''))}, text: texte }).catch(function () {});
   else if (navigator.clipboard) navigator.clipboard.writeText(texte).then(function () { alert('Fiche copiée ! Colle-la dans ton message.'); }, function () {});
 }
 </script>
@@ -2066,22 +1996,22 @@ $('btn-fiche-go').addEventListener('click', async () => {
   openFichePrint(fiche, name, currentProfile.level, ficheWin);
 });
 
-// ---------- Aide : comment utiliser Lumi ----------
-// Questions courantes : réponses instantanées (pré-écrites, voix de Lumi,
-// zéro appel IA, marchent même hors ligne). Question libre : Lumi répond via
+// ---------- Aide : comment utiliser Savika ----------
+// Questions courantes : réponses instantanées (pré-écrites, voix de Savika,
+// zéro appel IA, marchent même hors ligne). Question libre : Savika répond via
 // /api/aide (elle connaît toutes les fonctions et paramètres de l'app).
 const HELP_QA = [
-  { q: '📲 Installer Lumi sur le téléphone', a: 'Android : menu Chrome → « Installer l\'application » (ou le bouton 📲 dans les Paramètres). iPhone : ouvre Lumi dans Safari → bouton Partager → « Sur l\'écran d\'accueil ».\nAide iPhone : ⚙️ Paramètres & Partage → « Aide iPhone » pour le micro.' },
-  { q: '📷 Aider Lumi avec une photo du cahier', a: 'Dans une leçon, touche 📷, prends l\'exercice bien droit et lisible, puis envoie. Je lis l\'énoncé et je t\'aide à trouver la solution étape par étape — je ne donne jamais la réponse toute faite !' },
+  { q: '📲 Installer Savika sur le téléphone', a: 'Android : menu Chrome → « Installer l\'application » (ou le bouton 📲 dans les Paramètres). iPhone : ouvre Savika dans Safari → bouton Partager → « Sur l\'écran d\'accueil ».\nAide iPhone : ⚙️ Paramètres & Partage → « Aide iPhone » pour le micro.' },
+  { q: '📷 Aider Savika avec une photo du cahier', a: 'Dans une leçon, touche 📷, prends l\'exercice bien droit et lisible, puis envoie. Je lis l\'énoncé et je t\'aide à trouver la solution étape par étape — je ne donne jamais la réponse toute faite !' },
   { q: '📄 Créer la Fiche de révision (PDF)', a: 'Dans la leçon : ☰ Outils → « Fiche ». Coche ce qui doit y figurer : Révision, Quiz, Apprentissage (le cours pas à pas), Exemples corrigés, Astuce. Touche « Créer ma fiche », puis « 🖨️ Imprimer » (ou « 📤 Partager » pour l\'enregistrer en PDF). Chaque partie démarre sur une nouvelle page.' },
   { q: '🎯 Faire une interro (Quiz)', a: '☰ Outils → « Quiz » : écris un sujet — ou laisse vide pour un thème du programme de ton niveau — puis « C\'est parti ! ». Réponds aux questions ; je t\'explique à chaque fois et le score arrive à la fin.' },
   { q: '🏫 C\'est quoi la Classe ?', a: '☰ Outils → « Classe » : je prépare un petit cours étape par étape sur le sujet de ton choix, avec une question de contrôle à chaque étape. Idéal pour découvrir un sujet avant de faire les devoirs.' },
-  { q: '🔊 Changer la voix de Lumi', a: '⚙️ Réglages → « Voix de Lumi » : choisis Vivienne, Denise, Éloïse ou Sylvie (voix de Lumi), ou une voix de ton téléphone. La vitesse se règle juste en dessous. Pendant que je parle : 🔊 pour réécouter, ✋ pour me couper.' },
+  { q: '🔊 Changer la voix de Savika', a: '⚙️ Réglages → « Voix de Savika » : choisis Vivienne, Denise, Éloïse ou Sylvie (voix de Savika), ou une voix de ton téléphone. La vitesse se règle juste en dessous. Pendant que je parle : 🔊 pour réécouter, ✋ pour me couper.' },
   { q: '🆕 Commencer une nouvelle leçon', a: 'Touche « 🆕 Leçon », puis appuie une seconde fois sur « Terminer ? » pour confirmer. Ta leçon en cours est archivée dans 📊 Progrès (rien n\'est perdu !) et une nouvelle leçon commence, toute propre.' },
   { q: '📊 Voir les progrès', a: '📊 Progrès : tu y trouves les leçons terminées et les interros, avec le bilan « bien compris / à retravailler ». Touche une leçon pour relire toute la conversation.' },
-  { q: '🔗 Donner l\'accès à un autre appareil', a: 'Chaque famille a son code (LUMI-…). Le responsable ouvre l\'espace de gestion → « Copier l\'invitation » : le message contient le lien, le code se remplit tout seul. Pour un nouveau téléphone de la même famille : même code + la case « parent ».' },
-  { q: '🔄 Mettre Lumi à jour', a: 'Les mises à jour s\'installent toutes seules — au plus tard à la prochaine ouverture, dès que tu es sur l\'écran des profils. En secours : ⚙️ Réglages → « 🔄 Mettre à jour Lumi ».' },
-  { q: '🕵️ Ce que Lumi ne fait jamais', a: 'Je ne donne JAMAIS la réponse finale (je guide par questions), je ne parle jamais de mon fonctionnement interne, et tes données servent uniquement à accompagner les apprentissages : pas de publicité, pas de revente, rien d\'autre.' }
+  { q: '🔗 Donner l\'accès à un autre appareil', a: 'Chaque famille a son code (SAVIKA-…). Le responsable ouvre l\'espace de gestion → « Copier l\'invitation » : le message contient le lien, le code se remplit tout seul. Pour un nouveau téléphone de la même famille : même code + la case « parent ».' },
+  { q: '🔄 Mettre Savika à jour', a: 'Les mises à jour s\'installent toutes seules — au plus tard à la prochaine ouverture, dès que tu es sur l\'écran des profils. En secours : ⚙️ Réglages → « 🔄 Mettre à jour Savika ».' },
+  { q: '🕵️ Ce que Savika ne fait jamais', a: 'Je ne donne JAMAIS la réponse finale (je guide par questions), je ne parle jamais de mon fonctionnement interne, et tes données servent uniquement à accompagner les apprentissages : pas de publicité, pas de revente, rien d\'autre.' }
 ];
 function showHelpAnswer(text) {
   const box = $('help-result');
@@ -2111,7 +2041,7 @@ async function askHelp() {
   if (!q) { showHelpAnswer('Écris ta question sur l\'application juste au-dessus 🙂'); return; }
   $('help-input').value = '';
   const box = $('help-result');
-  box.innerHTML = '<p class="hint">Lumi réfléchit… ⏳</p>';
+  box.innerHTML = '<p class="hint">Savika réfléchit… ⏳</p>';
   try {
     const r = await fetch('/api/aide', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2204,7 +2134,7 @@ let quizData = null, quizIdx = 0, quizScore = 0, quizTopicUsed = '', quizSource 
 $('btn-quiz').addEventListener('click', () => {
   $('quiz-topic-row').classList.remove('hidden');
   $('quiz-modal').classList.remove('hidden');
-  $('quiz-area').innerHTML = '<p class="hint">Choisis un sujet et Lumi te pose 5 questions ! 🌟</p>';
+  $('quiz-area').innerHTML = '<p class="hint">Choisis un sujet et Savika te pose 5 questions ! 🌟</p>';
   $('quiz-progress').textContent = '';
   if (lastTopic()) $('quiz-topic').value = lastTopic();
 });
@@ -2432,7 +2362,7 @@ function finishQuiz() {
   $('quiz-progress').textContent = `Score final : ${quizScore} / ${quizData.length}`;
   const stars = '⭐'.repeat(Math.max(1, Math.round((quizScore / quizData.length) * 5)));
   const n = currentProfile ? currentProfile.name : '';
-  area.innerHTML = `<div class="quiz-final"><div class="quiz-stars">${stars}</div><p><strong>${quizScore} / ${quizData.length}</strong></p><p>${quizScore === quizData.length ? `Parfait ${escapeHtml(n)} ! Tu maîtrises ce sujet ! 🎉` : quizScore >= quizData.length / 2 ? 'Bien joué ! Réessaie pour faire encore mieux 💪' : 'Courage ! Révise un peu avec Lumi puis retente l\'interro 😊'}</p>${quizSource ? `<p class="source-ligne">📚 Source : <a href="${escapeHtml(quizSource.url)}" target="_blank" rel="noopener">${escapeHtml(quizSource.title)}</a></p>` : ''}</div>`;
+  area.innerHTML = `<div class="quiz-final"><div class="quiz-stars">${stars}</div><p><strong>${quizScore} / ${quizData.length}</strong></p><p>${quizScore === quizData.length ? `Parfait ${escapeHtml(n)} ! Tu maîtrises ce sujet ! 🎉` : quizScore >= quizData.length / 2 ? 'Bien joué ! Réessaie pour faire encore mieux 💪' : 'Courage ! Révise un peu avec Savika puis retente l\'interro 😊'}</p>${quizSource ? `<p class="source-ligne">📚 Source : <a href="${escapeHtml(quizSource.url)}" target="_blank" rel="noopener">${escapeHtml(quizSource.title)}</a></p>` : ''}</div>`;
   const again = document.createElement('button');
   again.className = 'btn btn-primary';
   again.textContent = '🔄 Autre interro';
@@ -2601,7 +2531,7 @@ async function loadConnectQr() {
       $('connect-qr').classList.add('hidden');
       $('connect-url').textContent = j.pending
         ? 'Préparation du lien sécurisé pour le téléphone…'
-        : 'Le lien HTTPS du téléphone est indisponible. Relance Lumi sur le PC, puis réessaie.';
+        : 'Le lien HTTPS du téléphone est indisponible. Relance Savika sur le PC, puis réessaie.';
       if (j.pending) setTimeout(() => {
         if (!$('connect-panel').classList.contains('hidden')) loadConnectQr();
       }, 2000);
@@ -2640,7 +2570,7 @@ $('btn-new').addEventListener('click', (e) => {
   // Une réponse en cours est annulée au premier appui ; un chargement affiche
   // un message au lieu d'ignorer le toucher.
   if (activeChat) cancelChat();
-  else if (chatLoading) { if (typeof toast === 'function') toast('Lumi termine ce qu’elle fait… réessaie dans un instant 🙂', 4000); return; }
+  else if (chatLoading) { if (typeof toast === 'function') toast('Savika termine ce qu’elle fait… réessaie dans un instant 🙂', 4000); return; }
   const btn = (e && e.currentTarget) || $('btn-new');
   // Premier toucher : on EXPLIQUE clairement qu'il faut confirmer — sur iPhone,
   // le petit changement de texte passait inaperçu et le bouton semblait mort.
@@ -2760,7 +2690,7 @@ function renderSession(s) {
   for (const m of msgs) {
     const el = document.createElement('div');
     el.className = 'hist-msg ' + (m.role === 'user' ? 'user' : 'assistant');
-    el.innerHTML = `<span class="hist-who">${m.role === 'user' ? '🧒 ' + escapeHtml(currentProfile ? currentProfile.name : 'Enfant') : '🌟 Lumi'}</span><div class="hist-text">${m.role === 'user' ? escapeHtml(m.content || '') : renderMarkdown(m.content || '')}</div>`;
+    el.innerHTML = `<span class="hist-who">${m.role === 'user' ? '🧒 ' + escapeHtml(currentProfile ? currentProfile.name : 'Enfant') : '🌟 Savika'}</span><div class="hist-text">${m.role === 'user' ? escapeHtml(m.content || '') : renderMarkdown(m.content || '')}</div>`;
     list.appendChild(el);
   }
   box.appendChild(list);
@@ -2800,70 +2730,8 @@ function enterParentArea() {
 // n'a pas ete choisie dans le formulaire de profil.
 const AGE_LEVEL_FRONT = { 6: 'CP', 7: 'CE1', 8: 'CE2', 9: 'CM1', 10: 'CM2', 11: '6e', 12: '5e', 13: '4e', 14: '3e' };
 
-// ---------- Pronote (espace parent) : saisie des identifiants ----------
-function pronoteCardHtml(pronote) {
-  const etat = pronote && pronote.configured
-    ? `<p class="parent-line">✅ Connecté${pronote.host ? ` — ${escapeHtml(pronote.host)}` : ''} · devoirs sur ${pronote.days} jour${pronote.days > 1 ? 's' : ''}${pronote.source === 'env' ? ' · depuis .env' : ''}</p>`
-    : `<p class="parent-line">Non configuré : la carte « cahier de textes » n'apparaît pas pour l'élève.</p>`;
-  return `
-  <div class="parent-kid">
-    <h3>📒 Pronote — devoirs automatiques</h3>${etat}
-    <label class="field">Adresse Pronote de l'élève
-      <input id="pr-url" type="url" placeholder="https://xxx.index-education.net/pronote/eleve.html" autocomplete="off"></label>
-    <label class="field">Identifiant de l'élève
-      <input id="pr-user" type="text" autocomplete="off"></label>
-    <label class="field">Mot de passe Pronote
-      <input id="pr-pass" type="password" autocomplete="new-password"></label>
-    <label class="field">Jours d'avance à afficher
-      <input id="pr-days" type="number" min="1" max="30" value="7"></label>
-    <label class="field">Mot de passe parent (accès distant uniquement)
-      <input id="pr-pp" type="password" autocomplete="off"></label>
-    <div class="video-search" style="margin-top: 8px;">
-      <button id="btn-pronote-save" class="btn btn-primary" type="button">💾 Enregistrer et tester</button>
-      <button id="btn-pronote-clear" class="btn" type="button">🗑️ Effacer</button>
-    </div>
-    <p id="pr-msg" class="hint"></p>
-  </div>`;
-}
 
-async function wirePronoteCard() {
-  const btnSave = $('btn-pronote-save');
-  const btnClear = $('btn-pronote-clear');
-  if (!btnSave || !btnClear) return;
-  btnSave.addEventListener('click', async () => {
-    const msg = $('pr-msg');
-    msg.textContent = 'Test de connexion en cours… ⏳';
-    try {
-      const r = await fetch('/api/pronote/config', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: $('pr-url').value, username: $('pr-user').value,
-          password: $('pr-pass').value, days: Number($('pr-days').value) || 7,
-          parentPassword: $('pr-pp').value, test: true
-        })
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) { msg.textContent = '⚠️ ' + (j.error || 'Enregistrement impossible.'); return; }
-      if (j.test && j.test.ok) msg.textContent = '✅ Connexion réussie : les devoirs arrivent du Pronote. L\'élève les verra à sa prochaine leçon.';
-      else if (j.test) msg.textContent = '💾 Enregistré, mais le test a échoué : ' + (j.test.error || 'raison inconnue');
-      else msg.textContent = '💾 Enregistré.';
-    } catch { msg.textContent = '⚠️ Serveur injoignable, réessaie.'; }
-  });
-  btnClear.addEventListener('click', async () => {
-    const msg = $('pr-msg');
-    msg.textContent = '';
-    try {
-      const r = await fetch('/api/pronote/config', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clear: true, parentPassword: $('pr-pp').value })
-      });
-      const j = await r.json().catch(() => ({}));
-      msg.textContent = r.ok ? '🗑️ Configuration Pronote effacée.' : '⚠️ ' + (j.error || 'Effacement impossible.');
-    } catch { msg.textContent = '⚠️ Serveur injoignable, réessaie.'; }
-  });
-}
-
-// ---------- Abonnement Lumi Famille (Stripe, espace parent) ----------
+// ---------- Abonnement Savika Famille (Stripe, espace parent) ----------
 // La carte se construit depuis /api/billing/status : invisible tant que le
 // paiement n'est pas configuré côté serveur. Les prix affichés viennent de
 // Stripe (amount), avec un libellé de secours si la lecture échoue.
@@ -2879,7 +2747,7 @@ function billingCardHtml(b) {
     const end = s.currentPeriodEnd ? ` jusqu’au ${dateOnly(s.currentPeriodEnd)}` : '';
     const stop = s.cancelAtPeriodEnd ? ' ⏳ Résiliation enregistrée : il s’arrêtera à cette date.' : '';
     return `<div class="parent-kid">
-      <h3>💳 Abonnement Lumi Famille</h3>
+      <h3>💳 Abonnement Savika Famille</h3>
       <p class="parent-line">✅ Actif${end} — formule ${s.interval === 'year' ? 'annuelle' : 'mensuelle'}.${stop}</p>
       <div class="billing-actions">${portalBtn}</div>
       <p id="billing-msg" class="hint"></p>
@@ -2890,14 +2758,14 @@ function billingCardHtml(b) {
   const trial = b.plan === 'trial' && b.trialEnds ? `<p class="parent-line">🎁 Essai en cours jusqu’au ${dateOnly(b.trialEnds)}.</p>` : '';
   const quota = b.plan === 'free'
     ? ((b.quota && Number.isFinite(b.quota.limit))
-        ? ` Aujourd’hui : ${b.quota.used}/${b.quota.limit} échanges gratuits utilisés${b.quota.used >= b.quota.limit ? ' — quota atteint ⏸️ débloque pour continuer' : ''}.`
+        ? ` Au total : ${b.quota.used}/${b.quota.limit} échanges gratuits utilisés${(b.quota.fiches && Number.isFinite(b.quota.fiches.limit)) ? ` · fiches de révision : ${b.quota.fiches.used}/${b.quota.fiches.limit}` : ''}${b.quota.used >= b.quota.limit ? ' — quota atteint ⏸️ débloque pour continuer' : ''}.`
         : ' Le quota gratuit s’applique actuellement.')
     : '';
   // Safari iOS : l'app installée gère bien le paiement par carte ; Apple Pay,
-  // lui, n'est proposé que dans Safari (règle Apple, pas un bug de Lumi).
-  const iosHint = isIOSDevice() ? '<p class="hint">📱 Sur iPhone/iPad : le paiement par carte fonctionne ici. Pour Apple Pay, ouvre Lumi dans Safari.</p>' : '';
+  // lui, n'est proposé que dans Safari (règle Apple, pas un bug de Savika).
+  const iosHint = isIOSDevice() ? '<p class="hint">📱 Sur iPhone/iPad : le paiement par carte fonctionne ici. Pour Apple Pay, ouvre Savika dans Safari.</p>' : '';
   return `<div class="parent-kid">
-    <h3>💳 Passe à Lumi Famille</h3>
+    <h3>💳 Passe à Savika Famille</h3>
     ${warn}${trial}
     <p class="parent-line">Accès illimité pour toute la famille, sans engagement, résiliable à tout moment.${quota}</p>
     <div class="billing-actions">
@@ -2987,7 +2855,7 @@ async function handleBillingReturn() {
     try {
       const b = await (await fetch('/api/billing/status')).json();
       if (b.subscription && (b.subscription.status === 'active' || b.subscription.status === 'trialing')) {
-        toast('Merci ! L’abonnement Lumi Famille est actif 💜', 8000);
+        toast('Merci ! L’abonnement Savika Famille est actif 💜', 8000);
         return;
       }
     } catch {}
@@ -3004,13 +2872,11 @@ async function renderParentArea() {
   let curriculum = null;
   try { curriculum = await (await fetch('/api/curriculum')).json(); } catch {}
   const kids = list.filter(p => p && p.id);
-  // Carte abonnement (Stripe) puis carte Pronote, avant les profils enfants.
+  // Carte abonnement (Stripe), avant les profils enfants.
   let billing = null;
   try { billing = await (await fetch('/api/billing/status')).json(); } catch {}
-  let pronote = null;
-  try { pronote = await (await fetch('/api/pronote/status')).json(); } catch {}
-  let html = billingCardHtml(billing) + pronoteCardHtml(pronote);
-  if (!kids.length) { html += '<p class="hint">Aucun profil enfant pour le moment.</p>'; box.innerHTML = html; wirePronoteCard(); wireBillingCard(); return; }
+  let html = billingCardHtml(billing);
+  if (!kids.length) { html += '<p class="hint">Aucun profil enfant pour le moment.</p>'; box.innerHTML = html; wireBillingCard(); return; }
 
   const now = Date.now();
   for (const kid of kids) {
@@ -3026,7 +2892,7 @@ async function renderParentArea() {
       <h3>${kid.photo ? `<img src="${escapeHtml(kid.photo)}" class="pill-photo" alt="">` : ''} ${escapeHtml(kid.name)} <span class="badge">${escapeHtml(kid.level || (kid.age + ' ans'))}</span></h3>
       <div class="parent-stats">
         <span class="stat"><strong>${sessions.length}</strong><small>leçons + interros</small></span>
-        <span class="stat"><strong>${answers}</strong><small>réponses de Lumi</small></span>
+        <span class="stat"><strong>${answers}</strong><small>réponses de Savika</small></span>
         <span class="stat"><strong>${quizzes.length}</strong><small>interros</small></span>
         <span class="stat"><strong>${last7.length}</strong><small>sur 7 jours</small></span>
       </div>`;
@@ -3061,7 +2927,6 @@ async function renderParentArea() {
     html += '</div>';
   }
   box.innerHTML = html;
-  wirePronoteCard();
   wireBillingCard();
 }
 
@@ -3114,9 +2979,9 @@ function readFamilyInvitation() {
   try { window.lumiInvitationLink = (typeof location.href === 'string') ? location.href : ''; } catch { window.lumiInvitationLink = ''; }
   // Retirer immédiatement le code de l'adresse. Aucun code Admin accepté dans un lien.
   window.history.replaceState(null, '', location.pathname);
-  return /^LUMI-(?:[0-9A-F]{4}-){5}[0-9A-F]{4}$/.test(code) ? code : '';
+  return /^SAVIKA-(?:[0-9A-F]{4}-){5}[0-9A-F]{4}$/.test(code) ? code : '';
 }
-// iPhone : Lumi a besoin de Safari (voix, micro, installation) ; sur les
+// iPhone : Savika a besoin de Safari (voix, micro, installation) ; sur les
 // autres navigateurs iOS et dans les navigateurs internes des messageries
 // (souvent « ça ouvre Chrome et rien ne marche »), on guide la famille.
 function gateBrowserHint() {
@@ -3147,7 +3012,7 @@ function showGateBrowserHint() {
     ? '<li>Copie le lien avec le bouton ci-dessous (ou garde ton message).</li><li>Ouvre l\'application <strong>Safari</strong>.</li><li>Colle le lien dans la barre d\'adresse, puis valide.</li>'
     : '<li>Touche ⋮ ou « Ouvrir dans… » dans le menu du navigateur.</li><li>Choisis <strong>Chrome</strong> (ou copie le lien et colle-le dans Chrome).</li>';
   box.innerHTML = (hint === 'ios-other'
-      ? '<strong>📱 Sur iPhone, Lumi s\'utilise dans Safari.</strong>'
+      ? '<strong>📱 Sur iPhone, Savika s\'utilise dans Safari.</strong>'
       : '<strong>📱 Ouvre ce lien dans Chrome.</strong>')
     + '<ol>' + etapes + '</ol>'
     + '<button type="button" class="btn btn-primary" id="gate-copy-link">📋 Copier le lien</button>';
@@ -3166,7 +3031,7 @@ function showGateBrowserHint() {
     }
   };
 }
-// Après la recharge de secours iOS (micro bloqué par Safari), Lumi rouvre
+// Après la recharge de secours iOS (micro bloqué par Safari), Savika rouvre
 // toute seule la leçon du profil en cours : l'enfant n'a plus qu'à retoucher
 // 🎙️ pour reprendre la parole. Le drapeau est consommé une seule fois.
 function resumeAfterMicRepair() {
@@ -3205,7 +3070,7 @@ async function initApp() {
     }
   } catch {
     $('screen-gate').classList.remove('hidden');
-    $('gate-error').textContent = 'Lumi ne peut pas vérifier ton accès. Vérifie la connexion puis réessaie.'; hideSplash(); return;
+    $('gate-error').textContent = 'Savika ne peut pas vérifier ton accès. Vérifie la connexion puis réessaie.'; hideSplash(); return;
   }
   try { const me = await (await fetch('/api/auth/me')).json(); configureAdminTest(me.adminTest === true); }
   catch { configureAdminTest(false); }
@@ -3215,7 +3080,7 @@ async function initApp() {
   handleBillingReturn();
   fetchProfiles().then(() => { hideSplash(); renderProfiles(); resumeAfterMicRepair(); });
 }
-// Écran de chargement : barre de progression + petite animation de Lumi qui
+// Écran de chargement : barre de progression + petite animation de Savika qui
 // écrit. Refermé dès que l'app sait quel écran montrer (code, profils...).
 function hideSplash() {
   const el = $('splash');
@@ -3223,14 +3088,26 @@ function hideSplash() {
   el.classList.add('done');
   if (typeof setTimeout === 'function') setTimeout(() => el.classList.add('hidden'), 320);
 }
+// Ouvre l'application apres une connexion reussie : code famille (enterGate)
+// ou connexion parent sans code (e-mail + mot de passe). Point d'entree unique
+// pour que les deux chemins se comportent exactement pareil.
+function openAfterUnlock(result) {
+  configureAdminTest(result && result.admin === true);
+  checkServerVoice(); // acces accepte : bascule voix du telephone si voix serveur absente
+  if (typeof checkWhisperStt === 'function') checkWhisperStt(); // dictee Whisper du PC, si dispo
+  $('screen-gate').classList.add('hidden');
+  $('screen-profile').classList.remove('hidden');
+  handleBillingReturn();
+  fetchProfiles().then(() => { renderProfiles(); resumeAfterMicRepair(); });
+}
 function enterGate() {
   const code = $('gate-code').value.trim();
   if (!code) {
-    $('gate-error').textContent = 'Entre d’abord ton code famille (il commence par LUMI-), ou le mot de passe de gestion.';
+    $('gate-error').textContent = 'Entre d’abord ton code famille (il commence par SAVIKA-), ou le mot de passe de gestion.';
     $('gate-code').focus();
     return;
   }
-  if (code.toUpperCase().startsWith('LUMI-') && !$('gate-consent').checked) {
+  if (code.toUpperCase().startsWith('SAVIKA-') && !$('gate-consent').checked) {
     $('gate-error').textContent = 'Confirme être le parent ou responsable légal en cochant la case.';
     $('gate-consent').focus();
     return;
@@ -3244,24 +3121,52 @@ function enterGate() {
       profilesCache = []; profileFetchGeneration++;
       const result = await r.json();
       if (result.admin === true) { $('gate-code').value = ''; location.href = '/admin.html'; return; }
-      configureAdminTest(result.admin === true);
-      checkServerVoice(); // code accepte : bascule voix du telephone si voix serveur absente
-      if (typeof checkWhisperStt === 'function') checkWhisperStt(); // dictée Whisper du PC, si dispo
-      $('screen-gate').classList.add('hidden');
-      $('screen-profile').classList.remove('hidden');
-      handleBillingReturn();
-      fetchProfiles().then(() => { renderProfiles(); resumeAfterMicRepair(); });
+      openAfterUnlock(result);
     } else {
       const j = await r.json().catch(() => ({}));
       $('gate-error').textContent = j.error || 'Code incorrect 🙂';
     }
-  }).catch(() => { $('gate-error').textContent = 'Impossible de contacter Lumi.'; });
+  }).catch(() => { $('gate-error').textContent = 'Impossible de contacter Savika.'; });
 }
 $('btn-gate-enter').addEventListener('click', enterGate);
 $('gate-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') enterGate(); });
 initApp();
 window.addEventListener('hashchange', () => { if (new URLSearchParams(location.hash.slice(1)).has('access')) initApp(); });
 if ('speechSynthesis' in window) speechSynthesis.getVoices();
+
+// ---------- Connexion parent SANS code (e-mail + mot de passe) ----------
+// Le parent n'a plus besoin d'un code : il se connecte (ou cree son compte,
+// gratuit — 20 appels IA + 5 fiches au total) directement depuis la gate. Le code famille reste pour les
+// invitations et les appareils des enfants.
+$('btn-parent-mode').addEventListener('click', () => {
+  const box = $('parent-box');
+  box.classList.toggle('hidden');
+  if (!box.classList.contains('hidden')) $('parent-email').focus();
+});
+async function parentAuth(route, body) {
+  const msg = $('parent-msg');
+  msg.textContent = 'Vérification…';
+  try {
+    const r = await fetch(route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { msg.textContent = '⚠️ ' + (j.error || 'Connexion impossible.'); return; }
+    profilesCache = []; profileFetchGeneration++;
+    refreshAdminNavigation();
+    openAfterUnlock(j);
+  } catch { msg.textContent = '⚠️ Serveur injoignable, réessaie.'; }
+}
+$('btn-parent-login').addEventListener('click', () => {
+  parentAuth('/api/auth/login', { email: $('parent-email').value.trim(), password: $('parent-password').value });
+});
+$('btn-parent-register').addEventListener('click', () => {
+  if (!$('gate-consent').checked) {
+    $('parent-msg').textContent = '⚠️ Coche d’abord la case « je confirme être le parent » ci-dessus, puis réessaie.';
+    $('gate-consent').focus();
+    return;
+  }
+  parentAuth('/api/auth/register', { email: $('parent-email').value.trim(), password: $('parent-password').value, consent: true });
+});
+$('parent-password').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-parent-login').click(); });
 
 // ---------- Installation sur l'écran d'accueil ----------
 let installPrompt = null;
@@ -3279,7 +3184,7 @@ function markInstallProposal(value) {
   try { localStorage.setItem('lumi-install-banner', value); } catch {}
 }
 function hideInstallBanner() { $('install-banner').classList.add('hidden'); }
-// Bannière « Installer Lumi » : proposée une seule fois par appareil, après
+// Bannière « Installer Savika » : proposée une seule fois par appareil, après
 // l'affichage des profils. Android/Chrome → invite native ; iPhone → guide Safari.
 function maybeShowInstallBanner(delay = 1500) {
   if (installBannerAnnounced || installAlreadyDone()) return;
@@ -3297,11 +3202,11 @@ function showInstall() {
   $('settings-modal').classList.add('hidden');
   $('install-modal').classList.remove('hidden');
   const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-  $('install-intro').textContent = installed ? 'Lumi est déjà ouverte comme une application.' : 'Garde Lumi à portée de main depuis son icône.';
+  $('install-intro').textContent = installed ? 'Savika est déjà ouverte comme une application.' : 'Garde Savika à portée de main depuis son icône.';
   $('btn-install-native').classList.toggle('hidden', installed || !installPrompt);
-  $('install-steps').innerHTML = installed ? '<li>Ouvre Lumi depuis son icône sur l’écran d’accueil.</li>' : isIOS
-    ? '<li>Ouvre Lumi dans <strong>Safari</strong>.</li><li>Appuie sur <strong>Partager</strong> (le carré avec une flèche vers le haut).</li><li>Choisis <strong>Sur l’écran d’accueil</strong>, puis <strong>Ajouter</strong>. Garde « Ouvrir comme app web » activé si cette option apparaît.</li>'
-    : '<li>Ouvre Lumi dans <strong>Chrome</strong> ou <strong>Edge</strong>.</li><li>Dans le menu du navigateur, choisis <strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong>.</li><li>Confirme l’installation, puis ouvre l’icône <strong>Lumi</strong>.</li>';
+  $('install-steps').innerHTML = installed ? '<li>Ouvre Savika depuis son icône sur l’écran d’accueil.</li>' : isIOS
+    ? '<li>Ouvre Savika dans <strong>Safari</strong>.</li><li>Appuie sur <strong>Partager</strong> (le carré avec une flèche vers le haut).</li><li>Choisis <strong>Sur l’écran d’accueil</strong>, puis <strong>Ajouter</strong>. Garde « Ouvrir comme app web » activé si cette option apparaît.</li>'
+    : '<li>Ouvre Savika dans <strong>Chrome</strong> ou <strong>Edge</strong>.</li><li>Dans le menu du navigateur, choisis <strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong>.</li><li>Confirme l’installation, puis ouvre l’icône <strong>Savika</strong>.</li>';
 }
 $('btn-install').addEventListener('click', showInstall);
 $('btn-install-settings').addEventListener('click', showInstall);
@@ -3312,7 +3217,7 @@ $('btn-install-native').addEventListener('click', async () => {
   installPrompt = null;
   await prompt.prompt();
   const result = await prompt.userChoice;
-  $('install-intro').textContent = result.outcome === 'accepted' ? 'Installation demandée. Ouvre Lumi depuis son icône.' : 'Tu peux installer Lumi plus tard depuis ce bouton.';
+  $('install-intro').textContent = result.outcome === 'accepted' ? 'Installation demandée. Ouvre Savika depuis son icône.' : 'Tu peux installer Savika plus tard depuis ce bouton.';
   $('btn-install-native').classList.add('hidden');
 });
 $('btn-install-banner-action').addEventListener('click', async () => {
@@ -3328,7 +3233,7 @@ $('btn-install-banner-action').addEventListener('click', async () => {
 $('btn-install-banner-dismiss').addEventListener('click', hideInstallBanner);
 window.addEventListener('appinstalled', () => {
   installPrompt = null;
-  $('btn-install').textContent = '📲 Lumi est installée';
+  $('btn-install').textContent = '📲 Savika est installée';
   markInstallProposal('installée');
   hideInstallBanner();
 });
@@ -3344,12 +3249,12 @@ $('btn-test-sound').addEventListener('click', () => {
   soundCheck.volume = 1;
   $('voice-feedback').textContent = 'Écoute la petite mélodie. Aucun son ? Vérifie le volume et la sortie Bluetooth.';
   soundCheck.play().catch(() => {
-    $('voice-feedback').textContent = 'Le navigateur a bloqué le son. Rouvre Lumi dans Safari ou Chrome, puis retouche « Tester le son ».';
+    $('voice-feedback').textContent = 'Le navigateur a bloqué le son. Rouvre Savika dans Safari ou Chrome, puis retouche « Tester le son ».';
   });
 });
 
 
-// ---------- Partager Lumi et demander un accès ----------
+// ---------- Partager Savika et demander un accès ----------
 document.querySelectorAll('[data-copy-lumi-link]').forEach(button => {
   button.addEventListener('click', async () => {
     const url = new URL('/', location.href).href;
@@ -3358,7 +3263,7 @@ document.querySelectorAll('[data-copy-lumi-link]').forEach(button => {
       let field = button.nextElementSibling;
       if (!field || !field.matches('[data-lumi-link]')) {
         field = document.createElement('input'); field.readOnly = true; field.dataset.lumiLink = '';
-        field.className = 'lumi-link-field'; field.setAttribute('aria-label', 'Lien de Lumi à copier');
+        field.className = 'lumi-link-field'; field.setAttribute('aria-label', 'Lien de Savika à copier');
         field.addEventListener('click', () => { field.select(); field.setSelectionRange(0,field.value.length); });
         button.after(field);
       }
@@ -3367,17 +3272,17 @@ document.querySelectorAll('[data-copy-lumi-link]').forEach(button => {
     }
   });
 });
-async function shareLumi() {
+async function shareSavika() {
   const url = new URL('/', location.href).href;
-  const text = 'Découvre Lumi pour les révisions. Ouvre le lien et choisis « Demander un accès » : le responsable pourra autoriser ta famille.';
+  const text = 'Découvre Savika pour les révisions. Ouvre le lien et choisis « Demander un accès » : le responsable pourra autoriser ta famille.';
   try {
-    if (navigator.share) { await navigator.share({ title: 'Lumi — révisions en famille', text, url }); return; }
+    if (navigator.share) { await navigator.share({ title: 'Savika — révisions en famille', text, url }); return; }
     if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text + '\n' + url); toast('Lien copié. Colle-le dans ton message.'); return; }
     toast('Copie ce lien dans ton message : ' + url, 12000);
   } catch (e) { if (e.name !== 'AbortError') toast('Partage impossible. Copie ce lien : ' + url, 12000); }
 }
-$('btn-share-app').addEventListener('click', shareLumi);
-$('btn-share-gate').addEventListener('click', shareLumi);
+$('btn-share-app').addEventListener('click', shareSavika);
+$('btn-share-gate').addEventListener('click', shareSavika);
 $('btn-request-access').addEventListener('click', () => {
   $('request-modal').classList.remove('hidden'); $('request-name').focus();
 });

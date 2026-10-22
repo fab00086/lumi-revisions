@@ -94,7 +94,7 @@ test('streamOllama : 503 avant le premier mot -> bascule sur le secours et diffu
       return { ok: true, body: new ReadableStream({
         start(controller) {
           controller.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"Cou"}}]}\n\n'));
-          controller.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"cou Lumi"}}]}\n\n'));
+          controller.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"cou Savika"}}]}\n\n'));
           controller.enqueue(enc.encode('data: [DONE]\n\n'));
           controller.close();
         }
@@ -104,7 +104,7 @@ test('streamOllama : 503 avant le premier mot -> bascule sur le secours et diffu
   vm.runInContext(section('async function streamOllama(', '// Conserve le début'), c);
   let full = '';
   const texte = await c.streamOllama([{ role: 'user', content: 'salut' }], { onDelta: (d, f) => { full = f; } });
-  assert.equal(texte, 'Coucou Lumi');
+  assert.equal(texte, 'Coucou Savika');
   assert.equal(appels[0].model, 'principal');
   assert.equal(appels[1].model, 'secours:cloud');
 });

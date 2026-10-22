@@ -2,7 +2,7 @@
 // IMPORTANT : garder cette valeur EGALE a la version de server.js (/api/version)
 // sinon le bouton « Mettre à jour » et le toast restent affichés en boucle.
 // tests/version-sync.cjs verifie la concordance.
-const lumiInterfaceVersion = '2026-10-16.11';
+const lumiInterfaceVersion = '2026-10-20.1';
 let lumiUpdateBusy = false;
 let lumiUpdateNotice = false;
 // Mise a jour AUTOMATIQUE (sans passer par Reglages) : la version est
@@ -19,11 +19,11 @@ async function checkLumiUpdate() {
     const badge = document.getElementById?.('lumi-version');
     if (badge) badge.textContent = version === lumiInterfaceVersion
       ? `Version installée : ${lumiInterfaceVersion} — à jour`
-      : `Version installée : ${lumiInterfaceVersion} — le serveur propose ${version}. Touche « Mettre à jour Lumi ».`;
+      : `Version installée : ${lumiInterfaceVersion} — le serveur propose ${version}. Touche « Mettre à jour Savika ».`;
     if (version !== lumiInterfaceVersion) {
       lumiUpdatePending = true;
       document.querySelectorAll('[data-update-lumi]').forEach(button => { button.textContent = '🔄 Nouvelle version — mettre à jour'; });
-      if (!lumiUpdateNotice) { lumiUpdateNotice = true; toast('Une nouvelle version de Lumi est prête : elle s\'installe toute seule sur l\'écran des profils (ou à la prochaine ouverture).', 8000); }
+      if (!lumiUpdateNotice) { lumiUpdateNotice = true; toast('Une nouvelle version de Savika est prête : elle s\'installe toute seule sur l\'écran des profils (ou à la prochaine ouverture).', 8000); }
       lumiMiseAJourHorsLecon();
     }
   } catch { /* Keep the offline interface available. */ }
@@ -44,25 +44,25 @@ function lumiMiseAJourHorsLecon() {
   if (!lumiUpdatePending || lumiReloading) return;
   if (lumiOccupe()) return;
   lumiReloading = true;
-  try { toast('Mise à jour de Lumi… 🌙', 4000); } catch {}
+  try { toast('Mise à jour de Savika… 🌙', 4000); } catch {}
   setTimeout(() => {
     try { window.location.replace(window.location.pathname + '?_maj=' + Date.now()); }
     catch { window.location.reload(); }
   }, 1200);
 }
-async function updateLumi() {
+async function updateSavika() {
   if (lumiUpdateBusy) return;
   if ((typeof chatLoading !== 'undefined' && chatLoading) || (typeof activeChat !== 'undefined' && activeChat) ||
       (typeof archiving !== 'undefined' && archiving) || document.querySelector('#input')?.value.trim() ||
       !document.querySelector('#photo-preview-modal')?.classList.contains('hidden')) {
-    toast('Termine ou annule le message et la photo avant de mettre à jour Lumi.', 7000); return;
+    toast('Termine ou annule le message et la photo avant de mettre à jour Savika.', 7000); return;
   }
   lumiUpdateBusy = true;
   const buttons = [...document.querySelectorAll('[data-update-lumi]')];
   buttons.forEach(button => { button.disabled = true; button.textContent = 'Vérification de la mise à jour…'; });
   try {
     const response = await fetch('/api/version', { cache: 'no-store' });
-    if (!response.ok) throw Error('Connexion nécessaire pour mettre à jour Lumi.');
+    if (!response.ok) throw Error('Connexion nécessaire pour mettre à jour Savika.');
     if ('serviceWorker' in navigator) {
       const registration = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
       await registration.update();
@@ -73,10 +73,10 @@ async function updateLumi() {
   } catch {
     toast('Mise à jour impossible. Vérifie Internet puis réessaie.', 7000);
     lumiUpdateBusy = false;
-    buttons.forEach(button => { button.disabled = false; button.textContent = '🔄 Mettre à jour Lumi'; });
+    buttons.forEach(button => { button.disabled = false; button.textContent = '🔄 Mettre à jour Savika'; });
   }
 }
-document.querySelectorAll('[data-update-lumi]').forEach(button => button.addEventListener('click', updateLumi));
+document.querySelectorAll('[data-update-lumi]').forEach(button => button.addEventListener('click', updateSavika));
 window.addEventListener('focus', checkLumiUpdate);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkLumiUpdate(); });
 // Une mise a jour en attente s'applique des qu'on est au calme (retour aux

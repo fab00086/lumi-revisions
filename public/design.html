@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lumi — Aperçu design</title>
+<title>Savika — Aperçu design</title>
 <link rel="stylesheet" href="/style.css">
 <style>
   body { padding: 20px 14px 70px; }
@@ -89,8 +89,8 @@
 </head>
 <body>
 <div class="apercu">
-  <h1>🖌️ Aperçu design — Lumi</h1>
-  <p class="sous">Tout le design en un seul endroit pour valider : boutons, écrans, fenêtres et la fiche imprimable (exemple, sans IA). <a href="/">← Retour à Lumi</a></p>
+  <h1>🖌️ Aperçu design — Savika</h1>
+  <p class="sous">Tout le design en un seul endroit pour valider : boutons, écrans, fenêtres et la fiche imprimable (exemple, sans IA). <a href="/app">← Retour à Savika</a></p>
 
   <nav class="toc">
     <a href="#boutons">Boutons &amp; outils</a>
@@ -121,8 +121,8 @@
     <div class="demo-row">
       <button class="btn" type="button">🔊 Tester la voix</button>
       <button class="btn btn-primary" type="button">📄 Créer ma fiche</button>
-      <button class="btn install-btn" type="button">📲 Installer Lumi</button>
-      <button class="btn" type="button" data-update-lumi>🔄 Mettre à jour Lumi</button>
+      <button class="btn install-btn" type="button">📲 Installer Savika</button>
+      <button class="btn" type="button" data-update-lumi>🔄 Mettre à jour Savika</button>
     </div>
   </section>
 
@@ -131,7 +131,7 @@
     <p class="note">Accueil (choix du profil) — maquette :</p>
     <div class="card" style="box-shadow:none;border:1px dashed #ddd2f7;max-width:none;">
       <div class="logo">🧑‍🏫</div>
-      <h1>Lumi</h1>
+      <h1>Savika</h1>
       <p class="subtitle">Choisis ton profil pour commencer.</p>
       <div class="demo-row">
         <button class="profile-pill" type="button">👧 Manon <span class="badge">CM1</span> <span class="del">✕</span></button>
@@ -189,7 +189,7 @@
     <div id="fiche-sheet">
       <header class="entete">
         <div>
-          <p class="kicker">Fiche de révision · Lumi</p>
+          <p class="kicker">Fiche de révision · Savika</p>
           <h1>Les tables de multiplication</h1>
           <p class="meta">Manon · CM1</p>
         </div>
@@ -261,24 +261,24 @@
           <p class="astuce">Pour la table de 9, les chiffres du résultat s'additionnent toujours à 9 (6 + 3 = 9).</p>
         </section>
       </div>
-      <p class="pied">Lumi — accompagne les devoirs, ne donne jamais la réponse.</p>
+      <p class="pied">Savika — accompagne les devoirs, ne donne jamais la réponse.</p>
     </div>
     <div class="fiche-actions">
       <button class="btn btn-primary" type="button" onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
       <button class="btn" type="button" onclick="apercuShare()">📤 Partager</button>
-      <a class="btn" href="/">← Retour à Lumi</a>
+      <a class="btn" href="/app">← Retour à Savika</a>
       <p class="hint">Sur téléphone : « Imprimer » propose « Enregistrer en PDF » et « Partager » ouvre la feuille du téléphone (impression, envoi…). Chaque partie démarre sur une nouvelle page.</p>
     </div>
     <script>
       function apercuShare() {
         var texte = (document.getElementById('fiche-sheet') || document.body).innerText.trim();
-        if (navigator.share) navigator.share({ title: 'Fiche de révision — Lumi (exemple)', text: texte }).catch(function () {});
+        if (navigator.share) navigator.share({ title: 'Fiche de révision — Savika (exemple)', text: texte }).catch(function () {});
         else if (navigator.clipboard) navigator.clipboard.writeText(texte).then(function () { alert('Fiche copiée !'); }, function () {});
       }
     </script>
   </section>
 
-  <p class="hint" style="text-align:center">Aperçu statique — aucune donnée réelle, aucun appel à l'IA. <a href="/">Retour à Lumi</a></p>
+  <p class="hint" style="text-align:center">Aperçu statique — aucune donnée réelle, aucun appel à l'IA. <a href="/app">Retour à Savika</a></p>
 </div>
 </body>
 </html>

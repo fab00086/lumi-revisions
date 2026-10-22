@@ -69,9 +69,9 @@ const envStripe = { STRIPE_SECRET_KEY: 'sk_test_123', STRIPE_WEBHOOK_SECRET: 'wh
 
 test('abonnement : le plan family payant retombe au quota gratuit quand Stripe ne le confirme plus', () => {
   const c = vm.createContext({ console, ENV: {}, accountPut: async () => {} });
-  vm.runInContext(section('const FREE_DAILY', 'function rowToAccount'), c);
+  vm.runInContext(section('const FREE_CALLS', 'function rowToAccount'), c);
   const day = vm.runInContext('todayKey()', c);
-  const free = vm.runInContext('FREE_DAILY', c);
+  const free = vm.runInContext('FREE_CALLS', c);
   const future = new Date(Date.now() + 30 * 864e5).toISOString();
   const past = new Date(Date.now() - 864e5).toISOString();
   const mk = (stripe, plan = 'family') => ({ id: 'a', plan, settings: { stripe }, usage: { chat: { [day]: free } } });
@@ -137,7 +137,7 @@ test('statut et checkout : tarifs lus chez Stripe, prix jamais devinés', async 
     assert.equal(status.plan, 'free');
     assert.equal(status.prices.month.amount, 7.99);
     assert.deepEqual(status.prices.year, { interval: 'year', amount: 79, currency: 'eur' });
-    // checkout mensuel : paramètres d'abonnement complets, retour sur Lumi
+    // checkout mensuel : paramètres d'abonnement complets, retour sur Savika
     const r = await f.post('/api/billing/checkout', { interval: 'month' }, COOKIE);
     assert.equal(r.status, 200);
     assert.equal((await r.json()).url, 'https://checkout.stripe.test/cs_test_1');
@@ -183,7 +183,7 @@ test('webhook abonnement : activation, portail, résiliation — le compte suit 
     assert.equal(portal.status, 200);
     assert.equal((await portal.json()).url, 'https://billing.stripe.test/portal_1');
     assert.match(decodeURIComponent(f.stripeCalls.at(-1).opt.body), /customer=cus_1/);
-    // Échec de paiement : Stripe prévient, Lumi garde l'accès (retard récent).
+    // Échec de paiement : Stripe prévient, Savika garde l'accès (retard récent).
     r = await f.webhook({ id: 'evt_2', type: 'customer.subscription.updated', data: { object: { ...activeSub, status: 'past_due' } } });
     assert.equal(r.status, 200);
     saved = await f.c.accountById('afam');
@@ -217,7 +217,7 @@ test('espace parent : carte abonnement invisible sans configuration, vrais prix 
   assert.equal(c.billingCardHtml(null), '');
   assert.equal(c.billingCardHtml({ enabled: false }), '');
   const off = c.billingCardHtml({ enabled: true, plan: 'free', subscription: null, prices: { month: { amount: 7.99 }, year: { amount: 79 } } });
-  assert.match(off, /Passe à Lumi Famille/);
+  assert.match(off, /Passe à Savika Famille/);
   assert.match(off, /Mensuel — 7,99 €\/mois/);
   assert.match(off, /Annuel — 79 €\/an/);
   assert.match(off, /quota gratuit s’applique/);
@@ -230,7 +230,7 @@ test('espace parent : carte abonnement invisible sans configuration, vrais prix 
   const due = c.billingCardHtml({ enabled: true, plan: 'free', subscription: { status: 'past_due' }, prices: {} });
   assert.match(due, /dernier paiement n’a pas abouti/);
   const stopped = c.billingCardHtml({ enabled: true, plan: 'free', subscription: { status: 'canceled', currentPeriodEnd: '2020-01-01T00:00:00.000Z' }, prices: {} });
-  assert.match(stopped, /Passe à Lumi Famille/);
+  assert.match(stopped, /Passe à Savika Famille/);
   assert.match(stopped, /Gérer mon abonnement/);
   // iPhone : le conseil Safari/Apple Pay apparaît, et le paiement ouvre une
   // fenêtre pré-ouverte AVANT le fetch (sinon Safari bloque le popup).

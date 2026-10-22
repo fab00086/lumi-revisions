@@ -50,7 +50,7 @@ test('photo : transcription jointe au tuteur et retournée pour sauvegarde', asy
     callOllama:async(messages,options)=>{visionCall={messages,options};return {content:'Exercice 9 : comparer 7/8 et 5/6.'};},
     streamOllama:async(messages,options)=>{tutorMessages=messages;options.onDelta('Quel dénominateur commun ?');},
     searchWeb:async()=>{throw Error('recherche non demandée');}, Buffer});
-  vm.runInContext(extract(back, 'const FREE_DAILY', 'function rowToAccount'), c);
+  vm.runInContext(extract(back, 'const FREE_CALLS', 'function rowToAccount'), c);
   vm.runInContext(extract(back, 'const PHOTO_MAX_BYTES', '// Les erreurs affichees'), c);
   vm.runInContext(extract(back, "app.post('/api/chat'", '// ---------- Quiz'), c);
   const res={writeHead(){},write(line){events.push(JSON.parse(line));},end(){}};

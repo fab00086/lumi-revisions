@@ -201,14 +201,14 @@ test('voix : le bouton parle pendant le clic, sans délai ni énoncé muet', () 
 });
 test('voix refusée : propose la lecture manuelle et ignore les anciens événements', () => {
   const t = setup(); t.c.speak('Réponse automatique.');
-  t.spoken[0].utterance.onerror(); assert.match(t.c.status, /Écouter Lumi/);
+  t.spoken[0].utterance.onerror(); assert.match(t.c.status, /Écouter Savika/);
   t.click('btn-listen'); t.spoken[1].utterance.onstart();
   t.spoken[0].utterance.onend(); assert.match(t.c.status, /Je parle/);
   assert.equal(t.spoken[1].utterance.text, 'Réponse automatique.');
 });
 test('voix sans événement : sort de l’attente', () => {
   const t = setup(); t.c.speak('Bonjour.'); [...t.timers.values()][0]();
-  assert.match(t.c.status, /Écouter Lumi/);
+  assert.match(t.c.status, /Écouter Savika/);
 });
 test('micro : démarre dans le clic et renouvelle la session après un arrêt', () => {
   const t = setup(); vm.runInContext('dictationReview = false', t.c); t.click('btn-mic'); const old = t.sessions[0];
@@ -233,12 +233,12 @@ test('mode discussion : le micro se rouvre tout seul et s’éteint au bouton', 
   [...t.timers.values()].forEach(fn => fn());
   assert.equal(t.sessions.length, n); // plus de renouvellement
 });
-test('mode discussion : le micro reste ouvert pendant la lecture de Lumi', () => {
+test('mode discussion : le micro reste ouvert pendant la lecture de Savika', () => {
   const t = setup(); t.click('btn-mic-live');
-  t.c.speak('Réponse de Lumi.'); // le micro n'est plus coupé pendant la voix
+  t.c.speak('Réponse de Savika.'); // le micro n'est plus coupé pendant la voix
   assert.equal(t.sessions[0].aborted, undefined);
   t.spoken[t.spoken.length - 1].utterance.onstart();
-  t.spoken[t.spoken.length - 1].utterance.onend(); // Lumi a fini de parler
+  t.spoken[t.spoken.length - 1].utterance.onend(); // Savika a fini de parler
   [...t.timers.values()].forEach(fn => fn());
   assert.equal(t.sessions.length, 1, 'la session vivante continue, sans re-création');
   assert.ok(t.$('btn-mic-live').classList.contains('live'));
@@ -373,7 +373,7 @@ test('🎤 pendant la voix du mode discussion : coupe la discussion, second appu
   assert.equal(t.sessions.length, 2); assert.ok(t.sessions[1].startedInGesture);
 });
 test('mode discussion : une reprise pendant la préparation de la voix ne coupe pas la réponse', () => {
-  const t = setup(); t.click('btn-mic-live'); t.c.speak('Réponse de Lumi.');
+  const t = setup(); t.click('btn-mic-live'); t.c.speak('Réponse de Savika.');
   const count=t.sessions.length;
   t.c.micLiveResume();
   t.spoken.at(-1).utterance.onstart(); // retire le délai de préparation
@@ -417,14 +417,14 @@ test('micro dictée : blocage après résultat intermédiaire garde le texte san
  t.sessions[0].onresult({results:[result]});const [id,fn]=[...t.timers.entries()][0];t.timers.delete(id);fn();
  assert.equal(t.$('input').value,'Mon début de question');assert.equal(t.c.sent,undefined);assert.match(t.c.status,/Phrase conservée/);
 });
-test('iPhone mode discussion : le micro reste vivant pendant la voix et l’enfant peut couper Lumi',async()=>{
+test('iPhone mode discussion : le micro reste vivant pendant la voix et l’enfant peut couper Savika',async()=>{
  const t=setup(true);t.click('btn-mic-live');t.c.speak('Une réponse.');await t.finishVoice();t.audio.onplay();
  assert.equal(t.sessions.length,1);assert.equal(t.sessions[0].aborted,undefined);
  assert.equal(vm.runInContext('voiceAudioBusy',t.c),true);
- t.sessions[0].onresult({results:[[{transcript:'Attends Lumi'}]]});
- assert.equal(t.audio.paused,true,'Lumi se tait immédiatement');
+ t.sessions[0].onresult({results:[[{transcript:'Attends Savika'}]]});
+ assert.equal(t.audio.paused,true,'Savika se tait immédiatement');
  assert.equal(vm.runInContext('voiceAudioBusy',t.c),false);
- assert.equal(t.c.sent,'Attends Lumi','la phrase de l’enfant part à Lumi');
+ assert.equal(t.c.sent,'Attends Savika','la phrase de l’enfant part à Savika');
 });
 test('lecteur : pause de fin ou événement tardif après Stop ne relance pas une ancienne voix',async()=>{
  const t=setup(true);t.click('btn-mic-live');t.c.speak('Une réponse.');await t.finishVoice();const oldPause=t.audio.onpause;
@@ -468,7 +468,7 @@ test('mode discussion : après trois silences, un conseil gentil à l’enfant (
   assert.equal(t.bubbles.filter(x => /plus fort/.test(x)).length, 1);
   assert.equal(t.$('btn-mic-live').classList.contains('live'), true);
 });
-test('dictée : le texte envoyé à Lumi est nettoyé (ponctuation parlée)', () => {
+test('dictée : le texte envoyé à Savika est nettoyé (ponctuation parlée)', () => {
   const t = setup(); vm.runInContext('dictationReview = false', t.c); t.click('btn-mic');
   t.sessions[0].onresult({ results: [[{ transcript: 'c’est quoi les fractions point d’interrogation' }]] });
   assert.equal(t.c.sent, 'c’est quoi les fractions ?');
@@ -486,7 +486,7 @@ test('dictée iPhone : une session coupée puis reprise garde le début et la po
   assert.match(t.c.status, /vérifie-la/);
 });
 
-test('dictée : par défaut, Lumi propose la phrase à relire avant l’envoi', () => {
+test('dictée : par défaut, Savika propose la phrase à relire avant l’envoi', () => {
   const t = setup(); t.click('btn-mic');
   t.sessions[0].onresult({ results: [[{ transcript: 'combien font sept plus cinq' }]] });
   assert.equal(t.c.sent, undefined);
@@ -573,7 +573,7 @@ test('push-to-talk Whisper : maintenir 🎤 enregistre, relâcher transcrit', as
   assert.equal(t.sessions.length, 0, 'aucune session navigateur concurrente');
 });
 
-// « Le micro marche une fois puis plus jamais » : après la voix de Lumi,
+// « Le micro marche une fois puis plus jamais » : après la voix de Savika,
 // Safari garde le micro et les sessions démarrent puis meurent sans rien
 // capter (audio-capture / aborted / mort en < 2,5 s). Ces morts anormales
 // doivent déclencher la réparation auto (relance, puis recharge) — avant ce

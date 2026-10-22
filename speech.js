@@ -133,7 +133,7 @@ let samplePromise = null, sampleRetryAt = 0;
 export function generateSpeechSample() {
   if (samplePromise) return samplePromise;
   if (Date.now() < sampleRetryAt) return Promise.reject(Error('Test vocal indisponible. Réessaie dans une minute.'));
-  samplePromise = generateSpeech('Bonjour. Je suis Lumi. Est-ce que tu entends ma voix ?').catch(error => {
+  samplePromise = generateSpeech('Bonjour. Je suis Savika. Est-ce que tu entends ma voix ?').catch(error => {
     samplePromise = null; sampleRetryAt = Date.now() + 60000; throw error;
   });
   return samplePromise;
