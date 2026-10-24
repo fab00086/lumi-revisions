@@ -1129,7 +1129,7 @@ app.post('/api/profs/batch/finish', async (req, res) => {
   res.json({ ok: true, deleted: true });
 });
 
-app.get('/api/version', (_req, res) => res.json({ version: '2026-10-24.2' }));
+app.get('/api/version', (_req, res) => res.json({ version: '2026-10-24.3' }));
 app.get('/api/gate', async (req, res, next) => {
   try {
     const cookies = parseCookies(req);
