@@ -2,7 +2,7 @@
 // Cache l'interface ; les appels /api/* passent toujours par le reseau.
 'use strict';
 
-const CACHE = 'lumi-v72';
+const CACHE = 'lumi-v73';
 const SHELL = [
   '/',
   '/index.html',
@@ -68,7 +68,7 @@ self.addEventListener('fetch', (e) => {
   // Les correctifs de l'interface doivent arriver dès la prochaine ouverture.
   // Le cache ne sert de secours que si le réseau est réellement indisponible.
   if (url.origin === location.origin &&
-      (e.request.mode === 'navigate' || ['/app.js', '/update.js', '/admin.js', '/admin.html', '/style.css', '/index.html', '/'].includes(url.pathname))) {
+      (e.request.mode === 'navigate' || ['/app.js', '/update.js', '/admin.js', '/admin.html', '/style.css', '/index.html', '/', '/app', '/app/', '/app/index.html', '/app/app.js', '/app/update.js', '/app/style.css'].includes(url.pathname))) {
     e.respondWith(fetch(e.request).then(async r => {
       if (r.ok) {
         const c = await caches.open(CACHE);
