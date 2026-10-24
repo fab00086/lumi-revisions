@@ -155,11 +155,21 @@ function loadProfiles() { return profilesCache; }
 // Utilisé pour les actions destructrices (supprimer un profil, supprimer le
 // compte) que l'enfant avec le seul code famille ne peut pas faire.
 async function ensureParentPassword(pw) {
-  const r = await fetch('/api/account/parent-password', {
+  let r = await fetch('/api/account/parent-password', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password: pw })
   });
   let j = {}; try { j = await r.json(); } catch {}
+  if (r.status === 403) {
+    const code = window.prompt('Pour créer le mot de passe parent la première fois, entre ton code famille (SAVIKA-…) :');
+    if (code) {
+      r = await fetch('/api/account/parent-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw, code: code.trim() })
+      });
+      j = {}; try { j = await r.json(); } catch {}
+    }
+  }
   if (!r.ok) { const e = new Error(j.error || 'Mot de passe refusé.'); e.status = r.status; throw e; }
 }
 // Boucle de confirmation parent pour supprimer les profils restants :
@@ -3054,6 +3064,7 @@ async function initApp() {
     setLiveMic(false); stopSpeech();
     $('screen-profile').classList.add('hidden'); $('screen-chat').classList.add('hidden');
     $('screen-gate').classList.remove('hidden'); $('gate-code').value = invitation;
+    if ($('code-box')) $('code-box').classList.remove('hidden');
     $('gate-consent').checked = false;
     $('gate-error').textContent = 'Code rempli depuis ton invitation. Confirme être le parent, puis touche « Entrer ».';
     showGateBrowserHint();
@@ -3066,7 +3077,8 @@ async function initApp() {
       $('screen-gate').classList.remove('hidden');
       showGateBrowserHint();
       hideSplash();
-      $('gate-code').focus();
+      const firstInput = $('parent-email') || $('gate-code');
+      if (firstInput) firstInput.focus();
       return;
     }
   } catch {
@@ -3140,9 +3152,12 @@ if ('speechSynthesis' in window) speechSynthesis.getVoices();
 // gratuit — 20 appels IA + 5 fiches au total) directement depuis la gate. Le code famille reste pour les
 // invitations et les appareils des enfants.
 $('btn-parent-mode').addEventListener('click', () => {
-  const box = $('parent-box');
+  const box = $('code-box') || $('parent-box');
   box.classList.toggle('hidden');
-  if (!box.classList.contains('hidden')) $('parent-email').focus();
+  if (!box.classList.contains('hidden')) {
+    const target = box.id === 'code-box' ? $('gate-code') : $('parent-email');
+    if (target) target.focus();
+  }
 });
 async function parentAuth(route, body) {
   const msg = $('parent-msg');

@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
@@ -43,32 +43,34 @@
     </div>
   </div>
 
-  <!-- ===== Écran : code d'accès (mode en ligne sécurisé) ===== -->
+  <!-- ===== Écran : connexion / création de compte (mode en ligne sécurisé) ===== -->
   <div id="screen-gate" class="screen hidden">
     <div class="card">
       <div class="logo">🔒</div>
       <h1>Savika</h1>
-      <p class="subtitle">Demande un accès. Après approbation, utilise le code réservé à ta famille. Le mot de passe de gestion ouvre l’espace Admin.</p>
-      <div class="video-search">
-        <input id="gate-code" type="password" placeholder="Code famille ou mot de passe personnel" autocomplete="current-password">
-        <button id="btn-gate-enter" class="btn btn-primary">Entrer</button>
-      </div>
-      <p id="gate-error" class="hint"></p>
-      <div id="gate-browser-hint" class="browser-hint hidden"></div>
-      <label class="consent-row"><input id="gate-consent" type="checkbox"> Pour ouvrir un accès famille, je confirme être le parent ou responsable légal.</label>
+      <p class="subtitle">Connecte-toi avec ton e-mail ou crée gratuitement ton compte famille (20 échanges et 5 fiches offerts).</p>
       <div class="parent-auth">
-        <button id="btn-parent-mode" class="btn install-btn" type="button"><span class="ic" data-ic="user"></span> Parent : se connecter (e-mail + mot de passe)</button>
-        <div id="parent-box" class="hidden">
+        <div id="parent-box">
           <input id="parent-email" type="email" placeholder="E-mail du parent" autocomplete="email">
-          <input id="parent-password" type="password" placeholder="Mot de passe" autocomplete="current-password">
+          <input id="parent-password" type="password" placeholder="Mot de passe (6 caractères minimum)" autocomplete="current-password">
+          <label class="consent-row"><input id="gate-consent" type="checkbox"> Pour créer ou ouvrir un accès famille, je confirme être le parent ou responsable légal.</label>
           <div class="video-search">
             <button id="btn-parent-login" class="btn btn-primary" type="button">Se connecter</button>
             <button id="btn-parent-register" class="btn" type="button">Créer un compte (gratuit)</button>
           </div>
-          <p id="parent-msg" class="hint">Aucun code nécessaire. Pour créer un compte, coche d’abord la case « je confirme être le parent » ci-dessus.</p>
+          <p id="parent-msg" class="hint">Pour créer un compte, coche d’abord la case « je confirme être le parent » ci-dessus.</p>
+        </div>
+        <button id="btn-parent-mode" class="btn install-btn" type="button">🔑 J’ai un code d’invitation (SAVIKA-…) ou accès Admin</button>
+        <div id="code-box" class="hidden">
+          <div class="video-search">
+            <input id="gate-code" type="password" placeholder="Code famille (SAVIKA-…) ou mot de passe Admin" autocomplete="current-password">
+            <button id="btn-gate-enter" class="btn btn-primary">Entrer</button>
+          </div>
+          <button id="btn-request-access" class="btn install-btn" type="button">Demander un code d’invitation</button>
         </div>
       </div>
-      <button id="btn-request-access" class="btn install-btn" type="button">Demander un accès</button>
+      <p id="gate-error" class="hint"></p>
+      <div id="gate-browser-hint" class="browser-hint hidden"></div>
       <button id="btn-share-gate" class="btn install-btn" type="button">Partager Savika</button>
       <button class="btn install-btn" type="button" data-copy-lumi-link>🔗 Copier le lien de Savika</button>
       <button class="btn install-btn" type="button" data-update-lumi>🔄 Mettre à jour Savika</button>
