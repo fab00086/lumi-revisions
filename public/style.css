@@ -25,8 +25,8 @@ body {
 
 .screen { height: 100%; display: flex; flex-direction: column; }
 
-/* ===== Écran profil ===== */
-#screen-profile { align-items: center; justify-content: center; padding: 24px; }
+/* ===== Écran profil & connexion ===== */
+#screen-profile, #screen-gate { align-items: center; justify-content: center; padding: 24px; }
 
 .card {
   background: var(--card);
@@ -578,7 +578,7 @@ body {
 .consent-row { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0; text-align: left; font-size: 15px; line-height: 1.5; }
 .consent-row input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; }
 .field input { padding: 12px; border: 2px solid #d9d0f4; border-radius: 12px; font: inherit; font-size: 16px; width: 100%; }
-#screen-profile { height: auto; min-height: 100%; padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+#screen-profile, #screen-gate { height: auto; min-height: 100%; padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: max(24px, env(safe-area-inset-bottom)); }
 .audio-feedback { margin: 14px 0; padding: 14px; border-radius: 12px; background: #f1edff; color: var(--text); font-size: 16px; line-height: 1.6; }
 #settings-modal .btn { width: 100%; margin-top: 12px; }
 .prog-current, .prog-item, .prog-bilan, .parent-weak { font-size: 16px; line-height: 1.6; padding: 16px; }
@@ -630,10 +630,13 @@ body {
 
 /* Connexion parent sans code (depuis la gate) */
 .parent-auth { margin: 6px 0 12px; }
-.parent-auth input {
+.parent-auth input:not([type="checkbox"]) {
   width: 100%; padding: 11px 13px; border-radius: 12px; border: 2px solid #e6e1f7; font-size: 15px; background: #faf9ff; margin-bottom: 8px; box-sizing: border-box;
 }
-.parent-auth input:focus { outline: none; border-color: var(--violet); }
+.parent-auth input:not([type="checkbox"]):focus { outline: none; border-color: var(--violet); }
+.parent-auth .consent-row input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; margin: 2px 0 0; }
+.parent-auth .video-search { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.parent-auth .video-search .btn { flex: 1 1 150px; }
 
 /* ===================== ÉCRITURE MANUSCRITE (chat) ===================== */
 @font-face { font-family: 'Patrick Hand'; font-display: swap; src: url('fonts/patrick-hand.woff2') format('woff2'); }
