@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 // ---------- Raccourcis ----------
 const $ = (id) => document.getElementById(id);
@@ -2100,6 +2100,7 @@ function renderVideoList(videos) {
 }
 
 function playVideo(id) {
+  if (!/^[A-Za-z0-9_-]{11}$/.test(String(id || ''))) return;
   $('video-player').innerHTML = `<iframe src="https://www.youtube.com/embed/${id}?autoplay=1" frameborder="0" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
   $('video-player').classList.remove('hidden');
 }

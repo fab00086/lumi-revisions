@@ -1,4 +1,7 @@
-import 'dotenv/config';
+// load-env.mjs charge les secrets (ext4 chmod 600 d'abord, repli .env local)
+// et DOIT rester la 1re importation : les modules locaux et les constantes
+// OLLAMA_* ci-dessous lisent process.env a l'evaluation.
+import './load-env.mjs';
 import express from 'express';
 import os from 'os';
 import path from 'path';
@@ -9,7 +12,7 @@ import fs from 'fs';
 import http from 'http';
 import https from 'https';
 import selfsigned from 'selfsigned';
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { speechAvailable, generateSpeech, generateSpeechSample } from './speech.js';
 import { createWhisperRunner } from './whisper-python.js';
 
@@ -24,6 +27,13 @@ const MODEL = process.env.OLLAMA_MODEL || 'glm-5.3-flash:cloud';
 const VISION_MODEL = process.env.OLLAMA_VISION_MODEL || 'gemma4:31b';
 const PORT = process.env.PORT || 3000;
 const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
+// Interface d'ecoute du HTTP en clair : 127.0.0.1 par defaut, volontairement.
+// L'acces distant passe par le tunnel HTTPS (cloudflared, lance sur cette
+// machine, contacte localhost) ; le telephone en Wi-Fi passe par le serveur
+// HTTPS auto-signe ci-dessous. LISTEN_HOST permet une exception documentee —
+// ne JAMAIS remettre 0.0.0.0 sans TLS : en clair, les profils et
+// conversations des enfants seraient lisibles par tout le reseau local.
+const LISTEN_HOST = process.env.LISTEN_HOST || '127.0.0.1';
 
 // ---------- Programme scolaire (data/curriculum.json) ----------
 // Notions courtes par niveau et matiere : injectees en une seule ligne dans le
@@ -513,6 +523,15 @@ const app = express();
 // dernier saut : le proxy remet l'IP reelle du client, des en-tetes forge
 // par le client ne passent pas. Sans proxy (local), aucun changement.
 app.set('trust proxy', 1);
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (req.secure || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
 app.use('/api', (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -546,6 +565,10 @@ app.use(express.static(path.join(__dirname, 'public'), {
 // Si LUMI_ACCESS_CODE est defini, toutes les routes /api demandent ce code
 // (entre une fois dans le navigateur, retenu par un cookie 1 an).
 const ACCESS_CODE = String(process.env.LUMI_ACCESS_CODE || '').trim();
+// Un code court se devine par force brute depuis le reseau local ou le tunnel
+// public — avertir au demarrage, sans bloquer (le code est deja en prod).
+if (ACCESS_CODE && ACCESS_CODE.length < 20)
+  console.warn('⚠️  LUMI_ACCESS_CODE fait moins de 20 caracteres : renforce-le (20+ caracteres aleatoires) pour proteger l’acces a l’app et aux donnees des enfants.');
 // ---------- Notifications privées des demandes d'accès ----------
 let ADMIN_EMAIL = String(process.env.LUMI_ADMIN_EMAIL || '').trim();
 let MAIL_API_KEY = String(process.env.RESEND_API_KEY || '').trim();
@@ -737,9 +760,15 @@ function allowLoginAttempt(req, res, prefix = 'login', max = 20) {
   return true;
 }
 
+function safeEqualAccess(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false;
+  const ha = createHash('sha256').update(a).digest();
+  const hb = createHash('sha256').update(b).digest();
+  return typeof timingSafeEqual === 'function' ? timingSafeEqual(ha, hb) : ha.equals(hb);
+}
 function hasAccess(req) {
   const m = String(req.headers.cookie || '').match(/lumi_access=([a-f0-9]{64})/);
-  return !!(m && m[1] === accessCookieValue());
+  return !!(m && safeEqualAccess(m[1], accessCookieValue()));
 }
 function accessCookieValue() {
   // valeur derivee du code (pas le code lui-meme)
@@ -1113,7 +1142,7 @@ app.get('/api/gate', async (req, res, next) => {
 app.post('/api/unlock', storedRoute(async (req, res) => {
   if (!allowLoginAttempt(req, res)) return;
   const code = String((req.body || {}).code || '').trim();
-  if (ADMIN_CODE && code === ADMIN_CODE) {
+  if (ADMIN_CODE && safeEqualAccess(code, ADMIN_CODE)) {
     const token = adminCookieValue();
     const ending = '; Path=/; HttpOnly; Max-Age=1800; SameSite=Lax' + (isSecureReq(req) ? '; Secure' : '');
     res.setHeader('Set-Cookie', ['lumi_admin=' + token + ending, 'lumi_admin_once=' + adminEntryValue(token) + ending,
@@ -1132,7 +1161,7 @@ app.post('/api/unlock', storedRoute(async (req, res) => {
       `lumi_admin=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`]);
     return res.json({ ok: true });
   }
-  if ((!ACCESS_CODE && LOCAL_MODE) || (ACCESS_CODE && code === ACCESS_CODE && LOCAL_MODE)) {
+  if ((!ACCESS_CODE && LOCAL_MODE) || (ACCESS_CODE && safeEqualAccess(code, ACCESS_CODE) && LOCAL_MODE)) {
     if (req.body.consent !== true) return res.status(400).json({ error: 'Confirme être le parent ou responsable légal en cochant la case.' });
     // Secure seulement en HTTPS : en http://IP-LAN, un cookie Secure serait ignore
     // et le gate ne s'ouvrirait jamais.
@@ -1756,6 +1785,7 @@ async function accountErase(accountId) {
 }
 
 app.post('/api/auth/register', storedRoute(async (req, res) => {
+  if (!allowLoginAttempt(req, res, 'auth', 10)) return;
   const existing = await resolveAccount(req);
   if (existing?.account?.settings?.accessCodeHash || parseCookies(req).lumi_family === '1')
     return res.status(403).json({ error: 'Ton code est déjà lié à un seul compte famille.' });
@@ -1769,7 +1799,9 @@ app.post('/api/auth/register', storedRoute(async (req, res) => {
   // RGPD : consentement parental horodate (preuve de quand il a ete donne).
   // Inscription libre-service : code demo genere AUTOMATIQUEMENT (plus de
   // validation admin manuelle), compte actif aussitot, quotas demo au total.
-  const demoCode = String(Math.floor(100000 + Math.random() * 900000));
+  const demoCode = typeof randomInt === 'function'
+    ? String(randomInt(100000, 1000000))
+    : String(100000 + (globalThis.crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
   await accountPut({
     id, email: mail, passHash: await hashPassword(password), plan: 'free',
     trialEnds: null,
@@ -1787,6 +1819,7 @@ app.post('/api/auth/register', storedRoute(async (req, res) => {
 }));
 
 app.post('/api/auth/login', storedRoute(async (req, res) => {
+  if (!allowLoginAttempt(req, res, 'auth', 10)) return;
   if (parseCookies(req).lumi_family === '1') return res.status(403).json({ error: 'Déconnecte cet appareil avant de changer de compte.' });
   const { email, password } = req.body || {};
   const mail = String(email || '').trim().toLowerCase();
@@ -1825,6 +1858,14 @@ app.get('/api/auth/me', async (req, res) => {
 // Desactive tant que LUMI_ADMIN_CODE est vide (typeof-guard pour les tests
 // qui font tourner cette section sans le serveur complet).
 const ADMIN_CODE = String((typeof ENV !== 'undefined' && ENV.LUMI_ADMIN_CODE) || '').trim();
+if (ADMIN_CODE && ADMIN_CODE.length < 20)
+  console.warn('⚠️  LUMI_ADMIN_CODE fait moins de 20 caracteres : renforce-le (20+ caracteres aleatoires) pour proteger la gestion administrateur.');
+function safeEqualSecret(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false;
+  const ha = createHash('sha256').update(a).digest();
+  const hb = createHash('sha256').update(b).digest();
+  return typeof timingSafeEqual === 'function' ? timingSafeEqual(ha, hb) : ha.equals(hb);
+}
 function adminCookieValue() {
   const payload = newToken() + '.' + (Date.now() + 30 * 60000);
   return payload + '.' + createHmac('sha256', ADMIN_CODE).update('lumi-admin-v2:' + payload).digest('hex');
@@ -1834,7 +1875,7 @@ function hasAdmin(req) {
   const token = parseCookies(req).lumi_admin || '';
   const match = /^([a-f0-9]{48})\.([0-9]{13})\.([a-f0-9]{64})$/.exec(token);
   if (!match || Number(match[2]) <= Date.now()) return false;
-  return match[3] === createHmac('sha256', ADMIN_CODE).update('lumi-admin-v2:' + match[1] + '.' + match[2]).digest('hex');
+  return safeEqualSecret(match[3], createHmac('sha256', ADMIN_CODE).update('lumi-admin-v2:' + match[1] + '.' + match[2]).digest('hex'));
 }
 function adminEntryValue(token) { return createHmac('sha256', ADMIN_CODE).update('lumi-admin-entry:' + token).digest('hex'); }
 function requireAdmin(req, res) {
@@ -1866,7 +1907,7 @@ app.post('/api/admin/notifications', storedRoute(async (req, res) => {
 app.post('/api/admin/login', (req, res) => {
   if (!allowLoginAttempt(req, res, 'admin', 10)) return;
   if (!ADMIN_CODE) return res.status(404).json({ error: 'Gestion des clients désactivée : définis LUMI_ADMIN_CODE.' });
-  if (String((req.body || {}).code || '').trim() === ADMIN_CODE) {
+  if (safeEqualSecret(String((req.body || {}).code || '').trim(), ADMIN_CODE)) {
     res.setHeader('Set-Cookie', `lumi_admin=${adminCookieValue()}; Path=/; HttpOnly; Max-Age=1800; SameSite=Lax${isSecureReq(req) ? '; Secure' : ''}`);
     res.json({ ok: true });
   } else {
@@ -2362,7 +2403,16 @@ app.post('/api/account/parent-password', storedRoute(async (req, res) => {
   const { current, password } = req.body || {};
   const next = String(password || '');
   if (next.length < 4) return res.status(400).json({ error: 'Choisis un mot de passe d’au moins 4 caractères.' });
-  if (r.account.passHash && !(await verifyPassword(String(current || ''), r.account.passHash)))
+  // Premiere pose (compte ouvert par un code famille : passHash vide) : la
+  // session est partagee avec l'enfant — exiger le code famille comme preuve
+  // parentale, sinon l'enfant poserait le mot de passe a la place du parent
+  // (et pourrait ensuite verrouiller ou supprimer tout le compte). Echec
+  // ferme : si le compte n'a aucun hash de code a comparer, refus aussi.
+  if (!r.account.passHash) {
+    const proof = String((req.body || {}).code ?? (req.body || {}).accessCode ?? '');
+    if (!r.account.settings?.accessCodeHash || !safeEqualSecret(familyCodeHash(proof), r.account.settings.accessCodeHash))
+      return res.status(403).json({ error: 'Première définition du mot de passe parent : ajoute le code famille (champ code) pour prouver que tu es le parent. Ensuite, seul le mot de passe sera demandé.' });
+  } else if (!(await verifyPassword(String(current || ''), r.account.passHash)))
     return res.status(401).json({ error: 'Ancien mot de passe parent incorrect.' });
   r.account.passHash = await hashPassword(next);
   await accountPut(r.account);
@@ -3191,7 +3241,7 @@ function extractVideos(obj, out) {
       const title = (v.title && v.title.runs && v.title.runs[0] && v.title.runs[0].text) || '';
       let thumb = (v.thumbnail && v.thumbnail.thumbnails && v.thumbnail.thumbnails[0] && v.thumbnail.thumbnails[0].url) || '';
       if (thumb.startsWith('//')) thumb = 'https:' + thumb;
-      if (id) out.push({ id, title, thumbnail: thumb });
+      if (typeof id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(id)) out.push({ id, title, thumbnail: thumb });
     } else {
       extractVideos(v, out);
     }
@@ -3408,8 +3458,11 @@ app.post('/api/child', storedRoute(async (req, res) => {
   notifyAccessRequests().catch(() => console.warn('Notification de demande : reprise différée.'));
   setInterval(() => { notifyAccessRequests().catch(() => console.warn('Notification de demande : reprise différée.')); }, 60000).unref();
 
-  // HTTP : pour l'ordinateur (localhost = contexte sécurisé, pas d'avertissement)
-  http.createServer(app).listen(PORT, '0.0.0.0', () => {
+  // HTTP : pour l'ordinateur (localhost = contexte sécurisé, pas d'avertissement).
+  // En clair -> ecoute LISTEN_HOST (defaut 127.0.0.1), jamais 0.0.0.0 : le
+  // reseau Wi-Fi ne doit pas lire en clair les donnees des enfants. Le tunnel
+  // HTTPS (cloudflared) et le navigateur local contactent localhost, inchanges.
+  http.createServer(app).listen(PORT, LISTEN_HOST, () => {
     // Charger la voix en avance ; les réponses réutilisent ensuite le même moteur.
     if (speechAvailable()) generateSpeechSample().catch(() => console.warn('Voix : préparation initiale différée.'));
     console.log(`\n  ✅ Savika demarree !`);
@@ -3425,6 +3478,8 @@ app.post('/api/child', storedRoute(async (req, res) => {
   if (process.env.NO_HTTPS) return;
 
   const { cert, key } = await getOrCreateCert();
+  // HTTPS auto-signe (CHIFFRE) : conserve sur 0.0.0.0 expres, pour le
+  // telephone en Wi-Fi local. Aucune donnee en clair exposee sur le reseau.
   https.createServer({ cert, key }, app).listen(HTTPS_PORT, '0.0.0.0', () => {
     const urls = lanUrls();
     urls.forEach(u => console.log(`  📱 Depuis le telephone (meme Wi-Fi) :  ${u}`));

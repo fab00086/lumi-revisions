@@ -217,7 +217,11 @@ test('invitation : sans service configuré, approbation conservée et envoyée l
    const login=await f.unlock(result.code);
    // Seul le mot de passe parent peut tout effacer : le code famille ne suffit jamais.
    assert.equal((await f.post('/api/account/delete',{password:'wrong'},login.cookie)).status,409);
-   assert.equal((await f.post('/api/account/parent-password',{password:'parent-secret'},login.cookie)).status,200);
+   // Premiere pose du mot de passe : la session seule ne suffit plus (M1) —
+   // le code famille prouve que c'est bien le parent, puis le mot de passe seul regime.
+   assert.equal((await f.post('/api/account/parent-password',{password:'parent-secret'},login.cookie)).status,403);
+   assert.equal((await f.post('/api/account/parent-password',{password:'parent-secret',code:'SAVIKA-MAUVAIS-CODE'},login.cookie)).status,403);
+   assert.equal((await f.post('/api/account/parent-password',{password:'parent-secret',code:result.code},login.cookie)).status,200);
    assert.equal((await f.post('/api/account/delete',{password:result.code},login.cookie)).status,401);
    assert.equal((await f.post('/api/account/delete',{password:'parent-secret'},login.cookie)).status,200);
    assert.equal(await f.c.accountById(acc.id),null);
@@ -438,7 +442,9 @@ test('suppressions : le mot de passe parent bloque l’enfant avec le seul code 
   assert.equal((await f.c.childList(uid)).length,1,'rien supprimé sans mot de passe');
   // Le code famille (que l'enfant connaît) ne suffit jamais — ni profils ni compte.
   assert.equal((await f.post('/api/account/delete',{password:'wrong'},cookie)).status,409);
-  assert.equal((await f.post('/api/account/parent-password',{password:'parent-secret'},cookie)).status,200);
+  // Premiere pose : sans le code famille (M1), l'enfant avec la seule session est refuse.
+  assert.equal((await f.post('/api/account/parent-password',{password:'parent-secret'},cookie)).status,403);
+  assert.equal((await f.post('/api/account/parent-password',{password:'parent-secret',code:fam.code},cookie)).status,200);
   assert.equal((await f.post('/api/account/delete',{password:fam.code},cookie)).status,401);
   assert.equal((await f.post('/api/profiles',{profiles:[],parentPassword:fam.code},cookie)).status,401);
   assert.equal((await f.c.childList(uid)).length,1);
